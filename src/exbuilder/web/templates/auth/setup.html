@@ -1,0 +1,17 @@
+{% extends "auth/base.html" %}
+{% block title %}First-time setup · EX Config Builder{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>Create the first admin</h1>
+<form class="panel" method="post">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  <p class="muted">There are no users yet. This account can add more users afterwards.</p>
+  <div class="field"><label for="u">Username</label>
+    <input id="u" type="text" name="username" autocomplete="username" required autofocus></div>
+  <div class="field"><label for="p">Password <span class="hint">(at least 10 characters)</span></label>
+    <input id="p" type="password" name="password" autocomplete="new-password" required></div>
+  <div class="field"><label for="c">Confirm password</label>
+    <input id="c" type="password" name="confirm" autocomplete="new-password" required></div>
+  <button type="submit">Create admin</button>
+</form>
+{% endblock %}

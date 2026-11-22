@@ -1,0 +1,52 @@
+# Docker Swarm stack for the EX Config Builder web UI.
+# Deploy in Portainer (Stacks > Add stack > Web editor) or with:
+#   docker stack deploy -c deploy/exbuilder-stack.yml --with-registry-auth exbuilder
+#
+# First sign-in: admin / admin. The app makes you choose a new password
+# right away. See INSTALL.md.
+#
+# Users live in the exbuilder_data volume. It's a local volume, so the service
+# is pinned to one node: set EXB_NODE to that node's hostname.
+version: "3.8"
+
+services:
+  web:
+    image: ghcr.io/cyberpunkspacex/juniper-config-builder:latest
+    environment:
+      # Set to "true" once users only reach the UI over HTTPS.
+      EXB_SECURE_COOKIES: ${EXB_SECURE_COOKIES:-false}
+      EXB_REQUIRE_2FA: ${EXB_REQUIRE_2FA:-false}
+    ports:
+      # Published on every node through the swarm routing mesh.
+      # The reverse proxy (exbuilder.cyberpunkx.ca) forwards here.
+      - target: 8080
+        published: ${EXB_PORT:-8088}
+        protocol: tcp
+        mode: ingress
+    read_only: true
+    volumes:
+      - exbuilder_data:/data
+      # Swarm ignores the service-level `tmpfs:` key, so mount it this way.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 67108864  # 64 MB
+    deploy:
+      replicas: 1
+      update_config:
+        # stop-first: the SQLite database must not be opened by two tasks at once.
+        order: stop-first
+        failure_action: rollback
+      placement:
+        constraints:
+          - node.hostname == ${EXB_NODE:?set EXB_NODE to the node that keeps the data volume}
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          memory: 256M
+      labels:
+        app: exbuilder
+
+volumes:
+  exbuilder_data:

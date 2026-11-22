@@ -1,0 +1,17 @@
+{% include "auth/_style.html" %}
+{% if current_user %}
+<nav class="fw-nav">
+  <a class="brand" href="{{ url_for('index') }}">EX Config Builder</a>
+  <a href="{{ url_for('index') }}">Builder</a>
+  {% if current_user['role'] == 'admin' %}<a href="{{ url_for('auth.users') }}">Users</a>{% endif %}
+  <a href="{{ url_for('auth.account') }}">My account</a>
+  <span class="who">{{ current_user['username'] }}{% if current_user['role'] == 'admin' %} (admin){% endif %}</span>
+  <form method="post" action="{{ url_for('auth.logout') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="link" type="submit">Sign out</button>
+  </form>
+</nav>
+{% endif %}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for cat, msg in messages %}<div class="flash {{ cat }}">{{ msg }}</div>{% endfor %}
+{% endwith %}

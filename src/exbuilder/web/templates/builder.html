@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EX Config Builder</title>
+<style>
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1600px; margin: 0 auto; padding: 18px 16px 48px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 16px; margin: 0 0 10px; }
+h3 { font-size: 14px; margin: 16px 0 8px; }
+a { color: var(--accent); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.toolbar .grow { flex: 1; }
+.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr) minmax(0, 0.9fr); gap: 16px; align-items: start; }
+@media (max-width: 1200px) { .layout { grid-template-columns: 170px minmax(0, 1fr); } .out { grid-column: 1 / -1; } }
+@media (max-width: 760px) { .layout { display: block; } .tabs { margin-bottom: 12px; } .out { margin-top: 14px; } .rows .row .fields { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } .rows .row .fields .span2 { grid-column: 1 / -1; } .tabs { flex-direction: row !important; flex-wrap: wrap; position: static !important; } }
+.tabs { display: flex; flex-direction: column; gap: 2px; position: sticky; top: 12px; }
+.tabs button { text-align: left; background: transparent; border: 1px solid transparent; color: var(--text); font-weight: 500; padding: 7px 10px; }
+.tabs button.active { background: var(--panel); border-color: var(--border); color: var(--accent); font-weight: 600; }
+.tabs .count { float: right; color: var(--muted); font-weight: 400; font-size: 12px; }
+.tabs .bad { color: var(--bad); }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+.section { display: none; }
+.section.active { display: block; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px 14px; }
+.field label, .rowfield label { display: block; font-weight: 600; font-size: 12px; margin-bottom: 3px; color: var(--muted); }
+.field.wide { grid-column: 1 / -1; }
+.check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
+.check input { width: auto; }
+input[type=text], input[type=password], input[type=number], select, textarea {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: inherit; }
+textarea { min-height: 70px; resize: vertical; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12.5px; }
+input.invalid { border-color: var(--bad); }
+button { border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text); padding: 6px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+button.secondary { background: transparent; color: var(--accent); }
+button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
+button.small { padding: 3px 9px; font-size: 12.5px; }
+.hint { color: var(--muted); font-size: 12.5px; margin: 4px 0 10px; }
+.rows .row { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: var(--bg); }
+.rows .row .head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-weight: 600; }
+.rows .row .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px 10px; }
+.rows .row .fields .span2 { grid-column: span 2; }
+.rows .row .fields .full { grid-column: 1 / -1; }
+.rows.compact .row { padding: 6px 10px; }
+.rows.compact .row .head { display: none; }
+.rows.compact .row .fields { display: flex; flex-wrap: wrap; align-items: flex-end; }
+.rows.compact .row .fields .rowfield { flex: 1 1 130px; min-width: 0; }
+.rows.compact .row .fields .span2 { flex: 2 1 220px; }
+.rows.compact .row .rm { margin-bottom: 3px; }
+.out { position: sticky; top: 12px; min-width: 0; }
+#sections { min-width: 0; }
+.out pre { margin: 0; max-height: calc(100vh - 260px); min-height: 240px; overflow: auto; background: var(--bg); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
+.outtabs { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center; }
+.outtabs .sel { background: var(--accent); color: var(--accent-text); }
+.msgs { margin: 0 0 10px; padding: 0; list-style: none; font-size: 13px; max-height: 200px; overflow: auto; }
+.msgs li { padding: 4px 8px; border-left: 3px solid; margin-bottom: 3px; border-radius: 3px; cursor: pointer; background: var(--bg); }
+.msgs li.err { border-color: var(--bad); }
+.msgs li.warn { border-color: var(--warn); }
+.msgs li b { font-weight: 600; }
+.status { font-size: 12.5px; color: var(--muted); }
+.status.ok { color: var(--ok); }
+.status.bad { color: var(--bad); }
+.portmap { display: flex; flex-direction: column; gap: 10px; }
+.member h4 { margin: 0 0 4px; font-size: 13px; }
+.pgroup { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, 30px); gap: 3px; overflow-x: auto; padding-bottom: 4px; justify-content: start; }
+.pchunks { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+.pgroup.single { grid-template-rows: 30px; }
+.port { width: 34px; height: 30px; border: 1px solid var(--border); border-radius: 4px; font-size: 10.5px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; background: var(--bg); color: var(--text); user-select: none; position: relative; }
+.port.poe::after { content: ""; position: absolute; top: 2px; right: 2px; width: 5px; height: 5px; border-radius: 50%; background: var(--warn); }
+.port.access { background: #2f8f5b; color: #fff; border-color: #2f8f5b; }
+.port.trunk { background: #2f6fdf; color: #fff; border-color: #2f6fdf; }
+.port.routed { background: #8a4fd1; color: #fff; border-color: #8a4fd1; }
+.port.lag { background: #c4661f; color: #fff; border-color: #c4661f; }
+.port.disabled { background: transparent; color: var(--muted); text-decoration: line-through; }
+.port.picked { outline: 3px solid var(--warn); outline-offset: 1px; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin: 6px 0; }
+.legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
+.pglabel { font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
+table.plist { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.plist td, table.plist th { padding: 6px; border-bottom: 1px solid var(--border); text-align: left; }
+.badge { font-size: 11px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--border); color: var(--muted); }
+.note { font-size: 12.5px; color: var(--muted); }
+code { font-size: 12.5px; }
+.hide { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+{% include "auth/_nav.html" %}
+<div class="toolbar">
+  <h1>Juniper EX Config Builder</h1>
+  <span class="grow"></span>
+  <button class="secondary" id="btn-new" type="button">New</button>
+  <button class="secondary" id="btn-example" type="button">Load example</button>
+  <button class="secondary" id="btn-open" type="button">Open JSON…</button>
+  <input type="file" id="file-open" accept=".json,application/json" class="hide">
+  <button class="secondary" id="btn-save-file" type="button">Download JSON</button>
+  <button id="btn-save-server" type="button">Save to my projects</button>
+</div>
+
+<div class="layout">
+  <nav class="tabs" id="tabs"></nav>
+
+  <div id="sections">
+
+  <!-- ===================================================== SWITCH -->
+  <section class="section" data-tab="Switch">
+    <div class="panel">
+      <h2>Project and hardware</h2>
+      <div class="grid">
+        <div class="field wide"><label>Project name</label><input type="text" data-bind="name" placeholder="e.g. Office floor 2 access switch"></div>
+      </div>
+      <h3>Switches</h3>
+      <p class="hint">One row for a standalone switch. Add rows to build a Virtual Chassis: each member gets its own number (FPC), so its ports are named ge-<b>1</b>/0/0 and so on.</p>
+      <div class="rows compact" data-table="switch.members"></div>
+      <button class="secondary small" type="button" data-add="switch.members">Add Virtual Chassis member</button>
+      <div class="grid" style="margin-top:12px">
+        <label class="check"><input type="checkbox" data-bind="switch.vc_preprovisioned"> Pre-provisioned Virtual Chassis (needs serial numbers)</label>
+        <label class="check"><input type="checkbox" data-bind="switch.vc_no_split_detection"> No split detection (recommended for 2 members)</label>
+        <div class="field wide"><label>Extra ports not in the model list (optional)</label><input type="text" data-bind="switch.custom_ports" placeholder="e.g. ge-0/1/0-1 for 1G optics in the uplinks"></div>
+      </div>
+      <p class="note" id="model-notes"></p>
+    </div>
+    <div class="panel">
+      <h2>Port map</h2>
+      <p class="hint">Click ports to pick them, then make a port group or LAG from the selection. The colour shows what each port does. A dot means PoE.</p>
+      <div class="legend">
+        <span style="--c:#2f8f5b">Access</span><span style="--c:#2f6fdf">Trunk</span><span style="--c:#8a4fd1">Routed</span>
+        <span style="--c:#c4661f">LAG member</span><span style="--c:var(--border)">Unused</span>
+      </div>
+      <div class="portmap" id="portmap"></div>
+      <div class="toolbar" style="margin-top:10px">
+        <span class="status" id="picked-label">No ports picked.</span>
+        <span class="grow"></span>
+        <button class="secondary small" type="button" id="pick-clear">Clear</button>
+        <button class="small" type="button" id="pick-ports">New port group</button>
+        <button class="small" type="button" id="pick-lag">New LAG</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== SYSTEM -->
+  <section class="section" data-tab="System">
+    <div class="panel">
+      <h2>Identity and time</h2>
+      <div class="grid">
+        <div class="field"><label>Host name *</label><input type="text" data-bind="system.hostname" placeholder="ex-floor2-01"></div>
+        <div class="field"><label>Domain name</label><input type="text" data-bind="system.domain" placeholder="corp.example.com"></div>
+        <div class="field"><label>Time zone</label><input type="text" data-bind="system.timezone" list="tz-list" placeholder="America/Edmonton"></div>
+        <div class="field"><label>DNS servers</label><input type="text" data-bind="system.name_servers" placeholder="10.0.0.10, 1.1.1.1"></div>
+        <div class="field"><label>DNS search domains</label><input type="text" data-bind="system.domain_search" placeholder="corp.example.com"></div>
+      </div>
+      <h3>NTP servers</h3>
+      <div class="rows compact" data-table="system.ntp_servers"></div>
+      <button class="secondary small" type="button" data-add="system.ntp_servers">Add NTP server</button>
+      <div class="grid" style="margin-top:10px">
+        <div class="field"><label>NTP source address (optional)</label><input type="text" data-bind="system.ntp_source" placeholder="10.10.10.2"></div>
+        <label class="check"><input type="checkbox" data-bind="system.auto_snapshot"> Auto-snapshot (backup boot partition)</label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Management port</h2>
+      <p class="hint">The dedicated out-of-band port (me0, or em0 on the EX4400). Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <div class="grid">
+        <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
+        <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>
+        <div class="field"><label>Gateway</label><input type="text" data-bind="system.mgmt_gateway" placeholder="192.168.1.1"></div>
+        <label class="check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (mgmt_junos)</label>
+        <label class="check"><input type="checkbox" data-bind="system.ignore_mgmt_alarm"> Ignore the alarm when the port is unplugged</label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Login banner</h2>
+      <textarea data-bind="system.banner" placeholder="Authorized access only. Activity is logged."></textarea>
+    </div>
+  </section>
+
+  <!-- ===================================================== ACCESS -->
+  <section class="section" data-tab="Users">
+    <div class="panel">
+      <h2>Root account</h2>
+      <p class="hint">Junos won't commit without a root password. Passwords are turned into SHA-512 hashes as soon as the config is generated, so plain text is never saved in a project.</p>
+      <div class="grid">
+        <div class="field"><label>Root password *</label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
+        <div class="field wide"><label>Root SSH public key (optional)</label><textarea data-bind="access.root_ssh_key" placeholder="ssh-ed25519 AAAA... you@laptop"></textarea></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Local users</h2>
+      <p class="hint">super-user = full access, operator = view and clear, read-only = view only.</p>
+      <div class="rows" data-table="access.users"></div>
+      <button class="secondary small" type="button" data-add="access.users">Add user</button>
+    </div>
+    <div class="panel">
+      <h2>Remote access</h2>
+      <div class="grid">
+        <div class="field"><label>SSH root login</label><select data-bind="access.ssh_root_login"><option value="deny">deny</option><option value="deny-password">keys only</option><option value="allow">allow</option></select></div>
+        <div class="field"><label>SSH connection limit</label><input type="text" data-bind="access.ssh_connection_limit"></div>
+        <div class="field"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
+        <label class="check"><input type="checkbox" data-bind="access.netconf"> NETCONF over SSH (Ansible, automation)</label>
+        <label class="check"><input type="checkbox" data-bind="access.web"> J-Web (HTTPS)</label>
+        <label class="check"><input type="checkbox" data-bind="access.retry_options"> Slow down password guessing</label>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================================================== SNMP / LOGGING -->
+  <section class="section" data-tab="SNMP & logs">
+    <div class="panel">
+      <h2>SNMP</h2>
+      <div class="grid">
+        <div class="field"><label>Location</label><input type="text" data-bind="snmp.location" placeholder="Building A, rack 3"></div>
+        <div class="field"><label>Contact</label><input type="text" data-bind="snmp.contact" placeholder="noc@example.com"></div>
+      </div>
+      <h3>SNMP v2c communities</h3>
+      <div class="rows compact" data-table="snmp.communities"></div>
+      <button class="secondary small" type="button" data-add="snmp.communities">Add community</button>
+      <h3>SNMP v3 users</h3>
+      <p class="hint">Recommended over v2c: passwords are encrypted on the wire. SHA-224/256/384/512 need a recent Junos release; pick SHA if your switch refuses it.</p>
+      <div class="rows" data-table="snmp.v3_users"></div>
+      <button class="secondary small" type="button" data-add="snmp.v3_users">Add v3 user</button>
+      <div class="grid" style="margin-top:10px">
+        <div class="field wide"><label>Trap receivers (v2c)</label><input type="text" data-bind="snmp.trap_targets" placeholder="10.0.0.20, 10.0.0.21"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Syslog</h2>
+      <div class="grid">
+        <div class="field"><label>Local log level</label><select data-bind="syslog.local_level" data-options="levels"></select></div>
+        <div class="field"><label>Source address</label><input type="text" data-bind="syslog.source_address" placeholder="(optional)"></div>
+        <label class="check"><input type="checkbox" data-bind="syslog.log_commands"> Log every CLI command</label>
+      </div>
+      <h3>Remote syslog servers</h3>
+      <div class="rows compact" data-table="syslog.hosts"></div>
+      <button class="secondary small" type="button" data-add="syslog.hosts">Add syslog server</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== VLANS -->
+  <section class="section" data-tab="VLANs">
+    <div class="panel">
+      <h2>VLANs</h2>
+      <p class="hint">Give a VLAN an IRB address to route it (layer 3). Several addresses can be comma-separated, including IPv6. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
+      <div class="rows" data-table="vlans"></div>
+      <button class="secondary small" type="button" data-add="vlans">Add VLAN</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== PORTS -->
+  <section class="section" data-tab="Ports">
+    <div class="panel">
+      <h2>Port groups</h2>
+      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code>ge-0/0/0-23, ge-0/0/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
+      <div class="rows" data-table="ports"></div>
+      <button class="secondary small" type="button" data-add="ports">Add port group</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== LAGS -->
+  <section class="section" data-tab="LAGs">
+    <div class="panel">
+      <h2>Link aggregation (LAG / ae)</h2>
+      <p class="hint">Bundle ports into one logical link with LACP. The other end must be set up the same way. Usually a trunk to a core switch, firewall or server.</p>
+      <div class="rows" data-table="lags"></div>
+      <button class="secondary small" type="button" data-add="lags">Add LAG</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== ROUTING -->
+  <section class="section" data-tab="Routing">
+    <div class="panel">
+      <h2>Static routes</h2>
+      <p class="hint">Use 0.0.0.0/0 for the default route. The next hop can be an IP address, <code>discard</code> or <code>reject</code>.</p>
+      <div class="rows compact" data-table="routing.static"></div>
+      <button class="secondary small" type="button" data-add="routing.static">Add route</button>
+    </div>
+    <div class="panel">
+      <h2>DHCP relay</h2>
+      <div class="grid">
+        <div class="field wide"><label>DHCP servers</label><input type="text" data-bind="routing.dhcp_relay_servers" placeholder="10.0.0.10, 10.0.0.11"></div>
+      </div>
+      <p class="hint">Relay is turned on per VLAN on the VLANs tab.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== SERVICES -->
+  <section class="section" data-tab="Services">
+    <div class="panel">
+      <h2>Switching services</h2>
+      <div class="grid">
+        <label class="check"><input type="checkbox" data-bind="services.lldp"> LLDP (see neighbours)</label>
+        <label class="check"><input type="checkbox" data-bind="services.lldp_med"> LLDP-MED (IP phones)</label>
+        <div class="field"><label>Spanning tree</label><select data-bind="services.stp"><option value="rstp">RSTP</option><option value="none">Off</option></select></div>
+        <div class="field"><label>Bridge priority</label><select data-bind="services.bridge_priority"><option value="">(default 32k)</option><option>0</option><option>4k</option><option>8k</option><option>12k</option><option>16k</option><option>20k</option><option>24k</option><option>28k</option><option>32k</option><option>36k</option><option>40k</option><option>48k</option><option>56k</option><option>60k</option></select></div>
+        <label class="check"><input type="checkbox" data-bind="services.bpdu_block_on_edge"> Block BPDUs on edge ports</label>
+        <label class="check"><input type="checkbox" data-bind="services.storm_control"> Storm control</label>
+        <div class="field"><label>Storm control limit (% of bandwidth)</label><input type="text" data-bind="services.storm_percent"></div>
+        <div class="field"><label>Storm control on</label><select data-bind="services.storm_scope"><option value="access">access ports</option><option value="all">access and trunk ports</option></select></div>
+        <label class="check"><input type="checkbox" data-bind="services.igmp_snooping"> IGMP snooping on all VLANs</label>
+        <label class="check"><input type="checkbox" data-bind="services.poe_all"> PoE on all ports (PoE models)</label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Output options</h2>
+      <div class="grid">
+        <label class="check"><input type="checkbox" data-bind="services.disable_unused"> Disable unused ports</label>
+        <label class="check"><input type="checkbox" data-bind="services.use_ranges"> Use interface ranges (shorter config)</label>
+        <label class="check"><input type="checkbox" data-bind="services.delete_first"> Start with <code>delete interfaces</code> / <code>delete vlans</code></label>
+      </div>
+      <p class="hint">"Start with delete" removes the factory port settings so they can't clash with yours. Keep it on for a new switch. Paste the set commands in <code>configure</code> mode, then <code>show | compare</code>, <code>commit check</code> and <code>commit confirmed 5</code>.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== PROJECTS -->
+  <section class="section" data-tab="My projects">
+    <div class="panel">
+      <h2>My saved projects</h2>
+      <p class="hint">Projects saved here are kept on the server and only visible to you. "Save to my projects" (top right) saves the current project under its project name, replacing an older save with the same name.</p>
+      <table class="plist"><thead><tr><th>Name</th><th>Saved</th><th></th></tr></thead><tbody id="plist"></tbody></table>
+      <p class="status" id="plist-status"></p>
+    </div>
+  </section>
+  </div>
+
+  <!-- ===================================================== OUTPUT -->
+  <aside class="out">
+    <div class="panel">
+      <div class="outtabs">
+        <button class="secondary small sel" type="button" data-fmt="set">set commands</button>
+        <button class="secondary small" type="button" data-fmt="hierarchy">hierarchical</button>
+        <span class="grow" style="flex:1"></span>
+        <button class="small" type="button" id="btn-copy">Copy</button>
+        <button class="secondary small" type="button" id="btn-download">Download</button>
+      </div>
+      <p class="status" id="status">Generating…</p>
+      <ul class="msgs" id="msgs"></ul>
+      <pre id="output"></pre>
+      <p class="note" id="load-hint"></p>
+    </div>
+  </aside>
+</div>
+<datalist id="tz-list">{% for tz in timezones %}<option value="{{ tz }}">{% endfor %}</datalist>
+<input type="hidden" id="csrf" value="{{ csrf_token }}">
+</main>
+
+<script>
+const CATALOG = {{ catalog|tojson }};
+const DEFAULTS = {{ defaults|tojson }};
+const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
+const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
+const CSRF = document.getElementById("csrf").value;
+const DRAFT_KEY = "exbuilder-draft";
+const MODEL_NAMES = CATALOG.map(m => m.name).concat(["Custom"]);
+
+const EXAMPLE = {
+  version: 1, name: "Office access switch",
+  switch: {members: [{fpc: 0, model: "EX2300-48P", serial: "", role: "routing-engine"}]},
+  system: {hostname: "ex-office-01", domain: "example.lan", timezone: "America/Edmonton", name_servers: "10.10.0.10, 1.1.1.1",
+           ntp_servers: [{address: "10.10.0.1", prefer: true}, {address: "pool.ntp.org", prefer: false}],
+           banner: "Authorized access only.\nAll activity is logged."},
+  access: {users: [{name: "netadmin", class: "super-user", full_name: "Network admin", password: "", ssh_keys: ""}], netconf: true},
+  snmp: {location: "Head office, rack 2", contact: "noc@example.lan",
+         communities: [{name: "s3cr3t-ro", access: "read-only", clients: "10.10.0.0/24"}],
+         v3_users: [{name: "librenms", auth: "sha256", auth_password: "change-me-auth", priv: "aes128", priv_password: "change-me-priv"}]},
+  syslog: {hosts: [{address: "10.10.0.20", facility: "any", level: "info", port: "514"}]},
+  vlans: [
+    {name: "MGMT", id: "10", description: "Switch management", irb: "10.10.10.2/24"},
+    {name: "USERS", id: "20", description: "Office PCs", irb: "10.10.20.1/24", dhcp_relay: true, snooping: true, dai: true},
+    {name: "VOICE", id: "30", description: "IP phones", irb: "10.10.30.1/24", dhcp_relay: true},
+    {name: "WIFI", id: "40", description: "Access points"}],
+  ports: [
+    {name: "DESKS", ports: "ge-0/0/0-39", mode: "access", vlan: "USERS", voice: "VOICE", description: "Desk ports", edge: true, mac_limit: "3"},
+    {name: "APS", ports: "ge-0/0/40-45", mode: "trunk", vlans: "WIFI, USERS", native: "MGMT", description: "Wi-Fi access points", poe: "high", edge: false},
+    {name: "UPLINK-FW", ports: "ge-0/0/47", mode: "routed", address: "10.255.0.2/30", description: "To firewall", poe: "off", edge: false}],
+  lags: [{name: "ae0", members: "xe-0/1/0-1", lacp: "active", lacp_fast: true, mode: "trunk", vlans: "MGMT, USERS, VOICE, WIFI", description: "To core"}],
+  routing: {static: [{prefix: "0.0.0.0/0", next_hop: "10.255.0.1", preference: ""}], dhcp_relay_servers: "10.10.0.10"},
+  services: {bridge_priority: "32k", disable_unused: true}
+};
+
+// ------------------------------------------------------------- table specs
+const VLAN_SEL = "vlan";   // a select filled with the current VLAN names
+const PORT_FIELDS = [
+  {key: "name", label: "Name", ph: "DESKS"},
+  {key: "ports", label: "Ports", ph: "ge-0/0/0-23", cls: "span2"},
+  {key: "mode", label: "Mode", type: "select", options: ["access", "trunk", "routed", "disabled"]},
+  {key: "description", label: "Description", cls: "span2"},
+  {key: "vlan", label: "Access VLAN", type: VLAN_SEL, show: r => r.mode === "access"},
+  {key: "voice", label: "Voice VLAN", type: VLAN_SEL, show: r => r.mode === "access"},
+  {key: "vlans", label: "Trunk VLANs (names or 'all')", ph: "USERS, VOICE", cls: "span2", show: r => r.mode === "trunk"},
+  {key: "native", label: "Native (untagged) VLAN", type: VLAN_SEL, show: r => r.mode === "trunk"},
+  {key: "address", label: "IP address / prefix", ph: "10.0.0.1/30", cls: "span2", show: r => r.mode === "routed"},
+  {key: "poe", label: "PoE", type: "select", options: [["", "default"], ["high", "priority high"], ["low", "priority low"], ["off", "off"]], show: r => r.mode !== "disabled"},
+  {key: "speed", label: "Speed", type: "select", options: [["", "auto"], "10m", "100m", "1g", "2.5g", "10g"], show: r => r.mode !== "disabled"},
+  {key: "mtu", label: "MTU", ph: "9216", show: r => r.mode !== "disabled"},
+  {key: "mac_limit", label: "MAC limit", ph: "e.g. 3", show: r => r.mode === "access"},
+  {key: "edge", label: "Edge port (RSTP)", type: "checkbox", show: r => r.mode === "access"},
+  {key: "dhcp_trusted", label: "DHCP trusted", type: "checkbox", show: r => r.mode === "access"},
+];
+const LAG_FIELDS = [
+  {key: "name", label: "LAG", ph: "ae0"},
+  {key: "members", label: "Member ports", ph: "xe-0/1/0-1", cls: "span2"},
+  {key: "lacp", label: "LACP", type: "select", options: ["active", "passive", ["static", "off (static)"]]},
+  {key: "lacp_fast", label: "Fast LACP (1s)", type: "checkbox"},
+  {key: "min_links", label: "Minimum links", ph: "1"},
+  {key: "mode", label: "Mode", type: "select", options: ["trunk", "access", "routed", "disabled"]},
+  {key: "description", label: "Description", cls: "span2"},
+  ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "address", "mtu"].includes(f.key)),
+];
+const TABLES = {
+  "switch.members": {fields: [
+      {key: "fpc", label: "Member (FPC)", ph: "0"},
+      {key: "model", label: "Model", type: "select", options: MODEL_NAMES, cls: "span2"},
+      {key: "serial", label: "Serial number", ph: "for pre-provisioning"},
+      {key: "role", label: "Role", type: "select", options: ["routing-engine", "line-card"]}],
+    blank: rows => ({fpc: rows.length, model: (rows[0] || {}).model || "EX2300-48P", serial: "", role: rows.length < 2 ? "routing-engine" : "line-card"})},
+  "system.ntp_servers": {fields: [{key: "address", label: "Server", ph: "10.0.0.1 or pool.ntp.org", cls: "span2"}, {key: "prefer", label: "Preferred", type: "checkbox"}],
+    blank: () => ({address: "", prefer: false})},
+  "access.users": {fields: [
+      {key: "name", label: "User name", ph: "netadmin"},
+      {key: "full_name", label: "Full name"},
+      {key: "class", label: "Class", type: "select", options: ["super-user", "operator", "read-only"]},
+      {key: "password", label: "Password", type: "password"},
+      {key: "ssh_keys", label: "SSH public keys (one per line)", type: "textarea", cls: "full"}],
+    title: r => r.name || "New user", blank: () => ({name: "", full_name: "", class: "super-user", password: "", ssh_keys: ""})},
+  "snmp.communities": {fields: [
+      {key: "name", label: "Community", ph: "not public"},
+      {key: "access", label: "Access", type: "select", options: ["read-only", "read-write"]},
+      {key: "clients", label: "Allowed clients", ph: "10.0.0.0/24", cls: "span2"}],
+    blank: () => ({name: "", access: "read-only", clients: ""})},
+  "snmp.v3_users": {fields: [
+      {key: "name", label: "User", ph: "librenms"},
+      {key: "auth", label: "Authentication", type: "select", options: ["sha", "sha256", "sha384", "sha512", "md5"]},
+      {key: "auth_password", label: "Auth password (8+)", type: "password"},
+      {key: "priv", label: "Privacy", type: "select", options: [["aes128", "AES-128"], ["des", "DES"], ["", "none"]]},
+      {key: "priv_password", label: "Privacy password (8+)", type: "password"}],
+    title: r => r.name || "New v3 user", blank: () => ({name: "", auth: "sha", auth_password: "", priv: "aes128", priv_password: ""})},
+  "syslog.hosts": {fields: [
+      {key: "address", label: "Server", ph: "10.0.0.20"},
+      {key: "facility", label: "Facility", type: "select", options: FACILITIES},
+      {key: "level", label: "Level", type: "select", options: LEVELS},
+      {key: "port", label: "Port", ph: "514"}],
+    blank: () => ({address: "", facility: "any", level: "info", port: "514"})},
+  "vlans": {fields: [
+      {key: "name", label: "Name", ph: "USERS"},
+      {key: "id", label: "VLAN ID", ph: "20"},
+      {key: "description", label: "Description", cls: "span2"},
+      {key: "irb", label: "IRB address(es) (layer 3)", ph: "10.0.20.1/24", cls: "span2"},
+      {key: "dhcp_relay", label: "DHCP relay", type: "checkbox"},
+      {key: "snooping", label: "DHCP snooping", type: "checkbox"},
+      {key: "dai", label: "ARP inspection", type: "checkbox"},
+      {key: "ipsg", label: "IP source guard", type: "checkbox"}],
+    title: r => `${r.name || "New VLAN"}${r.id ? " (" + r.id + ")" : ""}`,
+    blank: rows => ({name: "", id: String(rows.reduce((m, r) => Math.max(m, +r.id || 0), 0) + 10), description: "", irb: "", dhcp_relay: false, snooping: false, dai: false, ipsg: false})},
+  "ports": {fields: PORT_FIELDS, title: r => `${r.name || "Port group"} · ${r.mode}${r.ports ? " · " + r.ports : ""}`,
+    blank: () => ({name: "", ports: "", mode: "access", vlan: "", vlans: "", native: "", voice: "", description: "", poe: "", edge: true, mac_limit: "", dhcp_trusted: false, address: "", mtu: "", speed: ""})},
+  "lags": {fields: LAG_FIELDS, title: r => `${r.name || "LAG"} · ${r.mode}${r.members ? " · " + r.members : ""}`,
+    blank: rows => ({name: "ae" + rows.length, members: "", lacp: "active", lacp_fast: true, min_links: "", mode: "trunk", vlan: "", vlans: "", native: "", voice: "", description: "", address: "", mtu: ""})},
+  "routing.static": {fields: [
+      {key: "prefix", label: "Destination", ph: "0.0.0.0/0", cls: "span2"},
+      {key: "next_hop", label: "Next hop", ph: "10.0.0.1", cls: "span2"},
+      {key: "preference", label: "Preference", ph: "5"}],
+    blank: () => ({prefix: "", next_hop: "", preference: ""})},
+};
+
+// ------------------------------------------------------------------ state
+let state = null;
+let result = null;
+let fmt = "set";
+let picked = new Set();
+
+function clone(o) { return JSON.parse(JSON.stringify(o)); }
+function merge(base, data) {
+  const out = clone(base);
+  for (const [k, v] of Object.entries(data || {})) {
+    if (out[k] && typeof out[k] === "object" && !Array.isArray(out[k]) && v && typeof v === "object" && !Array.isArray(v)) out[k] = merge(out[k], v);
+    else out[k] = v;
+  }
+  return out;
+}
+function getPath(path) { return path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), state); }
+function setPath(path, value) {
+  const keys = path.split("."); let o = state;
+  for (const k of keys.slice(0, -1)) o = o[k];
+  o[keys[keys.length - 1]] = value;
+}
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+
+function load(project) {
+  state = merge(DEFAULTS, project || {});
+  for (const key of ["vlans", "ports", "lags"]) state[key] = state[key] || [];
+  picked.clear();
+  renderAll();
+  generate();
+}
+
+// --------------------------------------------------------------- rendering
+function vlanOptions() {
+  return [["", "(none)"], ...state.vlans.filter(v => v.name).map(v => [v.name, `${v.name} (${v.id})`])];
+}
+function optionHtml(options, value) {
+  let found = false;
+  const html = options.map(o => {
+    const [v, l] = Array.isArray(o) ? o : [o, o];
+    if (String(v) === String(value ?? "")) found = true;
+    return `<option value="${esc(v)}"${String(v) === String(value ?? "") ? " selected" : ""}>${esc(l)}</option>`;
+  }).join("");
+  return found || !value ? html : html + `<option value="${esc(value)}" selected>${esc(value)} (missing)</option>`;
+}
+function fieldHtml(path, f, row) {
+  const p = `${path}.${f.key}`; const v = row[f.key];
+  const cls = f.cls || "";
+  if (f.type === "checkbox")
+    return `<div class="rowfield ${cls}"><label>&nbsp;</label><label class="check"><input type="checkbox" data-bind="${p}"${v ? " checked" : ""}> ${esc(f.label)}</label></div>`;
+  let input;
+  if (f.type === "select" || f.type === VLAN_SEL) input = `<select data-bind="${p}">${optionHtml(f.type === VLAN_SEL ? vlanOptions() : f.options, v)}</select>`;
+  else if (f.type === "textarea") input = `<textarea data-bind="${p}">${esc(v)}</textarea>`;
+  else input = `<input type="${f.type === "password" ? "password" : "text"}" data-bind="${p}" value="${esc(v)}" placeholder="${esc(f.ph || "")}"${f.type === "password" ? ' autocomplete="new-password"' : ""}>`;
+  return `<div class="rowfield ${cls}"><label>${esc(f.label)}</label>${input}</div>`;
+}
+function renderTable(path) {
+  const el = document.querySelector(`[data-table="${path}"]`); const spec = TABLES[path];
+  const rows = getPath(path) || [];
+  el.innerHTML = rows.map((row, i) => {
+    const fields = spec.fields.filter(f => !f.show || f.show(row)).map(f => fieldHtml(`${path}.${i}`, f, row)).join("");
+    const rm = `<button class="danger small rm" type="button" data-remove="${path}" data-index="${i}" title="Remove">✕</button>`;
+    const title = spec.title ? esc(spec.title(row)) : "";
+    const up = i ? `<button class="secondary small" type="button" data-up="${path}" data-index="${i}" title="Move up">↑</button> ` : "";
+    return `<div class="row"><div class="head"><span>${title}</span><span>${up}${rm}</span></div><div class="fields">${fields}${el.classList.contains("compact") ? rm : ""}</div></div>`;
+  }).join("") || `<p class="hint">Nothing yet.</p>`;
+}
+function renderTables() { Object.keys(TABLES).forEach(renderTable); }
+function renderBound() {
+  document.querySelectorAll("#sections > section [data-bind]").forEach(el => {
+    if (el.closest("[data-table]")) return;
+    if (el.dataset.options === "levels" && !el.options.length) el.innerHTML = optionHtml(LEVELS, "");
+    const v = getPath(el.dataset.bind);
+    if (el.type === "checkbox") el.checked = !!v; else el.value = v ?? "";
+  });
+}
+function renderAll() { renderBound(); renderTables(); renderPortmap(); renderNotes(); updateTabs(); }
+
+function memberModels() {
+  return (state.switch.members || []).map(m => ({fpc: +m.fpc || 0, model: CATALOG.find(c => c.name === m.model)}));
+}
+function renderNotes() {
+  document.getElementById("model-notes").textContent = memberModels().filter(m => m.model)
+    .map(m => `Member ${m.fpc}: ${m.model.name}. ${m.model.notes}`).join("  ");
+}
+function renderPortmap() {
+  const el = document.getElementById("portmap");
+  const used = (result && result.ports) || {};
+  const html = memberModels().map(({fpc, model}) => {
+    if (!model) return `<div class="member"><h4>Member ${fpc}: custom model (no port map)</h4></div>`;
+    const groups = {};
+    for (const p of model.ports) {
+      const name = p.name.replace(/-0\//, `-${fpc}/`);
+      const key = p.kind + " " + p.speed;
+      (groups[key] = groups[key] || []).push({...p, name});
+    }
+    return `<div class="member"><h4>Member ${fpc}: ${esc(model.name)}</h4>` + Object.entries(groups).map(([key, ports]) => {
+      const kind = key.split(" ")[0];
+      const label = {access: "Front ports", uplink: "Uplinks", module: "Uplink module (optional)", vcp: "Virtual Chassis ports"}[kind] || kind;
+      const single = ports.length <= 8 ? " single" : "";
+      // Junos numbers top row even, bottom row odd, like the front panel.
+      const cells = ports.map(p => {
+        const u = used[p.name]; const n = p.name.split("/").pop();
+        const cls = ["port", p.poe ? "poe" : "", u ? u.use : "", picked.has(p.name) ? "picked" : ""].join(" ");
+        const tip = `${p.name} · ${p.speed}${p.poe ? " · PoE" : ""}${u ? " · " + u.use + " (" + u.label + ")" : ""}`;
+        return `<div class="${cls}" data-port="${p.name}" title="${esc(tip)}">${n}</div>`;
+      });
+      const chunks = [];
+      for (let i = 0; i < cells.length; i += 24) chunks.push(`<div class="pgroup${single}">${cells.slice(i, i + 24).join("")}</div>`);
+      return `<div class="pglabel">${esc(label)} · ${esc(ports[0].speed)}</div><div class="pchunks">${chunks.join("")}</div>`;
+    }).join("") + `</div>`;
+  }).join("");
+  el.innerHTML = html;
+  const n = picked.size;
+  document.getElementById("picked-label").textContent = n ? `Picked: ${compact([...picked])}` : "No ports picked.";
+}
+
+function portKey(n) { const m = n.match(/^(\w+)-(\d+)\/(\d+)\/(\d+)$/); return m ? [+m[2], +m[3], m[1], +m[4]] : [99, 0, n, 0]; }
+function compact(list) {
+  const sorted = list.slice().sort((a, b) => { const x = portKey(a), y = portKey(b); for (let i = 0; i < 4; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; });
+  const out = [];
+  for (const name of sorted) {
+    const k = portKey(name); const last = out[out.length - 1];
+    if (last && last.k[0] === k[0] && last.k[1] === k[1] && last.k[2] === k[2] && last.end + 1 === k[3]) { last.end = k[3]; continue; }
+    out.push({name, k, end: k[3]});
+  }
+  return out.map(r => r.end === r.k[3] ? r.name : `${r.name}-${r.end}`).join(", ");
+}
+
+// ------------------------------------------------------------------- tabs
+const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
+                     Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], Services: ["Services"], "My projects": []};
+let activeTab = "Switch";
+function updateTabs() {
+  const nav = document.getElementById("tabs");
+  const msgs = result ? result.errors : [];
+  nav.innerHTML = Object.keys(TAB_SECTION).map(t => {
+    const bad = msgs.filter(m => TAB_SECTION[t].includes(m.section)).length;
+    let count = "";
+    if (t === "VLANs") count = state.vlans.length; else if (t === "Ports") count = state.ports.length; else if (t === "LAGs") count = state.lags.length;
+    return `<button type="button" data-tabbtn="${t}" class="${t === activeTab ? "active" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
+  }).join("");
+  document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
+}
+function showTab(t) {
+  activeTab = t; updateTabs();
+  try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
+  if (t === "My projects") refreshProjects();
+}
+
+// ---------------------------------------------------------------- generate
+let timer = null; let seq = 0;
+function schedule() { clearTimeout(timer); timer = setTimeout(generate, 400); saveDraft(); }
+async function generate() {
+  const mine = ++seq; const sent = clone(state);
+  setStatus("Generating…", "");
+  try {
+    const resp = await fetch("generate", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(sent)});
+    if (resp.redirected || resp.status === 401) { location.reload(); return; }
+    const data = await resp.json();
+    if (mine !== seq) return;
+    if (!resp.ok) { setStatus(data.error || "Server error", "bad"); return; }
+    result = data;
+    applyHashes(sent, data.hashed || {});
+    showOutput();
+  } catch (e) { if (mine === seq) setStatus("Could not reach the server: " + e, "bad"); }
+}
+function applyHashes(sent, hashed) {
+  let changed = false;
+  for (const [path, hash] of Object.entries(hashed)) {
+    const was = path.split(".").reduce((o, k) => (o == null ? undefined : o[k]), sent);
+    if (getPath(path) === was) { setPath(path, hash); changed = true; }
+  }
+  if (changed) { renderBound(); renderTable("access.users"); saveDraft(); }
+}
+function setStatus(text, cls) { const s = document.getElementById("status"); s.textContent = text; s.className = "status " + cls; }
+function showOutput() {
+  if (!result) return;
+  document.getElementById("output").textContent = fmt === "set" ? result.set : result.hierarchy;
+  const e = result.errors.length, w = result.warnings.length;
+  setStatus(e ? `${e} error${e > 1 ? "s" : ""} to fix before this config will commit${w ? `, ${w} warning${w > 1 ? "s" : ""}` : ""}.`
+              : w ? `Ready, with ${w} warning${w > 1 ? "s" : ""} to review.` : "Ready. No problems found.", e ? "bad" : "ok");
+  document.getElementById("msgs").innerHTML =
+    result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
+    result.warnings.map(m => `<li class="warn" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
+  document.getElementById("load-hint").innerHTML = fmt === "set"
+    ? "On the switch: <code>configure</code>, paste, <code>show | compare</code>, <code>commit check</code>, then <code>commit confirmed 5</code> and <code>commit</code> once you're still connected."
+    : "On the switch: <code>configure</code>, <code>load merge terminal</code>, paste, Ctrl+D, then <code>show | compare</code> and <code>commit confirmed 5</code>. On a factory-new switch you can use <code>load override terminal</code>.";
+  renderPortmap(); updateTabs();
+}
+
+// ---------------------------------------------------------------- events
+document.addEventListener("input", ev => {
+  const el = ev.target; const path = el.dataset && el.dataset.bind; if (!path) return;
+  setPath(path, el.type === "checkbox" ? el.checked : el.value);
+  const table = el.closest("[data-table]");
+  // Re-render where a field changes what other fields show.
+  if (el.tagName === "SELECT" || el.type === "checkbox") {
+    if (table) renderTable(table.dataset.table);
+    if (path.startsWith("switch.members")) { renderPortmap(); renderNotes(); }
+  }
+  if (path.startsWith("vlans.") && el.tagName !== "SELECT") { clearTimeout(window._vt); window._vt = setTimeout(() => { renderTable("ports"); renderTable("lags"); }, 600); }
+  if (table && /\.(name|ports|members)$/.test(path)) {
+    const head = el.closest(".row").querySelector(".head span"); const spec = TABLES[table.dataset.table];
+    if (head && spec.title) head.textContent = spec.title(getPath(path.split(".").slice(0, -1).join(".")));
+  }
+  schedule();
+});
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("button, [data-port], [data-goto]"); if (!t) return;
+  if (t.dataset.tabbtn) showTab(t.dataset.tabbtn);
+  else if (t.dataset.add) { const rows = getPath(t.dataset.add); rows.push(TABLES[t.dataset.add].blank(rows)); renderTable(t.dataset.add); if (t.dataset.add === "switch.members") renderPortmap(); schedule(); }
+  else if (t.dataset.remove) { getPath(t.dataset.remove).splice(+t.dataset.index, 1); renderTable(t.dataset.remove); if (t.dataset.remove === "vlans") { renderTable("ports"); renderTable("lags"); } schedule(); }
+  else if (t.dataset.up) { const rows = getPath(t.dataset.up); const i = +t.dataset.index; [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; renderTable(t.dataset.up); schedule(); }
+  else if (t.dataset.port) { picked.has(t.dataset.port) ? picked.delete(t.dataset.port) : picked.add(t.dataset.port); renderPortmap(); }
+  else if (t.dataset.goto) { const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(t.dataset.goto)); if (tab) showTab(tab); }
+  else if (t.dataset.fmt) { fmt = t.dataset.fmt; document.querySelectorAll("[data-fmt]").forEach(b => b.classList.toggle("sel", b === t)); showOutput(); }
+});
+document.getElementById("pick-clear").onclick = () => { picked.clear(); renderPortmap(); };
+document.getElementById("pick-ports").onclick = () => {
+  if (!picked.size) return;
+  const row = TABLES.ports.blank(state.ports); row.ports = compact([...picked]); row.name = "GROUP-" + (state.ports.length + 1);
+  state.ports.push(row); picked.clear(); renderTable("ports"); renderPortmap(); showTab("Ports"); schedule();
+};
+document.getElementById("pick-lag").onclick = () => {
+  if (!picked.size) return;
+  const used = new Set(state.lags.map(l => l.name)); let n = 0; while (used.has("ae" + n)) n++;
+  const row = TABLES.lags.blank(state.lags); row.name = "ae" + n; row.members = compact([...picked]);
+  state.lags.push(row); picked.clear(); renderTable("lags"); renderPortmap(); showTab("LAGs"); schedule();
+};
+
+function fileName(ext) { return ((state.system.hostname || state.name || "ex-switch").replace(/[^\w.-]+/g, "-")) + ext; }
+function download(name, text, type) {
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+document.getElementById("btn-copy").onclick = async () => {
+  const text = document.getElementById("output").textContent;
+  try { await navigator.clipboard.writeText(text); setStatus("Copied to the clipboard.", "ok"); }
+  catch (e) { const r = document.createRange(); r.selectNodeContents(document.getElementById("output")); const s = getSelection(); s.removeAllRanges(); s.addRange(r); setStatus("Selected: press Ctrl+C to copy.", ""); }
+};
+document.getElementById("btn-download").onclick = () => download(fileName(fmt === "set" ? ".set" : ".conf"), document.getElementById("output").textContent, "text/plain");
+document.getElementById("btn-save-file").onclick = () => download(fileName(".json"), JSON.stringify(state, null, 2), "application/json");
+document.getElementById("btn-open").onclick = () => document.getElementById("file-open").click();
+document.getElementById("file-open").onchange = async ev => {
+  const f = ev.target.files[0]; if (!f) return;
+  try { load(JSON.parse(await f.text())); setStatus(`Opened ${f.name}.`, "ok"); } catch (e) { setStatus("That file is not a valid project JSON: " + e.message, "bad"); }
+  ev.target.value = "";
+};
+document.getElementById("btn-new").onclick = () => { if (confirmReplace()) load({}); };
+document.getElementById("btn-example").onclick = () => { if (confirmReplace()) load(EXAMPLE); };
+function confirmReplace() {
+  const blank = JSON.stringify(merge(DEFAULTS, {})) === JSON.stringify(state);
+  return blank || window.confirm("Replace the current project? Download or save it first if you want to keep it.");
+}
+
+// ---------------------------------------------------------------- projects
+async function api(url, body) {
+  const opts = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)};
+  const resp = await fetch(url, opts); const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  return data;
+}
+async function refreshProjects() {
+  const tb = document.getElementById("plist");
+  try {
+    const data = await api("projects");
+    tb.innerHTML = data.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="note">${esc(p.updated_at)}</td>
+      <td style="text-align:right"><button class="secondary small" data-open="${p.id}" type="button">Open</button>
+      <button class="danger small" data-del="${p.id}" data-name="${esc(p.name)}" type="button">Delete</button></td></tr>`).join("")
+      || `<tr><td colspan="3" class="note">No saved projects yet.</td></tr>`;
+  } catch (e) { document.getElementById("plist-status").textContent = "Could not load projects: " + e.message; }
+}
+document.getElementById("plist").addEventListener("click", async ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); showTab("Switch"); setStatus(`Opened ${p.name}.`, "ok"); }
+  if (b.dataset.del && window.confirm(`Delete the saved project "${b.dataset.name}"?`)) { await api(`projects/${b.dataset.del}/delete`, {}); refreshProjects(); }
+});
+document.getElementById("btn-save-server").onclick = async () => {
+  const name = (state.name || state.system.hostname || "").trim();
+  if (!name) { showTab("Switch"); setStatus("Give the project a name (Switch tab) before saving.", "bad"); return; }
+  await generate();  // hash any new passwords first
+  try { await api("projects", {name, data: state}); setStatus(`Saved "${name}" to your projects.`, "ok"); if (activeTab === "My projects") refreshProjects(); }
+  catch (e) { setStatus("Save failed: " + e.message, "bad"); }
+};
+
+// ---------------------------------------------------------------- drafts
+function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) {} }
+(function start() {
+  let draft = null;
+  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
+  if (!TAB_SECTION[activeTab]) activeTab = "Switch";
+  load(draft || {});
+  if (activeTab === "My projects") refreshProjects();
+})();
+</script>
+</body>
+</html>

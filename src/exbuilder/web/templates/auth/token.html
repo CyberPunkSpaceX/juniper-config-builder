@@ -1,0 +1,13 @@
+{% extends "auth/base.html" %}
+{% block title %}API token · EX Config Builder{% endblock %}
+{% block content %}
+<h1>Your API token</h1>
+<section class="panel" style="max-width: 640px">
+  <p>Copy it now: it is shown only once. Any older token stopped working.</p>
+  <pre class="codes">{{ token }}</pre>
+  <p class="muted">Use it as the password for scripts:</p>
+  <pre class="codes">curl -u {{ current_user['username'] }}:{{ token }} -H "Content-Type: application/json" --data @project.json {{ request.url_root }}api/generate</pre>
+  <p><a href="{{ url_for('auth.account') }}">Back to My account</a></p>
+</section>
+<style>pre.codes { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-all; }</style>
+{% endblock %}
