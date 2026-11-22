@@ -1,0 +1,15 @@
+{% extends "auth/base.html" %}
+{% block title %}Two-factor code · EX Config Builder{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>EX Config Builder</h1>
+<form class="panel" method="post">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  <div class="field"><label for="code">Enter the 6-digit code from your authenticator app</label>
+    <input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9a-zA-Z -]*" maxlength="20" required autofocus></div>
+  <button type="submit">Verify</button>
+  <p class="muted" style="font-size:13px">Lost your phone? Enter one of your recovery codes instead,
+    or ask an admin to reset your two-factor sign-in.</p>
+</form>
+{% endblock %}

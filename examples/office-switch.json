@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "name": "Office access switch",
+  "switch": {
+    "members": [
+      {
+        "fpc": 0,
+        "model": "EX2300-48P",
+        "serial": "",
+        "role": "routing-engine"
+      }
+    ]
+  },
+  "system": {
+    "hostname": "ex-office-01",
+    "domain": "example.lan",
+    "timezone": "America/Edmonton",
+    "name_servers": "10.10.0.10, 1.1.1.1",
+    "ntp_servers": [
+      {
+        "address": "10.10.0.1",
+        "prefer": true
+      },
+      {
+        "address": "pool.ntp.org",
+        "prefer": false
+      }
+    ],
+    "banner": "Authorized access only.\nAll activity is logged."
+  },
+  "access": {
+    "root_password": "",
+    "users": [
+      {
+        "name": "netadmin",
+        "class": "super-user",
+        "password": "",
+        "ssh_keys": ""
+      }
+    ],
+    "netconf": true
+  },
+  "snmp": {
+    "location": "Head office, rack 2",
+    "contact": "noc@example.lan",
+    "communities": [
+      {
+        "name": "s3cr3t-ro",
+        "access": "read-only",
+        "clients": "10.10.0.0/24"
+      }
+    ],
+    "v3_users": [
+      {
+        "name": "librenms",
+        "auth": "sha256",
+        "auth_password": "change-me-auth",
+        "priv": "aes128",
+        "priv_password": "change-me-priv"
+      }
+    ]
+  },
+  "syslog": {
+    "hosts": [
+      {
+        "address": "10.10.0.20",
+        "facility": "any",
+        "level": "info",
+        "port": "514"
+      }
+    ]
+  },
+  "vlans": [
+    {
+      "name": "MGMT",
+      "id": 10,
+      "description": "Switch management",
+      "irb": "10.10.10.2/24"
+    },
+    {
+      "name": "USERS",
+      "id": 20,
+      "description": "Office PCs",
+      "irb": "10.10.20.1/24",
+      "dhcp_relay": true,
+      "snooping": true,
+      "dai": true
+    },
+    {
+      "name": "VOICE",
+      "id": 30,
+      "description": "IP phones",
+      "irb": "10.10.30.1/24",
+      "dhcp_relay": true
+    },
+    {
+      "name": "WIFI",
+      "id": 40,
+      "description": "Access points"
+    }
+  ],
+  "ports": [
+    {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-39",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "VOICE",
+      "description": "Desk ports",
+      "edge": true,
+      "mac_limit": "3"
+    },
+    {
+      "name": "APS",
+      "ports": "ge-0/0/40-45",
+      "mode": "trunk",
+      "vlans": "WIFI, USERS",
+      "native": "MGMT",
+      "description": "Wi-Fi access points",
+      "poe": "high",
+      "edge": false
+    },
+    {
+      "name": "UPLINK-FW",
+      "ports": "ge-0/0/47",
+      "mode": "routed",
+      "address": "10.255.0.2/30",
+      "description": "To firewall",
+      "poe": "off"
+    }
+  ],
+  "lags": [
+    {
+      "name": "ae0",
+      "members": "xe-0/1/0-1",
+      "lacp": "active",
+      "lacp_fast": true,
+      "mode": "trunk",
+      "vlans": "MGMT, USERS, VOICE, WIFI",
+      "description": "To core"
+    }
+  ],
+  "routing": {
+    "static": [
+      {
+        "prefix": "0.0.0.0/0",
+        "next_hop": "10.255.0.1"
+      }
+    ],
+    "dhcp_relay_servers": "10.10.0.10"
+  },
+  "services": {
+    "bridge_priority": "32k",
+    "disable_unused": true
+  }
+}

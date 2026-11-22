@@ -1,0 +1,13 @@
+{% extends "auth/base.html" %}
+{% block title %}Recovery codes · EX Config Builder{% endblock %}
+{% block content %}
+<h1>{% if first %}Two-factor sign-in is on{% else %}New recovery codes{% endif %}</h1>
+<section class="panel" style="max-width: 520px">
+  <p>Save these recovery codes somewhere safe, such as your password manager. Each one signs you in once
+    if you lose your phone. They are shown only now{% if not first %}, and your old codes no longer work{% endif %}.</p>
+  <pre class="codes">{% for c in codes %}{{ c }}
+{% endfor %}</pre>
+  <p><a href="{{ url_for('auth.account') }}">Done, back to My account</a></p>
+</section>
+<style>pre.codes { font: 16px/1.7 ui-monospace, SFMono-Regular, Menlo, monospace; columns: 2; margin: 0 0 12px; }</style>
+{% endblock %}

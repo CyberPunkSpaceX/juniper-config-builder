@@ -1,0 +1,21 @@
+# EX Config Builder on a single Docker host:  docker compose -f deploy/docker-compose.yml up -d
+# Then open http://<host>:8088 and sign in as admin / admin (you'll be asked
+# for a new password straight away). See INSTALL.md.
+services:
+  exbuilder:
+    image: ghcr.io/cyberpunkspacex/juniper-config-builder:latest
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    environment:
+      # Set to "true" once you only reach the UI over HTTPS.
+      EXB_SECURE_COOKIES: "false"
+      EXB_REQUIRE_2FA: "false"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    volumes:
+      - exbuilder_data:/data
+
+volumes:
+  exbuilder_data:

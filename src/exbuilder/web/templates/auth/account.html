@@ -1,0 +1,63 @@
+{% extends "auth/base.html" %}
+{% block title %}My account · EX Config Builder{% endblock %}
+{% block content %}
+<h1>My account</h1>
+<div class="cards">
+<form class="panel" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Change password</h2>
+  <div class="field"><label for="cur">Current password</label>
+    <input id="cur" type="password" name="current" autocomplete="current-password" required></div>
+  <div class="field"><label for="p">New password <span class="hint">(at least 10 characters)</span></label>
+    <input id="p" type="password" name="password" autocomplete="new-password" required></div>
+  <div class="field"><label for="c">Confirm new password</label>
+    <input id="c" type="password" name="confirm" autocomplete="new-password" required></div>
+  <button type="submit">Change password</button>
+  <p class="muted">Changing your password signs you out on other devices.</p>
+  {% if current_user['must_change'] %}<p class="muted">Then set up two-factor sign-in, on the right, to protect the account further.</p>{% endif %}
+</form>
+
+<section class="panel">
+  <h2>Two-factor sign-in</h2>
+  {% if current_user['totp_secret'] %}
+  <p><span class="badge on">on</span> You sign in with your password and a code from your authenticator app.
+    <span class="muted">{{ recovery_left }} recovery code{{ '' if recovery_left == 1 else 's' }} left.</span></p>
+  <form method="post" action="{{ url_for('auth.twofa_recovery') }}" class="field">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label for="rc">New recovery codes <span class="hint">(enter a current code)</span></label>
+    <div class="inline"><input id="rc" type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required>
+      <button class="small secondary">Make new codes</button></div>
+  </form>
+  {% if not require_2fa %}
+  <form method="post" action="{{ url_for('auth.twofa_off') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label>Turn it off <span class="hint">(current password and a code)</span></label>
+    <div class="inline"><input type="password" name="current" placeholder="password" autocomplete="current-password" required>
+      <input type="text" name="code" placeholder="code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" required>
+      <button class="small danger">Turn off</button></div>
+  </form>
+  {% endif %}
+  {% else %}
+  <p><span class="badge off">off</span> Add a 6-digit code from an authenticator app (Google Authenticator,
+    Microsoft Authenticator, Duo Mobile, Authy...) to your sign-in.</p>
+  <p><a class="button-link" href="{{ url_for('auth.twofa_setup') }}">Set up two-factor sign-in</a></p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2>API token</h2>
+  <p class="muted">For scripts that call <code>/api/generate</code>. Use it instead of your password{% if current_user['totp_secret'] %}
+    (required, because 2FA is on){% endif %}.</p>
+  <form class="inline" method="post" action="{{ url_for('auth.api_token') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="small secondary" name="action" value="new">{{ 'Replace token' if current_user['api_token'] else 'Create token' }}</button>
+    {% if current_user['api_token'] %}<button class="small danger" name="action" value="delete">Delete token</button>{% endif %}
+  </form>
+</section>
+</div>
+<style>
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0 18px; align-items: start; }
+a.button-link { display: inline-block; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text);
+  padding: 8px 14px; border-radius: 6px; font-weight: 600; text-decoration: none; }
+</style>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "auth/base.html" %}
+{% block title %}Set up two-factor sign-in · EX Config Builder{% endblock %}
+{% block content %}
+<h1>Set up two-factor sign-in</h1>
+<form class="panel" method="post" style="max-width: 520px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  <p>1. Open an authenticator app (Google Authenticator, Microsoft Authenticator, Duo Mobile, Authy,
+    1Password, Bitwarden...) and add an account by scanning this code.</p>
+  {% if qr %}<div class="qr">{{ qr | safe }}</div>{% endif %}
+  <p class="muted" style="font-size:13px">Can't scan it? Choose "enter a setup key" in the app and type:<br>
+    <code class="secret">{{ secret }}</code> <span class="hint">(time-based, 6 digits)</span></p>
+  <div class="field"><label for="code">2. Enter the 6-digit code the app shows</label>
+    <input id="code" type="text" name="code" inputmode="numeric" autocomplete="one-time-code"
+           pattern="[0-9 ]*" maxlength="8" required></div>
+  <button type="submit">Turn on</button>
+</form>
+<style>
+.qr svg { background: #fff; border-radius: 6px; display: block; margin: 0 0 12px; }
+code.secret { font: 15px ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 1px; word-break: break-all; }
+</style>
+{% endblock %}

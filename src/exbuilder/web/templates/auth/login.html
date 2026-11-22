@@ -1,0 +1,14 @@
+{% extends "auth/base.html" %}
+{% block title %}Sign in · EX Config Builder{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<h1>EX Config Builder</h1>
+<form class="panel" method="post">
+  {% if error %}<div class="flash error">{{ error }}</div>{% endif %}
+  <div class="field"><label for="u">Username</label>
+    <input id="u" type="text" name="username" autocomplete="username" required autofocus></div>
+  <div class="field"><label for="p">Password</label>
+    <input id="p" type="password" name="password" autocomplete="current-password" required></div>
+  <button type="submit">Sign in</button>
+</form>
+{% endblock %}

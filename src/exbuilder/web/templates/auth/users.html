@@ -1,0 +1,82 @@
+{% extends "auth/base.html" %}
+{% block title %}Users · EX Config Builder{% endblock %}
+{% block content %}
+<h1>Users</h1>
+
+<form class="panel" method="post" action="{{ url_for('auth.users_create') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Add a user</h2>
+  <div class="row">
+    <div><label for="nu">Username</label><input id="nu" type="text" name="username" required autocomplete="off"></div>
+    <div><label for="np">Password <span class="hint">(min {{ min_password }})</span></label>
+      <input id="np" type="password" name="password" required autocomplete="new-password"></div>
+    <div><label for="nr">Role</label>
+      <select id="nr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+    <div><button type="submit">Add user</button></div>
+  </div>
+  <label style="margin-top:10px; font-weight:400"><input type="checkbox" name="must_change" value="1" checked>
+    Ask them to choose a new password when they first sign in</label>
+</form>
+
+<section class="panel scroll">
+  <table>
+    <tr><th>User</th><th>Role</th><th>Status</th><th>2FA</th><th>Last sign-in</th><th>Reset password</th><th></th></tr>
+    {% for u in users %}
+    {% set me = u['id'] == current_user['id'] %}
+    <tr>
+      <td><b>{{ u['username'] }}</b>{% if me %} <span class="muted">(you)</span>{% endif %}
+        <div class="muted" style="font-size:12px">added {{ u['created_at'] }}</div></td>
+      <td>
+        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="role">
+          <select name="role" onchange="this.form.submit()" aria-label="Role for {{ u['username'] }}">
+            {% for r in roles %}<option value="{{ r }}" {% if r == u['role'] %}selected{% endif %}>{{ r }}</option>{% endfor %}
+          </select>
+          <noscript><button class="small secondary">Save</button></noscript>
+        </form>
+      </td>
+      <td>
+        <span class="badge {{ 'on' if u['active'] else 'off' }}">{{ 'active' if u['active'] else 'disabled' }}</span>
+        {% if u['must_change'] %}<span class="badge">must change password</span>{% endif %}
+      </td>
+      <td>
+        {% if u['totp_secret'] %}<span class="badge on">on</span>
+        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
+              onsubmit="return confirm('Reset two-factor sign-in for {{ u['username'] }}?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="reset2fa">
+          <button class="small secondary">Reset</button>
+        </form>
+        {% else %}<span class="badge">off</span>{% endif %}
+      </td>
+      <td class="muted">{{ u['last_login'] or 'never' }}</td>
+      <td>
+        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="reset">
+          <input type="password" name="password" placeholder="new password" required autocomplete="new-password"
+                 aria-label="New password for {{ u['username'] }}">
+          <button class="small secondary">Reset</button>
+        </form>
+      </td>
+      <td>
+        {% if not me %}
+        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="toggle">
+          <button class="small secondary">{{ 'Disable' if u['active'] else 'Enable' }}</button>
+        </form>
+        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
+              onsubmit="return confirm('Delete {{ u['username'] }}?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="delete">
+          <button class="small danger">Delete</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}
