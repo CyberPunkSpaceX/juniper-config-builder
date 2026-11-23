@@ -27,7 +27,7 @@ ROUTING_DEFAULTS = {
     "bgp_groups": [],
 }
 POLICY_DEFAULTS = {"prefix_lists": [], "communities": [], "terms": []}
-EVPN_DEFAULTS = {"enabled": False, "role": "leaf", "overlay_type": "internal", "overlay_as": "",
+EVPN_DEFAULTS = {"enabled": False, "role": "leaf", "overlay_type": "internal", "overlay_as": "", "route_reflector": False,
                  "peers": "", "vrf_target": "", "vrfs": []}
 AREA_DEFAULTS = {"area": "0.0.0.0", "type": "normal", "interfaces": "", "passive": "", "p2p": "", "md5_key": ""}
 BGP_DEFAULTS = {"name": "", "type": "external", "peer_as": "", "local_address": "", "neighbors": "",
@@ -413,7 +413,7 @@ def evpn(ctx) -> None:
     if overlay["type"] == "internal":
         if asn != ctx.asn and ctx.asn:
             cfg.add(("protocols", "bgp", "group EVPN-OVERLAY"), f"local-as {asn}")
-        if role == "spine":
+        if role == "spine" or _true(e.get("route_reflector")):
             overlay["cluster"] = lo
     else:
         overlay["multihop"] = True

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, render_template, request
 
-from .. import __version__, models
+from .. import __version__, fabric, models
 from ..generator import DEFAULTS, build
 from . import auth
 
@@ -61,7 +61,8 @@ def create_app() -> Flask:
     @app.get("/")
     def index():
         return render_template("builder.html", version=__version__, catalog=models.catalog(),
-                               defaults=DEFAULTS, timezones=zones)
+                               defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
+                               fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS)
 
     @app.get("/healthz")
     def healthz():
@@ -70,6 +71,27 @@ def create_app() -> Flask:
     @app.post("/generate")
     def generate():
         return build(_project_from_request()).to_dict()
+
+    # ------------------------------------------------------- fabric wizard
+    def _fabric_result() -> dict:
+        body = _project_from_request()
+        spec, base = body.get("fabric"), body.get("base") or {}
+        if not isinstance(spec, dict) or not isinstance(base, dict):
+            abort(400, "Send {fabric: {...}, base: {...}}.")
+        return fabric.generate(spec, base)
+
+    @app.post("/fabric")
+    def fabric_generate():
+        result = _fabric_result()
+        return (result, 400) if "error" in result else result
+
+    @app.post("/fabric/zip")
+    def fabric_zip():
+        result = _fabric_result()
+        if "error" in result:
+            return result, 400
+        return Response(fabric.to_zip(result), mimetype="application/zip",
+                        headers={"Content-Disposition": "attachment; filename=fabric-configs.zip"})
 
     # -------------------------------------------------------- saved projects
     def _uid() -> int:
