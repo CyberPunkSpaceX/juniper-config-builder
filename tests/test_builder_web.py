@@ -74,3 +74,24 @@ def test_fabric_endpoints(admin):
     z = admin.post("/fabric/zip", json=body, headers=hdr)
     assert z.status_code == 200 and z.mimetype == "application/zip" and z.data[:2] == b"PK"
     assert admin.post("/fabric", json=body).status_code == 400  # CSRF
+
+
+def test_import_and_excel_endpoints(admin):
+    import io
+    from pathlib import Path
+    hdr = {"X-CSRF-Token": token(admin)}
+    text = (Path(__file__).parent / "data" / "legacy-ex2300.conf").read_text()
+    resp = admin.post("/import/config", json={"text": text}, headers=hdr)
+    assert resp.status_code == 200 and resp.json["model"].startswith("EX2300")
+    assert resp.json["recommendations"] and resp.json["project"]["system"]["hostname"] == "sw-legacy-01"
+    assert admin.post("/import/config", json={"text": "nothing"}, headers=hdr).status_code == 400
+    tpl = admin.get("/excel/template")
+    assert tpl.status_code == 200 and tpl.data[:2] == b"PK"
+    exp = admin.post("/excel/export", json={"system": {"hostname": "sw9"}}, headers=hdr)
+    assert exp.status_code == 200 and "sw9.xlsx" in exp.headers["Content-Disposition"]
+    up = admin.post("/import/excel", data={"file": (io.BytesIO(exp.data), "sw9.xlsx")}, headers=hdr,
+                    content_type="multipart/form-data")
+    assert up.status_code == 200 and up.json["project"]["system"]["hostname"] == "sw9"
+    bad = admin.post("/import/excel", data={"file": (io.BytesIO(b"nope"), "x.xlsx")}, headers=hdr,
+                     content_type="multipart/form-data")
+    assert bad.status_code == 400

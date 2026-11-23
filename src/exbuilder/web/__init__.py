@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, render_template, request
 
-from .. import __version__, fabric, models
+from .. import __version__, fabric, importer, models, xlsx
 from ..generator import DEFAULTS, build
 from . import auth
 
@@ -92,6 +92,50 @@ def create_app() -> Flask:
             return result, 400
         return Response(fabric.to_zip(result), mimetype="application/zip",
                         headers={"Content-Disposition": "attachment; filename=fabric-configs.zip"})
+
+    # ------------------------------------------------- import and Excel
+    @app.post("/import/config")
+    def import_config():
+        body = _project_from_request()
+        text = str(body.get("text") or "")
+        if len(text) > 1_500_000:
+            return {"error": "That config is too large."}, 400
+        model = str(body.get("model") or "") or importer.guess_model(text)
+        if model and not models.get(model):
+            model = ""
+        result = importer.check(text, model)
+        if "error" in result:
+            return result, 400
+        result["model"] = model
+        return result
+
+    def _xlsx_response(data: bytes, name: str) -> Response:
+        return Response(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f"attachment; filename={name}"})
+
+    @app.get("/excel/template")
+    def excel_template():
+        return _xlsx_response(xlsx.workbook(), "ex-switch-template.xlsx")
+
+    @app.post("/excel/export")
+    def excel_export():
+        project = _project_from_request()
+        name = "".join(c if c.isalnum() or c in "-_." else "-" for c in
+                       str((project.get("system") or {}).get("hostname") or "ex-switch"))[:60] or "ex-switch"
+        return _xlsx_response(xlsx.workbook(project), f"{name}.xlsx")
+
+    @app.post("/import/excel")
+    def import_excel():
+        f = request.files.get("file")
+        if f is None:
+            return {"error": "Choose an Excel file (.xlsx)."}, 400
+        try:
+            project = xlsx.read(f.read())
+        except xlsx.WorkbookError as exc:
+            return {"error": str(exc)}, 400
+        built = build(project)
+        return {"project": project, "errors": built.errors, "warnings": built.warnings,
+                "recommendations": importer.recommendations(project, [], [])}
 
     # -------------------------------------------------------- saved projects
     def _uid() -> int:

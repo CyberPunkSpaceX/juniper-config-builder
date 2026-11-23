@@ -108,7 +108,8 @@
       "voice": "VOICE",
       "description": "Desk ports",
       "edge": true,
-      "mac_limit": "3"
+      "mac_limit": "3",
+      "role": "phone"
     },
     {
       "name": "APS",
@@ -118,7 +119,8 @@
       "native": "MGMT",
       "description": "Wi-Fi access points",
       "poe": "high",
-      "edge": false
+      "edge": false,
+      "role": "ap"
     },
     {
       "name": "UPLINK-FW",

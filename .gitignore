@@ -8,3 +8,4 @@ __pycache__/
 *.set
 *.conf
 /projects/
+!tests/data/*.conf
