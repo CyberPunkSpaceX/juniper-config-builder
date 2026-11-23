@@ -1,7 +1,7 @@
 # EX Config Builder
 
 A web GUI (and a small CLI) that builds configuration for **Juniper EX switches**
-running Junos with ELS (EX2300, EX3400, EX4300, EX4400). Fill in forms, and the
+running Junos with ELS (EX2300, EX3400, EX4100, EX4300, EX4400). Fill in forms, and the
 config appears live as `set` commands and as the hierarchical (curly brace)
 format, ready to copy or download.
 
@@ -9,7 +9,7 @@ format, ready to copy or download.
 
 | Area | What you can set |
 |---|---|
-| Hardware | Model (EX2300 / EX3400 / EX4300 / EX4400, incl. PoE and multigig), Virtual Chassis members, pre-provisioning with serial numbers, a clickable port map |
+| Hardware | Model (EX2300 / EX3400 / EX4100 / EX4100-F / EX4300 / EX4400, incl. PoE and multigig), Virtual Chassis members, pre-provisioning with serial numbers, a clickable port map |
 | System | Host name, domain, time zone, DNS servers and search domains, NTP (preferred server, source address), login banner, management port (me0/em0) with optional management VRF, auto-snapshot |
 | Users | Root password and SSH key, local users with class, password and SSH keys. Passwords are turned into SHA-512 (`$6$`) hashes; plain text never reaches the output or a saved project |
 | Remote access | SSH root login, connection and rate limits, NETCONF, J-Web, login retry limits |
@@ -22,7 +22,7 @@ format, ready to copy or download.
 | OSPF | Areas (normal, stub, NSSA), interfaces, passive and point-to-point interfaces, MD5 keys, reference bandwidth, export policies |
 | BGP | Groups (eBGP / iBGP), neighbors with their own AS and description, local address, import/export policies, BFD, multipath, MD5 |
 | Policies | Prefix lists, communities, policy statements with terms: from protocol / prefix list / route filter / community, then local preference, MED, community add, next-hop self, accept / reject / next term |
-| EVPN-VXLAN | Leaf, collapsed-core or spine (route reflector) role, iBGP or eBGP overlay, VNI per VLAN, anycast gateway (virtual-gateway-address), tenant VRFs with EVPN type-5 routes, ESI-LAG multihoming. EX4400 and EX4300-48MP |
+| EVPN-VXLAN | Leaf, collapsed-core or spine (route reflector) role, iBGP or eBGP overlay, VNI per VLAN, anycast gateway (virtual-gateway-address), tenant VRFs with EVPN type-5 routes, ESI-LAG multihoming. EX4100, EX4400 and EX4300-48MP |
 | Services | LLDP, LLDP-MED, RSTP with bridge priority and BPDU guard on edge ports, storm control, IGMP snooping, PoE on all ports, disable unused ports, interface ranges |
 
 It checks what you enter as you type: bad addresses, duplicate VLAN IDs, a port

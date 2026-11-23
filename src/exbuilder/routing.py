@@ -19,7 +19,7 @@ ESI = re.compile(r"^([0-9a-fA-F]{2}:){9}[0-9a-fA-F]{2}$")
 MAC = re.compile(r"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
 PROTOCOLS = ("direct", "static", "ospf", "bgp", "aggregate", "evpn", "local")
 MATCHES = ("exact", "orlonger", "longer", "upto")
-EVPN_MODELS = ("EX4400", "EX4300-48MP")
+EVPN_MODELS = ("EX4400", "EX4100", "EX4100-F", "EX4300-48MP")
 
 ROUTING_DEFAULTS = {
     "router_id": "", "asn": "", "loopback": "", "ecmp": False,
@@ -392,7 +392,7 @@ def evpn(ctx) -> None:
         return
     families = {m.family for m in ctx.models} | {m.name for m in ctx.models}
     if ctx.models and not any(f in families for f in EVPN_MODELS):
-        ctx.warn("EVPN", "EVPN-VXLAN runs on the EX4400 and EX4300-48MP, not on the EX2300, EX3400 or other EX4300 models.")
+        ctx.warn("EVPN", "EVPN-VXLAN runs on the EX4100, EX4400 and EX4300-48MP, not on the EX2300, EX3400 or other EX4300 models.")
     ctx.warn("EVPN", "EVPN-VXLAN and BGP need a feature license on EX switches. Check yours with 'show system license'.")
     role = e.get("role") if e.get("role") in ("leaf", "spine", "collapsed") else "leaf"
     lo = getattr(ctx, "loopback_ip", None)
