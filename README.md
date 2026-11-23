@@ -21,7 +21,10 @@ format, ready to copy or download.
    port that is already in a group to edit that group: its ports light up, click
    ports to add or remove them, then **Save group**. A port added to one group is
    taken out of any other. The config on the right updates as you type, with errors in red
-   (Junos would refuse them) and warnings in orange.
+   (Junos would refuse them) and warnings in orange. Anything missing or wrong, such
+   as an empty host name or root password, is outlined in red right on the field (or
+   its row in a table), and the tab it sits on turns red with a count. Click an
+   error in the list to jump straight to that field.
 4. **Copy or download** the set commands or the hierarchical config, then load it
    on the switch as described in [Applying the config](#applying-the-config-on-a-switch).
 

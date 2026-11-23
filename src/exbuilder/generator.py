@@ -170,9 +170,32 @@ class Ctx:
         self.router_id = None
         self.loopback_ip = None
         self.models: list = []
+        self.row: str | None = None           # table row being checked, e.g. "ports.3"
 
-    def error(self, section: str, message: str) -> None:
-        self.res.errors.append({"section": section, "message": message})
+    def at(self, table: str, item: dict | None) -> None:
+        """Mark which table row the next errors belong to (None clears it).
+
+        The page uses this to outline the row, and the field when one is named.
+        """
+        self.row = None
+        if item is None:
+            return
+        rows = self.p
+        for key in table.split("."):
+            rows = rows.get(key) if isinstance(rows, dict) else None
+        for i, r in enumerate(rows or []):
+            if r is item:
+                self.row = f"{table}.{i}"
+                return
+
+    def error(self, section: str, message: str, field: str | None = None) -> None:
+        """Record an error. ``field`` is a key in the current row, or a full path outside tables."""
+        msg = {"section": section, "message": message}
+        if self.row:
+            msg["row"] = self.row
+        if field:
+            msg["field"] = f"{self.row}.{field}" if self.row else field
+        self.res.errors.append(msg)
 
     def warn(self, section: str, message: str) -> None:
         self.res.warnings.append({"section": section, "message": message})
@@ -221,13 +244,14 @@ def _switch(ctx: Ctx) -> None:
         ctx.error("Switch", "Add at least one switch (member 0).")
     seen = set()
     for m in members:
+        ctx.at("switch.members", m)
         try:
             fpc = int(m.get("fpc", 0))
         except (TypeError, ValueError):
-            ctx.error("Switch", f"Member number '{m.get('fpc')}' must be a number from 0 to 9.")
+            ctx.error("Switch", f"Member number '{m.get('fpc')}' must be a number from 0 to 9.", "fpc")
             continue
         if not 0 <= fpc <= 9 or fpc in seen:
-            ctx.error("Switch", f"Member number {fpc} must be 0-9 and used once.")
+            ctx.error("Switch", f"Member number {fpc} must be 0-9 and used once.", "fpc")
             continue
         seen.add(fpc)
         model = models.get(m.get("model", ""))
@@ -235,7 +259,8 @@ def _switch(ctx: Ctx) -> None:
             for port in model.ports(fpc):
                 ctx.known[port["name"]] = port
         elif m.get("model") != models.CUSTOM:
-            ctx.error("Switch", f"Unknown model '{m.get('model')}'.")
+            ctx.error("Switch", f"Unknown model '{m.get('model')}'.", "model")
+    ctx.at("", None)
     try:
         for name in P.expand(sw.get("custom_ports", "")):
             ctx.known.setdefault(name, {"name": name, "kind": "access", "speed": "", "poe": False})
@@ -250,14 +275,16 @@ def _switch(ctx: Ctx) -> None:
         if _truthy(sw.get("vc_preprovisioned")):
             ctx.cfg.add(("virtual-chassis",), "preprovisioned")
             for m in members:
+                ctx.at("switch.members", m)
                 serial = _s(m.get("serial"))
                 if not serial:
-                    ctx.error("Switch", f"Pre-provisioned Virtual Chassis needs the serial number of member {m.get('fpc')}.")
+                    ctx.error("Switch", f"Pre-provisioned Virtual Chassis needs the serial number of member {m.get('fpc')}.", "serial")
                     continue
                 role = m.get("role") if m.get("role") in ("routing-engine", "line-card") else "line-card"
                 path = ("virtual-chassis", f"member {int(m.get('fpc', 0))}")
                 ctx.cfg.add(path, f"role {role}")
                 ctx.cfg.add(path, f"serial-number {q(serial)}")
+            ctx.at("", None)
             res = [m for m in members if m.get("role") == "routing-engine"]
             if len(res) > 2:
                 ctx.error("Switch", "A Virtual Chassis has at most two routing-engine members.")
@@ -273,9 +300,9 @@ def _system(ctx: Ctx) -> None:
     cfg.comment("System")
     host = _s(s.get("hostname"))
     if not host:
-        ctx.error("System", "Host name is required.")
+        ctx.error("System", "Host name is required.", "system.hostname")
     elif not HOSTNAME.match(host):
-        ctx.error("System", f"Host name '{host}' may only use letters, digits and hyphens (max 63).")
+        ctx.error("System", f"Host name '{host}' may only use letters, digits and hyphens (max 63).", "system.hostname")
     else:
         cfg.add(("system",), f"host-name {host}")
     domain = _s(s.get("domain"))
@@ -283,13 +310,13 @@ def _system(ctx: Ctx) -> None:
         if DOMAIN.match(domain):
             cfg.add(("system",), f"domain-name {domain}")
         else:
-            ctx.error("System", f"Domain '{domain}' is not a valid domain name.")
+            ctx.error("System", f"Domain '{domain}' is not a valid domain name.", "system.domain")
     tz = _s(s.get("timezone"))
     if tz and tz != "UTC":
         if re.match(r"^[A-Za-z0-9_+\-/]+$", tz):
             cfg.add(("system",), f"time-zone {tz}")
         else:
-            ctx.error("System", f"Time zone '{tz}' is not valid.")
+            ctx.error("System", f"Time zone '{tz}' is not valid.", "system.timezone")
     for ns in _list(s.get("name_servers")):
         if _ip(ctx, "System", "DNS server", ns):
             cfg.add(("system", "name-server"), ns)
@@ -347,7 +374,7 @@ def _password(ctx: Ctx, section: str, label: str, value: str, key: str) -> str |
     if is_hashed(value):
         return value
     if len(value) < 6:
-        ctx.error(section, f"{label}: Junos needs at least 6 characters.")
+        ctx.error(section, f"{label}: Junos needs at least 6 characters.", key if not ctx.row else key.rsplit(".", 1)[-1])
         return None
     if value.isalpha() or value.isdigit():
         ctx.warn(section, f"{label}: Junos may refuse a password without a mix of letters and digits or symbols.")
@@ -375,19 +402,20 @@ def _access(ctx: Ctx) -> None:
     if root:
         cfg.add(("system", "root-authentication"), f"encrypted-password {q(root)}")
     elif not _s(a.get("root_ssh_key")):
-        ctx.error("Access", "A root password is required, or Junos refuses to commit.")
+        ctx.error("Access", "A root password is required, or Junos refuses to commit.", "access.root_password")
     _ssh_keys(ctx, "Access", "Root", ("system", "root-authentication"), a.get("root_ssh_key", ""))
 
     names = set()
     for i, u in enumerate(a.get("users") or []):
+        ctx.at("access.users", u)
         name = _s(u.get("name"))
         if not name:
             continue
         if not USERNAME.match(name) or name in ("root",):
-            ctx.error("Access", f"User '{name}': use lower-case letters, digits, '.', '_' or '-' (not root).")
+            ctx.error("Access", f"User '{name}': use lower-case letters, digits, '.', '_' or '-' (not root).", "name")
             continue
         if name in names:
-            ctx.error("Access", f"User '{name}' is listed twice.")
+            ctx.error("Access", f"User '{name}' is listed twice.", "name")
             continue
         names.add(name)
         cls = u.get("class") if u.get("class") in CLASSES else "read-only"
@@ -400,7 +428,8 @@ def _access(ctx: Ctx) -> None:
             cfg.add((*path, "authentication"), f"encrypted-password {q(hashed)}")
         _ssh_keys(ctx, "Access", f"User {name}", (*path, "authentication"), u.get("ssh_keys", ""))
         if not hashed and not _s(u.get("ssh_keys")):
-            ctx.error("Access", f"User '{name}' needs a password or an SSH key.")
+            ctx.error("Access", f"User '{name}' needs a password or an SSH key.", "password")
+    ctx.at("", None)
     if not any(u.get("class") == "super-user" and _s(u.get("name")) for u in a.get("users") or []):
         ctx.warn("Access", "No super-user account: you'd have to sign in as root to manage the switch.")
 
@@ -438,6 +467,7 @@ def _snmp(ctx: Ctx) -> None:
         if _s(s.get(key)):
             cfg.add(("snmp",), f"{key} {q(_s(s.get(key)))}")
     for c in comms:
+        ctx.at("snmp.communities", c)
         name = _s(c.get("name"))
         if name.lower() in ("public", "private"):
             ctx.warn("SNMP", f"Community '{name}' is a well-known default; pick something harder to guess.")
@@ -451,22 +481,24 @@ def _snmp(ctx: Ctx) -> None:
                 cfg.add((*path, "clients"), cl)
         if clients:
             cfg.add((*path, "clients"), "0.0.0.0/0 restrict")
+    ctx.at("", None)
     if users:
         cfg.add(("snmp", "view all"), "oid .1 include")
     for u in users:
+        ctx.at("snmp.v3_users", u)
         name = _s(u.get("name"))
         user_path = ("snmp", "v3", "usm", "local-engine", f"user {q(name)}")
         auth = SNMP_AUTH.get(u.get("auth") or "sha")
         apw, ppw = _s(u.get("auth_password")), _s(u.get("priv_password"))
         if len(apw) < 8:
-            ctx.error("SNMP", f"SNMPv3 user {name}: the authentication password needs at least 8 characters.")
+            ctx.error("SNMP", f"SNMPv3 user {name}: the authentication password needs at least 8 characters.", "auth_password")
             continue
         cfg.add((*user_path, auth), f"authentication-password {q(apw)}")
         level = "authentication"
         priv = SNMP_PRIV.get(u.get("priv") or "")
         if priv:
             if len(ppw) < 8:
-                ctx.error("SNMP", f"SNMPv3 user {name}: the privacy password needs at least 8 characters.")
+                ctx.error("SNMP", f"SNMPv3 user {name}: the privacy password needs at least 8 characters.", "priv_password")
             else:
                 cfg.add((*user_path, priv), f"privacy-password {q(ppw)}")
                 level = "privacy"
@@ -477,6 +509,7 @@ def _snmp(ctx: Ctx) -> None:
                 f"group {q(group)}")
         cfg.add(("snmp", "v3", "vacm", "access", f"group {q(group)}", "default-context-prefix",
                  "security-model usm", f"security-level {level}"), "read-view all")
+    ctx.at("", None)
     targets = _list(s.get("trap_targets"))
     if targets:
         tg = ("snmp", "trap-group traps")
@@ -497,6 +530,7 @@ def _syslog(ctx: Ctx) -> None:
     if _truthy(s.get("log_commands")):
         cfg.add(("system", "syslog", "file interactive-commands"), "interactive-commands any")
     for h in s.get("hosts") or []:
+        ctx.at("syslog.hosts", h)
         addr = _s(h.get("address"))
         if not addr or not _ip(ctx, "Logging", "Syslog server", addr):
             continue
@@ -509,7 +543,8 @@ def _syslog(ctx: Ctx) -> None:
             if port.isdigit() and 1 <= int(port) <= 65535:
                 cfg.add(path, f"port {port}")
             else:
-                ctx.error("Logging", f"Syslog port '{port}' is not valid.")
+                ctx.error("Logging", f"Syslog port '{port}' is not valid.", "port")
+    ctx.at("", None)
     src = _s(s.get("source_address"))
     if src and _ip(ctx, "Logging", "Syslog source address", src):
         cfg.add(("system", "syslog"), f"source-address {src}")
@@ -523,19 +558,20 @@ def _vlans(ctx: Ctx) -> None:
         return
     cfg.comment("VLANs")
     for v in vlans:
+        ctx.at("vlans", v)
         name, vid = _s(v.get("name")), _s(v.get("id"))
         if not NAME.match(name):
-            ctx.error("VLANs", f"VLAN name '{name}' must start with a letter and use letters, digits, '-', '_' or '.'.")
+            ctx.error("VLANs", f"VLAN name '{name}' must start with a letter and use letters, digits, '-', '_' or '.'.", "name")
             continue
         if not vid.isdigit() or not 1 <= int(vid) <= 4094:
-            ctx.error("VLANs", f"VLAN {name}: ID must be 1-4094.")
+            ctx.error("VLANs", f"VLAN {name}: ID must be 1-4094.", "id")
             continue
         vid_n = int(vid)
         if name.lower() in {n.lower() for n in ctx.vlan_by_name}:
-            ctx.error("VLANs", f"VLAN name '{name}' is used twice.")
+            ctx.error("VLANs", f"VLAN name '{name}' is used twice.", "name")
             continue
         if vid_n in ctx.vlan_by_id:
-            ctx.error("VLANs", f"VLAN ID {vid_n} is used by both {ctx.vlan_by_id[vid_n]['name']} and {name}.")
+            ctx.error("VLANs", f"VLAN ID {vid_n} is used by both {ctx.vlan_by_id[vid_n]['name']} and {name}.", "id")
             continue
         ctx.vlan_by_name[name] = v
         ctx.vlan_by_id[vid_n] = v
@@ -551,7 +587,7 @@ def _vlans(ctx: Ctx) -> None:
                 ctx.cfg.add(("interfaces", "irb", f"unit {vid_n}", f"family {_family(a)}"),
                             f"address {a.with_prefixlen}")
         elif _truthy(v.get("dhcp_relay")):
-            ctx.error("VLANs", f"VLAN {name}: DHCP relay needs an IRB address.")
+            ctx.error("VLANs", f"VLAN {name}: DHCP relay needs an IRB address.", "irb")
         if _truthy(v.get("snooping")) or _truthy(v.get("dai")) or _truthy(v.get("ipsg")):
             sec = (*path, "forwarding-options")
             cfg.add(sec, "dhcp-security")
@@ -561,7 +597,7 @@ def _vlans(ctx: Ctx) -> None:
                 cfg.add((*sec, "dhcp-security"), "ip-source-guard")
 
 
-def _vlan_name(ctx: Ctx, section: str, label: str, ref: str) -> str | None:
+def _vlan_name(ctx: Ctx, section: str, label: str, ref: str, field: str | None = None) -> str | None:
     ref = _s(ref)
     if not ref:
         return None
@@ -572,7 +608,7 @@ def _vlan_name(ctx: Ctx, section: str, label: str, ref: str) -> str | None:
             return name
     if ref.isdigit() and int(ref) in ctx.vlan_by_id:
         return ctx.vlan_by_id[int(ref)]["name"]
-    ctx.error(section, f"{label}: VLAN '{ref}' is not defined on the VLANs tab.")
+    ctx.error(section, f"{label}: VLAN '{ref}' is not defined on the VLANs tab.", field)
     return None
 
 
@@ -580,7 +616,7 @@ def _claim(ctx: Ctx, section: str, label: str, names: list[str]) -> list[str]:
     ok = []
     for name in names:
         if name in ctx.used:
-            ctx.error(section, f"{label}: {name} is already used by {ctx.used[name]}.")
+            ctx.error(section, f"{label}: {name} is already used by {ctx.used[name]}.", "ports" if section == "Ports" else "members")
             continue
         info = ctx.known.get(name)
         if info is None:
@@ -619,13 +655,13 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
         if mtu.isdigit() and 256 <= int(mtu) <= 9216:
             cfg.add(base, f"mtu {mtu}")
         else:
-            ctx.error(section, f"{label}: MTU must be 256-9216.")
+            ctx.error(section, f"{label}: MTU must be 256-9216.", "mtu")
     speed = _s(row.get("speed")).lower()
     if speed and not base[1].startswith("ae"):
         if speed in SPEEDS:
             cfg.add((*base, "ether-options"), f"speed {speed}")
         else:
-            ctx.error(section, f"{label}: speed must be one of {', '.join(SPEEDS)}.")
+            ctx.error(section, f"{label}: speed must be one of {', '.join(SPEEDS)}.", "speed")
     unit = (*base, "unit 0")
     sw = (*unit, "family ethernet-switching")
     sc = _truthy(ctx.p["services"].get("storm_control"))
@@ -633,12 +669,12 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
 
     if mode == "access":
         cfg.add(sw, "interface-mode access")
-        vlan = _vlan_name(ctx, section, label, row.get("vlan"))
+        vlan = _vlan_name(ctx, section, label, row.get("vlan"), "vlan")
         if vlan:
             cfg.add_list((*sw, "vlan"), "members", [vlan])
         elif not _s(row.get("vlan")):
             ctx.warn(section, f"{label}: no access VLAN, so the port uses the default VLAN.")
-        voice = _vlan_name(ctx, section, f"{label} voice", row.get("voice"))
+        voice = _vlan_name(ctx, section, f"{label} voice", row.get("voice"), "voice")
         if not voice and not _s(row.get("voice")):
             # A VLAN ticked as "voice VLAN" is offered to every access port that has none of its own.
             voice = next((v["name"] for v in ctx.p["vlans"] if _truthy(v.get("voice")) and v["name"] != vlan), "")
@@ -646,7 +682,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
             if not _truthy(ctx.p["services"].get("lldp_med")):
                 ctx.warn(section, f"{label}: turn on LLDP-MED (Services tab) so phones learn voice VLAN {voice} by themselves.")
             if voice == vlan:
-                ctx.error(section, f"{label}: the voice VLAN must differ from the data VLAN.")
+                ctx.error(section, f"{label}: the voice VLAN must differ from the data VLAN.", "voice")
             else:
                 for port in phys:
                     cfg.add(("switch-options", "voip", f"interface {port}.0"), f"vlan {voice}")
@@ -665,7 +701,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
                     action = _s(row.get("mac_action")) or "drop"
                     cfg.add((*path, "interface-mac-limit"), f"packet-action {action if action in SEC.MAC_ACTIONS else 'drop'}")
             else:
-                ctx.error(section, f"{label}: MAC limit must be 1-16383.")
+                ctx.error(section, f"{label}: MAC limit must be 1-16383.", "mac_limit")
         if _truthy(row.get("sticky")):
             for port in phys:
                 cfg.add(("switch-options", f"interface {port}.0"), "persistent-learning")
@@ -675,13 +711,13 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
         cfg.add(sw, "interface-mode trunk")
         refs = _list(row.get("vlans"))
         if not refs:
-            ctx.error(section, f"{label}: a trunk needs at least one VLAN (or 'all').")
+            ctx.error(section, f"{label}: a trunk needs at least one VLAN (or 'all').", "vlans")
         members = []
         if any(r.lower() == "all" for r in refs):
             members = ["all"]
         else:
-            members = [n for r in refs if (n := _vlan_name(ctx, section, label, r))]
-        native = _vlan_name(ctx, section, f"{label} native", row.get("native"))
+            members = [n for r in refs if (n := _vlan_name(ctx, section, label, r, "vlans"))]
+        native = _vlan_name(ctx, section, f"{label} native", row.get("native"), "native")
         if native:
             nid = int(ctx.vlan_by_name[native]["id"])
             cfg.add(base, f"native-vlan-id {nid}")
@@ -696,7 +732,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
     elif mode == "routed":
         addrs = _addresses(ctx, section, label, row.get("address"))
         if not addrs:
-            ctx.error(section, f"{label}: a routed port needs an IP address with prefix (example 10.0.0.1/30).")
+            ctx.error(section, f"{label}: a routed port needs an IP address with prefix (example 10.0.0.1/30).", "address")
         if len(phys) > 1 and base[1] == "interface-range":
             ctx.error(section, f"{label}: a routed port group can only hold one port (each needs its own address).")
         if addrs and base[1] != "interface-range":
@@ -704,7 +740,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
         for a in addrs:
             cfg.add((*unit, f"family {_family(a)}"), f"address {a.with_prefixlen}")
     else:
-        ctx.error(section, f"{label}: unknown mode '{mode}'.")
+        ctx.error(section, f"{label}: unknown mode '{mode}'.", "mode")
         return
     if mode in ("access", "trunk"):
         SEC.port(ctx, section, label, mode, base, phys, row)
@@ -731,7 +767,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
         except ValueError:
             watts = -1
         if not 0 < watts <= 90:
-            ctx.error(section, f"{label}: maximum PoE power must be 0.1-90 watts.")
+            ctx.error(section, f"{label}: maximum PoE power must be 0.1-90 watts.", "poe_max")
         else:
             for port in phys:
                 info = ctx.known.get(port)
@@ -752,11 +788,12 @@ def _ports(ctx: Ctx) -> None:
     ctx.cfg.comment("Switch ports")
     range_names = set()
     for i, row in enumerate(rows):
+        ctx.at("ports", row)
         label = _s(row.get("name")) or f"Port group {i + 1}"
         try:
             names = P.expand(row.get("ports"))
         except ValueError as exc:
-            ctx.error("Ports", f"{label}: {exc}")
+            ctx.error("Ports", f"{label}: {exc}", "ports")
             continue
         names = _claim(ctx, "Ports", label, names)
         if not names:
@@ -784,6 +821,7 @@ def _ports(ctx: Ctx) -> None:
             voice_ = mode_ == "access" and (bool(_s(row.get("voice"))) or any(
                 _truthy(v.get("voice")) and v["name"] != _s(row.get("vlan")) for v in ctx.p["vlans"]))
             ctx.res.ports[port] = {"use": mode_, "label": label, "voice": voice_, "role": _s(row.get("role"))}
+    ctx.at("", None)
 
 
 def _lags(ctx: Ctx) -> None:
@@ -794,24 +832,25 @@ def _lags(ctx: Ctx) -> None:
     highest = -1
     seen = set()
     for row in lags:
+        ctx.at("lags", row)
         name = _s(row.get("name"))
         label = f"LAG {name or '?'}"
         if not P.is_ae(name) or int(name[2:]) > 127:
-            ctx.error("LAGs", f"LAG name '{name}' must be ae0 to ae127.")
+            ctx.error("LAGs", f"LAG name '{name}' must be ae0 to ae127.", "name")
             continue
         if name in seen:
-            ctx.error("LAGs", f"{name} is listed twice.")
+            ctx.error("LAGs", f"{name} is listed twice.", "name")
             continue
         seen.add(name)
         highest = max(highest, int(name[2:]))
         try:
             members = P.expand(row.get("members"))
         except ValueError as exc:
-            ctx.error("LAGs", f"{label}: {exc}")
+            ctx.error("LAGs", f"{label}: {exc}", "members")
             continue
         members = _claim(ctx, "LAGs", label, members)
         if len(members) < 1:
-            ctx.error("LAGs", f"{label}: add member ports.")
+            ctx.error("LAGs", f"{label}: add member ports.", "members")
             continue
         if len(members) == 1:
             ctx.warn("LAGs", f"{label}: only one member port, so there's no redundancy.")
@@ -834,9 +873,10 @@ def _lags(ctx: Ctx) -> None:
             if ml.isdigit() and 1 <= int(ml) <= len(members):
                 ctx.cfg.add(opts, f"minimum-links {ml}")
             else:
-                ctx.error("LAGs", f"{label}: minimum links must be 1-{len(members)}.")
+                ctx.error("LAGs", f"{label}: minimum links must be 1-{len(members)}.", "min_links")
         R.esi_lag(ctx, row, name, label)
         _iface_settings(ctx, "LAGs", label, ("interfaces", name), row, [name])
+    ctx.at("", None)
     if highest >= 0:
         ctx.cfg.add(("chassis", "aggregated-devices", "ethernet"), f"device-count {highest + 1}")
 
@@ -854,6 +894,7 @@ def _routing(ctx: Ctx) -> None:
     if routes:
         cfg.comment("Static routes")
     for x in routes:
+        ctx.at("routing.static", x)
         prefix = _s(x.get("prefix"))
         if prefix == "default":
             prefix = "0.0.0.0/0"
@@ -868,7 +909,7 @@ def _routing(ctx: Ctx) -> None:
             nh_ip = _ip(ctx, "Routing", f"Route {net} next hop", nh) if nh else None
             if not nh_ip:
                 if not nh:
-                    ctx.error("Routing", f"Route {net}: add a next hop (an IP, 'discard' or 'reject').")
+                    ctx.error("Routing", f"Route {net}: add a next hop (an IP, 'discard' or 'reject').", "next_hop")
                 continue
             if not any(nh_ip in iface.network for _, iface in ctx.l3_networks if iface.version == nh_ip.version):
                 ctx.warn("Routing", f"Route {net}: next hop {nh} is not in any subnet on this switch.")
@@ -879,10 +920,11 @@ def _routing(ctx: Ctx) -> None:
                 cfg.add((*base, f"route {net}"), target)
                 cfg.add((*base, f"route {net}"), f"preference {pref}")
             else:
-                ctx.error("Routing", f"Route {net}: preference must be 0-255.")
+                ctx.error("Routing", f"Route {net}: preference must be 0-255.", "preference")
         else:
             cfg.add(base, f"route {net} {target}")
 
+    ctx.at("", None)
     servers = _list(r.get("dhcp_relay_servers"))
     relay_vlans = [v for v in ctx.vlan_by_name.values() if _truthy(v.get("dhcp_relay")) and _s(v.get("irb"))]
     if relay_vlans and not servers:
@@ -913,7 +955,7 @@ def _services(ctx: Ctx) -> None:
             if prio in PRIORITIES:
                 cfg.add(("protocols", "rstp"), f"bridge-priority {prio}")
             else:
-                ctx.error("Services", "Bridge priority must be 0, 4k, 8k ... 60k (steps of 4k).")
+                ctx.error("Services", "Bridge priority must be 0, 4k, 8k ... 60k (steps of 4k).", "services.bridge_priority")
         for port in sorted(set(ctx.edge_ports), key=P.sort_key):
             cfg.add(("protocols", "rstp", f"interface {port}"), "edge")
         if _truthy(s.get("bpdu_block_on_edge")):
@@ -927,7 +969,7 @@ def _services(ctx: Ctx) -> None:
         if pct.isdigit() and 1 <= int(pct) <= 100:
             cfg.add(("forwarding-options", "storm-control-profiles storm-default", "all"), f"bandwidth-percentage {pct}")
         else:
-            ctx.error("Services", "Storm control percentage must be 1-100.")
+            ctx.error("Services", "Storm control percentage must be 1-100.", "services.storm_percent")
     poe_models = any(m.poe for m in _models(ctx))
     if _truthy(s.get("poe_all")) and poe_models:
         cfg.add(("poe",), "interface all")
@@ -940,7 +982,7 @@ def _services(ctx: Ctx) -> None:
             if gb.isdigit() and 0 <= int(gb) <= 19:
                 cfg.add(("poe",), f"guard-band {gb}")
             else:
-                ctx.error("Services", "PoE guard band must be 0-19 watts.")
+                ctx.error("Services", "PoE guard band must be 0-19 watts.", "services.poe_guard_band")
         fpcs = sorted({int(m.get("fpc", 0)) for m in ctx.p["switch"].get("members") or []
                        if str(m.get("fpc", 0)).isdigit() and (models.get(m.get("model", "")) or models.Model("", "", ())).poe})
         for fpc in fpcs:
@@ -996,24 +1038,14 @@ def build(project: dict) -> Result:
         if _truthy((p.get("qos") or {}).get("enabled")):
             ctx.cfg.raw_set("delete class-of-service")
 
-    _switch(ctx)
-    ctx.models = _models(ctx)
-    _system(ctx)
-    _access(ctx)
-    _snmp(ctx)
-    _syslog(ctx)
-    _vlans(ctx)
-    _ports(ctx)
-    _lags(ctx)
-    R.basics(ctx)
-    R.policies(ctx)
-    _routing(ctx)
-    R.ospf(ctx)
-    R.bgp(ctx)
-    R.evpn(ctx)
-    _services(ctx)
-    SEC.apply(ctx)
-    Q.apply(ctx)
+    steps = (_switch, _models, _system, _access, _snmp, _syslog, _vlans, _ports, _lags, R.basics, R.policies,
+             _routing, R.ospf, R.bgp, R.evpn, _services, SEC.apply, Q.apply)
+    for step in steps:
+        if step is _models:
+            ctx.models = _models(ctx)
+        else:
+            step(ctx)
+        ctx.row = None  # a step that stops early must not leave its row behind
 
     hostname = _s(p["system"].get("hostname")) or "switch"
     ctx.res.set_text = ctx.cfg.to_set()

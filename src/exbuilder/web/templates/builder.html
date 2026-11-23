@@ -22,6 +22,14 @@ a { color: var(--accent); }
 .tabs button.active { background: var(--panel); border-color: var(--border); color: var(--accent); font-weight: 600; }
 .tabs .count { float: right; color: var(--muted); font-weight: 400; font-size: 12px; }
 .tabs .bad { color: var(--bad); }
+.tabs button.has-problem { color: var(--bad); }
+.problem[data-bind] { border-color: var(--bad) !important; box-shadow: 0 0 0 2px rgba(220, 38, 38, .25); background: rgba(220, 38, 38, .06); }
+.field.problem > label, .rowfield.problem > label { color: var(--bad); }
+.field.problem > label::after, .rowfield.problem > label::after { content: " ⚠"; }
+.rows .row.problem { border-color: var(--bad); box-shadow: inset 3px 0 0 var(--bad); }
+.problem-note { color: var(--bad); font-size: 12px; margin-top: 3px; }
+@keyframes flash { 0%, 100% { box-shadow: 0 0 0 2px rgba(220, 38, 38, .25); } 50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, .45); } }
+.problem.flash { animation: flash .5s ease 3; }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
 .section { display: none; }
 .section.active { display: block; }
@@ -931,10 +939,40 @@ function renderTable(path) {
     const rm = `<button class="danger small rm" type="button" data-remove="${path}" data-index="${i}" title="Remove">✕</button>`;
     const title = spec.title ? esc(spec.title(row)) : "";
     const up = i ? `<button class="secondary small" type="button" data-up="${path}" data-index="${i}" title="Move up">↑</button> ` : "";
-    return `<div class="row"><div class="head"><span>${title}</span><span>${up}${rm}</span></div><div class="fields">${fields}${el.classList.contains("compact") ? rm : ""}</div></div>`;
+    return `<div class="row" data-row="${path}.${i}"><div class="head"><span>${title}</span><span>${up}${rm}</span></div><div class="fields">${fields}${el.classList.contains("compact") ? rm : ""}</div></div>`;
   }).join("") || `<p class="hint">Nothing yet.</p>`;
+  markProblems();
 }
 function renderTables() { Object.keys(TABLES).forEach(renderTable); renderPolicyList(); }
+// Outline what needs fixing: the field an error names, or else its table row.
+function markProblems() {
+  document.querySelectorAll("#sections .problem").forEach(el => { el.classList.remove("problem"); el.removeAttribute("data-problem"); });
+  document.querySelectorAll("#sections .problem-note").forEach(el => el.remove());
+  for (const m of (result && result.errors) || []) {
+    const row = m.row && document.querySelector(`#sections [data-row="${m.row}"]`);
+    if (row) { row.classList.add("problem"); row.title = m.message; }
+    const el = m.field && document.querySelector(`#sections [data-bind="${m.field}"]`);
+    if (!el) continue;
+    el.classList.add("problem");
+    const box = el.closest(".field, .rowfield");
+    if (box) {
+      box.classList.add("problem");
+      // One short note under fields outside tables (tables already show the row outline).
+      if (!row && !box.querySelector(".problem-note")) {
+        const note = document.createElement("div"); note.className = "problem-note"; note.textContent = m.message; box.appendChild(note);
+      }
+    }
+  }
+}
+function gotoProblem(section, field, row) {
+  const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(section));
+  if (tab) showTab(tab);
+  const el = (field && document.querySelector(`#sections [data-bind="${field}"]`)) || (row && document.querySelector(`#sections [data-row="${row}"]`));
+  if (!el || !el.offsetParent) return;
+  el.scrollIntoView({block: "center", behavior: "smooth"});
+  if (el.matches("input, select, textarea")) el.focus({preventScroll: true});
+  el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
+}
 function renderPolicyList() { document.getElementById("policy-list").innerHTML = policyNames().map(n => `<option value="${esc(n)}">`).join(""); }
 function renderBound() {
   document.querySelectorAll("#sections > section [data-bind]").forEach(el => {
@@ -1045,7 +1083,7 @@ function updateTabs() {
     const bad = msgs.filter(m => TAB_SECTION[t].includes(m.section)).length;
     let count = "";
     if (t === "VLANs") count = state.vlans.length; else if (t === "Ports") count = state.ports.length; else if (t === "LAGs") count = state.lags.length;
-    return `<button type="button" data-tabbtn="${t}" class="${t === activeTab ? "active" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
+    return `<button type="button" data-tabbtn="${t}" class="${t === activeTab ? "active" : ""}${bad ? " has-problem" : ""}" title="${bad ? bad + " to fix on this tab" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
   }).join("");
   document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
 }
@@ -1089,12 +1127,12 @@ function showOutput() {
   setStatus(e ? `${e} error${e > 1 ? "s" : ""} to fix before this config will commit${w ? `, ${w} warning${w > 1 ? "s" : ""}` : ""}.`
               : w ? `Ready, with ${w} warning${w > 1 ? "s" : ""} to review.` : "Ready. No problems found.", e ? "bad" : "ok");
   document.getElementById("msgs").innerHTML =
-    result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
+    result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
     result.warnings.map(m => `<li class="warn" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
   document.getElementById("load-hint").innerHTML = fmt === "set"
     ? "On the switch: <code>configure</code>, paste, <code>show | compare</code>, <code>commit check</code>, then <code>commit confirmed 5</code> and <code>commit</code> once you're still connected."
     : "On the switch: <code>configure</code>, <code>load merge terminal</code>, paste, Ctrl+D, then <code>show | compare</code> and <code>commit confirmed 5</code>. On a factory-new switch you can use <code>load override terminal</code>.";
-  renderPortmap(); updateTabs();
+  renderPortmap(); updateTabs(); markProblems();
 }
 
 // ---------------------------------------------------------------- events
@@ -1127,7 +1165,7 @@ document.addEventListener("click", ev => {
   else if (t.dataset.remove) { getPath(t.dataset.remove).splice(+t.dataset.index, 1); renderTable(t.dataset.remove); if (t.dataset.remove === "vlans") { renderTable("ports"); renderTable("lags"); } schedule(); }
   else if (t.dataset.up) { const rows = getPath(t.dataset.up); const i = +t.dataset.index; [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; renderTable(t.dataset.up); schedule(); }
   else if (t.dataset.port) portClick(t.dataset.port, ev.shiftKey);
-  else if (t.dataset.goto) { const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(t.dataset.goto)); if (tab) showTab(tab); }
+  else if (t.dataset.goto) gotoProblem(t.dataset.goto, t.dataset.field, t.dataset.row);
   else if (t.dataset.fmt) { fmt = t.dataset.fmt; document.querySelectorAll("[data-fmt]").forEach(b => b.classList.toggle("sel", b === t)); showOutput(); }
 });
 // ------------------------------------------------- port map group editing

@@ -250,3 +250,30 @@ def test_ex4100_models():
     res = build(base(switch={"members": [{"fpc": 0, "model": "EX4100-24P"}]},
                      ports=[{"ports": "ge-0/0/0-23", "mode": "access"}, {"ports": "xe-0/2/0", "mode": "trunk", "vlans": "all"}]))
     assert res.errors == [] and "not a port" not in msgs(res.warnings)
+
+
+def test_errors_point_at_fields_and_rows():
+    p = json.loads(EXAMPLE.read_text())
+    p["system"]["hostname"] = ""
+    p["vlans"][1]["id"] = "5000"
+    p["ports"].insert(0, {"name": "BAD", "ports": "ge-0/0/99x", "mode": "access"})
+    errs = build(p).errors
+    host = next(e for e in errs if e["message"] == "Host name is required.")
+    assert host["field"] == "system.hostname" and "row" not in host
+    vlan = next(e for e in errs if "ID must be 1-4094" in e["message"])
+    assert vlan["row"] == "vlans.1" and vlan["field"] == "vlans.1.id"
+    bad = next(e for e in errs if e["message"].startswith("BAD:"))
+    assert bad["row"] == "ports.0" and bad["field"] == "ports.0.ports"
+    # Errors after the tables (services, QoS ...) never inherit a row.
+    p["services"]["storm_control"] = True
+    p["services"]["storm_percent"] = "500"
+    storm = next(e for e in build(p).errors if "Storm control" in e["message"])
+    assert "row" not in storm
+
+
+def test_dot1x_settings_reported_once():
+    p = json.loads(EXAMPLE.read_text())
+    p["ports"][0]["dot1x"] = "dot1x"
+    p["security"] = {"radius_servers": [{"address": "10.0.0.5", "secret": "s3cret"}], "guest_vlan": "NOPE"}
+    errs = [e for e in build(p).errors if "Guest VLAN" in e["message"]]
+    assert len(errs) == 1 and errs[0]["field"] == "security.guest_vlan"
