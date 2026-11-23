@@ -14,6 +14,7 @@ import re
 from dataclasses import dataclass, field
 
 from . import __version__, models
+from . import routing as R
 from . import ports as P
 from .cryptpw import is_hashed, sha512_crypt
 from .junos import Config, q
@@ -51,7 +52,9 @@ DEFAULTS: dict = {
     "vlans": [],
     "ports": [],
     "lags": [],
-    "routing": {"static": [], "dhcp_relay_servers": ""},
+    "routing": {"static": [], "dhcp_relay_servers": "", **R.ROUTING_DEFAULTS},
+    "policy": R.POLICY_DEFAULTS,
+    "evpn": R.EVPN_DEFAULTS,
     "services": {
         "lldp": True, "lldp_med": True,
         "stp": "rstp", "bridge_priority": "", "bpdu_block_on_edge": True,
@@ -68,9 +71,10 @@ PORT_DEFAULTS = {"name": "", "ports": "", "mode": "access", "vlan": "", "vlans":
                  "voice": "", "description": "", "poe": "", "edge": True, "mac_limit": "",
                  "dhcp_trusted": False, "address": "", "mtu": "", "speed": ""}
 LAG_DEFAULTS = {**PORT_DEFAULTS, "name": "ae0", "members": "", "lacp": "active", "lacp_fast": True,
-                "min_links": "", "mode": "trunk", "edge": False}
+                "min_links": "", "mode": "trunk", "edge": False, "esi": "", "lacp_system_id": ""}
 VLAN_DEFAULTS = {"name": "", "id": "", "description": "", "irb": "", "dhcp_relay": False,
-                 "snooping": False, "dai": False, "ipsg": False}
+                 "snooping": False, "dai": False, "ipsg": False,
+                 "vni": "", "vga": "", "vrf": ""}
 
 HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 DOMAIN = re.compile(r"^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$")
@@ -155,6 +159,12 @@ class Ctx:
         self.edge_ports: list[str] = []
         self.trusted: dict[str, list[str]] = {}  # vlan -> ports with dhcp trust
         self.l3_networks: list = []           # (label, ip_interface)
+        self.l3_ifaces: set[str] = set()      # logical interfaces with an address (for OSPF)
+        self.policy_names: set[str] = set()
+        self.asn = None
+        self.router_id = None
+        self.loopback_ip = None
+        self.models: list = []
 
     def error(self, section: str, message: str) -> None:
         self.res.errors.append({"section": section, "message": message})
@@ -530,6 +540,7 @@ def _vlans(ctx: Ctx) -> None:
         cfg.add(path, f"vlan-id {vid_n}")
         addrs = _addresses(ctx, "VLANs", f"VLAN {name} IRB", v.get("irb"))
         if addrs:
+            ctx.l3_ifaces.add(f"irb.{vid_n}")
             cfg.add(path, f"l3-interface irb.{vid_n}")
             for a in addrs:
                 ctx.cfg.add(("interfaces", "irb", f"unit {vid_n}", f"family {_family(a)}"),
@@ -674,6 +685,8 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
             ctx.error(section, f"{label}: a routed port needs an IP address with prefix (example 10.0.0.1/30).")
         if len(phys) > 1 and base[1] == "interface-range":
             ctx.error(section, f"{label}: a routed port group can only hold one port (each needs its own address).")
+        if addrs and base[1] != "interface-range":
+            ctx.l3_ifaces.add(f"{base[1]}.0")
         for a in addrs:
             cfg.add((*unit, f"family {_family(a)}"), f"address {a.with_prefixlen}")
     else:
@@ -790,6 +803,7 @@ def _lags(ctx: Ctx) -> None:
                 ctx.cfg.add(opts, f"minimum-links {ml}")
             else:
                 ctx.error("LAGs", f"{label}: minimum links must be 1-{len(members)}.")
+        R.esi_lag(ctx, row, name, label)
         _iface_settings(ctx, "LAGs", label, ("interfaces", name), row, [name])
     if highest >= 0:
         ctx.cfg.add(("chassis", "aggregated-devices", "ethernet"), f"device-count {highest + 1}")
@@ -929,6 +943,7 @@ def build(project: dict) -> Result:
         ctx.cfg.raw_set("delete poe")
 
     _switch(ctx)
+    ctx.models = _models(ctx)
     _system(ctx)
     _access(ctx)
     _snmp(ctx)
@@ -936,7 +951,12 @@ def build(project: dict) -> Result:
     _vlans(ctx)
     _ports(ctx)
     _lags(ctx)
+    R.basics(ctx)
+    R.policies(ctx)
     _routing(ctx)
+    R.ospf(ctx)
+    R.bgp(ctx)
+    R.evpn(ctx)
     _services(ctx)
 
     hostname = _s(p["system"].get("hostname")) or "switch"
