@@ -166,7 +166,7 @@ code { font-size: 12.5px; }
     </div>
     <div class="panel">
       <h2>Management port</h2>
-      <p class="hint">The dedicated out-of-band port (me0, or em0 on the EX4400). Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <p class="hint">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400). Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
       <div class="grid">
         <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
         <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>
@@ -343,7 +343,7 @@ code { font-size: 12.5px; }
   <section class="section" data-tab="EVPN-VXLAN">
     <div class="panel">
       <h2>EVPN-VXLAN</h2>
-      <p class="hint">Stretches VLANs over a routed (layer 3) network. Each switch needs a loopback and AS (Routing tab) and an underlay that reaches the other loopbacks (OSPF or BGP on the OSPF &amp; BGP tab, MTU 9216 on fabric links). Then give VLANs a VNI on the VLANs tab. Runs on the EX4400 and EX4300-48MP, with a feature license.</p>
+      <p class="hint">Stretches VLANs over a routed (layer 3) network. Each switch needs a loopback and AS (Routing tab) and an underlay that reaches the other loopbacks (OSPF or BGP on the OSPF &amp; BGP tab, MTU 9216 on fabric links). Then give VLANs a VNI on the VLANs tab. Runs on the EX4100, EX4400 and EX4300-48MP, with a feature license.</p>
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="evpn.enabled"> Turn on EVPN-VXLAN</label>
         <div class="field"><label>Role of this switch</label><select data-bind="evpn.role"><option value="leaf">Leaf (VTEP)</option><option value="collapsed">Collapsed core (VTEP)</option><option value="spine">Spine / route reflector</option></select></div>

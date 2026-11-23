@@ -238,3 +238,15 @@ def test_no_ranges_option_writes_each_port():
     s = sets(res)
     assert "set interfaces ge-0/0/2 unit 0 family ethernet-switching interface-mode access" in s
     assert not any("interface-range" in l for l in s)
+
+
+def test_ex4100_models():
+    m = models.get("EX4100-48MP")
+    names = {p["name"]: p for p in m.ports(0)}
+    assert names["mge-0/0/15"]["poe"] and names["ge-0/0/16"]["poe"] and "ge-0/0/15" not in names
+    assert names["et-0/1/3"]["kind"] == "vcp" and names["xe-0/2/0"]["kind"] == "uplink"
+    assert m.mgmt == "em0"
+    assert len(models.get("EX4100-F-12P").ports(0)) == 16
+    res = build(base(switch={"members": [{"fpc": 0, "model": "EX4100-24P"}]},
+                     ports=[{"ports": "ge-0/0/0-23", "mode": "access"}, {"ports": "xe-0/2/0", "mode": "trunk", "vlans": "all"}]))
+    assert res.errors == [] and "not a port" not in msgs(res.warnings)

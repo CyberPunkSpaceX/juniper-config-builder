@@ -88,6 +88,28 @@ _add("EX3400-48P", "EX3400", [_ge(47, True), *_ex3400()], notes="PoE+. et-0/1/0-
 _add("EX3400-48MP", "EX3400", [_mge(23, speed="1/2.5/5/10G"), _ge(47, True, first=24), *_ex3400()],
      notes="Ports 0-23 are multigigabit (mge). PoE+. et-0/1/0-1 are VC ports by default.")
 
+# ---------------------------------------------------------------- EX4100
+# 4x 10G SFP+ uplinks (xe-0/2/x) and 4x 25G SFP28 (et-0/1/x) that are
+# Virtual Chassis ports out of the box. The EX4100-F (fanless/compact) has
+# 4x 1/10G SFP+ uplinks only.
+_ex4100 = lambda: [PortGroup("vcp", "et", 1, 0, 3, "25G SFP28"), PortGroup("uplink", "xe", 2, 0, 3, SFP10)]  # noqa: E731
+_ex4100f = lambda: [PortGroup("uplink", "xe", 2, 0, 3, SFP10)]  # noqa: E731
+_N41 = "et-0/1/0-3 (25G) are VC ports by default."
+_add("EX4100-24T", "EX4100", [_ge(23), *_ex4100()], mgmt="em0", notes=_N41)
+_add("EX4100-24P", "EX4100", [_ge(23, True), *_ex4100()], mgmt="em0", notes="PoE+. " + _N41)
+_add("EX4100-48T", "EX4100", [_ge(47), *_ex4100()], mgmt="em0", notes=_N41)
+_add("EX4100-48P", "EX4100", [_ge(47, True), *_ex4100()], mgmt="em0", notes="PoE+. " + _N41)
+_add("EX4100-24MP", "EX4100", [_mge(7, speed="1-10G"), _ge(23, True, first=8), *_ex4100()], mgmt="em0",
+     notes="Ports 0-7 are multigigabit (mge), 8-23 are 1G. PoE++. " + _N41)
+_add("EX4100-48MP", "EX4100", [_mge(15, speed="1-10G"), _ge(47, True, first=16), *_ex4100()], mgmt="em0",
+     notes="Ports 0-15 are multigigabit (mge), 16-47 are 1G. PoE++. " + _N41)
+_add("EX4100-F-12T", "EX4100-F", [_ge(11), *_ex4100f()], mgmt="em0", notes="Compact, fanless.")
+_add("EX4100-F-12P", "EX4100-F", [_ge(11, True), *_ex4100f()], mgmt="em0", notes="Compact, fanless, PoE+.")
+_add("EX4100-F-24T", "EX4100-F", [_ge(23), *_ex4100f()], mgmt="em0")
+_add("EX4100-F-24P", "EX4100-F", [_ge(23, True), *_ex4100f()], mgmt="em0", notes="PoE+.")
+_add("EX4100-F-48T", "EX4100-F", [_ge(47), *_ex4100f()], mgmt="em0")
+_add("EX4100-F-48P", "EX4100-F", [_ge(47, True), *_ex4100f()], mgmt="em0", notes="PoE+.")
+
 # ---------------------------------------------------------------- EX4300
 _ex4300 = lambda: [PortGroup("vcp", "et", 1, 0, 3, "40G QSFP+"), PortGroup("module", "xe", 2, 0, 3, "10G SFP+ (module)")]  # noqa: E731
 _add("EX4300-24T", "EX4300", [_ge(23), *_ex4300()], notes="Rear et-0/1/0-3 are VC ports. xe-0/2/x needs an uplink module.")
