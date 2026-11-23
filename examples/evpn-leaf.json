@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "name": "EVPN-VXLAN leaf 1",
+  "switch": {
+    "members": [
+      {
+        "fpc": 0,
+        "model": "EX4400-48P",
+        "serial": "",
+        "role": "routing-engine"
+      }
+    ]
+  },
+  "system": {
+    "hostname": "leaf1",
+    "domain": "example.lan",
+    "timezone": "UTC",
+    "name_servers": "10.10.0.10",
+    "ntp_servers": [
+      {
+        "address": "10.10.0.1",
+        "prefer": true
+      }
+    ]
+  },
+  "access": {
+    "users": [
+      {
+        "name": "netadmin",
+        "class": "super-user",
+        "full_name": "Network admin",
+        "password": "",
+        "ssh_keys": ""
+      }
+    ]
+  },
+  "vlans": [
+    {
+      "name": "USERS",
+      "id": "20",
+      "description": "Users",
+      "irb": "10.20.0.2/24",
+      "vni": "10020",
+      "vga": "10.20.0.1",
+      "vrf": "TENANT1"
+    },
+    {
+      "name": "VOICE",
+      "id": "30",
+      "description": "Phones",
+      "irb": "10.30.0.2/24",
+      "vni": "10030",
+      "vga": "10.30.0.1",
+      "vrf": "TENANT1"
+    },
+    {
+      "name": "PRINTERS",
+      "id": "40",
+      "description": "Stretched layer 2 only",
+      "vni": "10040"
+    }
+  ],
+  "ports": [
+    {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-39",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "VOICE",
+      "edge": true
+    },
+    {
+      "name": "SPINE1",
+      "ports": "xe-0/2/0",
+      "mode": "routed",
+      "address": "10.1.1.1/31",
+      "mtu": "9216",
+      "description": "To spine1",
+      "edge": false
+    },
+    {
+      "name": "SPINE2",
+      "ports": "xe-0/2/1",
+      "mode": "routed",
+      "address": "10.1.1.3/31",
+      "mtu": "9216",
+      "description": "To spine2",
+      "edge": false
+    }
+  ],
+  "lags": [
+    {
+      "name": "ae1",
+      "members": "ge-0/0/46-47",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, PRINTERS",
+      "description": "Server, multihomed to leaf1+leaf2",
+      "esi": "00:01:01:01:01:01:01:01:01:01",
+      "lacp_system_id": "00:00:00:01:01:01"
+    }
+  ],
+  "routing": {
+    "loopback": "10.255.0.11/32",
+    "asn": "65000",
+    "ecmp": true,
+    "ospf": {
+      "enabled": true,
+      "reference_bandwidth": "100g",
+      "areas": [
+        {
+          "area": "0.0.0.0",
+          "type": "normal",
+          "interfaces": "xe-0/2/0, xe-0/2/1, lo0",
+          "passive": "lo0",
+          "p2p": "xe-0/2/0, xe-0/2/1",
+          "md5_key": ""
+        }
+      ]
+    },
+    "bgp_groups": []
+  },
+  "policy": {
+    "prefix_lists": [],
+    "communities": [],
+    "terms": []
+  },
+  "evpn": {
+    "enabled": true,
+    "role": "leaf",
+    "overlay_type": "internal",
+    "peers": "10.255.0.1\n10.255.0.2",
+    "vrf_target": "target:65000:1",
+    "vrfs": [
+      {
+        "name": "TENANT1",
+        "id": "100",
+        "l3vni": "9100"
+      }
+    ]
+  },
+  "services": {
+    "stp": "rstp"
+  }
+}

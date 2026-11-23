@@ -97,7 +97,7 @@ code { font-size: 12.5px; }
   <h1>Juniper EX Config Builder</h1>
   <span class="grow"></span>
   <button class="secondary" id="btn-new" type="button">New</button>
-  <button class="secondary" id="btn-example" type="button">Load example</button>
+  <select id="example-pick" style="width:auto"><option value="">Load an example…</option><option value="office">Office access switch</option><option value="evpn">EVPN-VXLAN leaf</option></select>
   <button class="secondary" id="btn-open" type="button">Open JSON…</button>
   <input type="file" id="file-open" accept=".json,application/json" class="hide">
   <button class="secondary" id="btn-save-file" type="button">Download JSON</button>
@@ -275,6 +275,16 @@ code { font-size: 12.5px; }
   <!-- ===================================================== ROUTING -->
   <section class="section" data-tab="Routing">
     <div class="panel">
+      <h2>Routing identity</h2>
+      <p class="hint">The loopback (lo0) is a stable address for OSPF, BGP and EVPN-VXLAN. The router ID defaults to the loopback.</p>
+      <div class="grid">
+        <div class="field"><label>Loopback address</label><input type="text" data-bind="routing.loopback" placeholder="10.255.0.11/32"></div>
+        <div class="field"><label>Router ID</label><input type="text" data-bind="routing.router_id" placeholder="(loopback)"></div>
+        <div class="field"><label>Local AS number</label><input type="text" data-bind="routing.asn" placeholder="65000"></div>
+        <label class="check"><input type="checkbox" data-bind="routing.ecmp"> ECMP: use all equal-cost paths</label>
+      </div>
+    </div>
+    <div class="panel">
       <h2>Static routes</h2>
       <p class="hint">Use 0.0.0.0/0 for the default route. The next hop can be an IP address, <code>discard</code> or <code>reject</code>.</p>
       <div class="rows compact" data-table="routing.static"></div>
@@ -286,6 +296,69 @@ code { font-size: 12.5px; }
         <div class="field wide"><label>DHCP servers</label><input type="text" data-bind="routing.dhcp_relay_servers" placeholder="10.0.0.10, 10.0.0.11"></div>
       </div>
       <p class="hint">Relay is turned on per VLAN on the VLANs tab.</p>
+    </div>
+  </section>
+
+  <!-- ===================================================== OSPF / BGP -->
+  <section class="section" data-tab="OSPF & BGP">
+    <div class="panel">
+      <h2>OSPF</h2>
+      <p class="hint">List the interfaces that run OSPF in each area, like <code>xe-0/2/0, irb.20, lo0</code> (unit .0 is added when you leave it out). <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
+      <div class="grid">
+        <label class="check"><input type="checkbox" data-bind="routing.ospf.enabled"> Turn on OSPF</label>
+        <div class="field"><label>Reference bandwidth</label><input type="text" data-bind="routing.ospf.reference_bandwidth" placeholder="100g"></div>
+        <div class="field"><label>Export policies</label><input type="text" data-bind="routing.ospf.export" placeholder="e.g. STATIC-TO-OSPF"></div>
+      </div>
+      <h3>Areas</h3>
+      <div class="rows" data-table="routing.ospf.areas"></div>
+      <button class="secondary small" type="button" data-add="routing.ospf.areas">Add area</button>
+    </div>
+    <div class="panel">
+      <h2>BGP</h2>
+      <p class="hint">Set the local AS on the Routing tab. Neighbors: one per line as <code>IP [peer AS] [description]</code>, for example <code>10.1.1.0 64512 ISP router</code>. Import and export take policy names from the Policies tab. Without an export policy, external BGP advertises nothing.</p>
+      <div class="rows" data-table="routing.bgp_groups"></div>
+      <button class="secondary small" type="button" data-add="routing.bgp_groups">Add BGP group</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== POLICIES -->
+  <section class="section" data-tab="Policies">
+    <div class="panel">
+      <h2>Prefix lists</h2>
+      <div class="rows compact" data-table="policy.prefix_lists"></div>
+      <button class="secondary small" type="button" data-add="policy.prefix_lists">Add prefix list</button>
+      <h3>Communities</h3>
+      <div class="rows compact" data-table="policy.communities"></div>
+      <button class="secondary small" type="button" data-add="policy.communities">Add community</button>
+    </div>
+    <div class="panel">
+      <h2>Policy statements</h2>
+      <p class="hint">Each row is one term. Terms with the same policy name form one policy and are checked top to bottom; use ↑ to reorder. A term without any "from" matches every route, so a last term with <b>reject</b> drops whatever the earlier terms didn't accept.</p>
+      <div class="rows" data-table="policy.terms"></div>
+      <button class="secondary small" type="button" data-add="policy.terms">Add term</button>
+    </div>
+  </section>
+
+  <!-- ===================================================== EVPN -->
+  <section class="section" data-tab="EVPN-VXLAN">
+    <div class="panel">
+      <h2>EVPN-VXLAN</h2>
+      <p class="hint">Stretches VLANs over a routed (layer 3) network. Each switch needs a loopback and AS (Routing tab) and an underlay that reaches the other loopbacks (OSPF or BGP on the OSPF &amp; BGP tab, MTU 9216 on fabric links). Then give VLANs a VNI on the VLANs tab. Runs on the EX4400 and EX4300-48MP, with a feature license.</p>
+      <div class="grid">
+        <label class="check"><input type="checkbox" data-bind="evpn.enabled"> Turn on EVPN-VXLAN</label>
+        <div class="field"><label>Role of this switch</label><select data-bind="evpn.role"><option value="leaf">Leaf (VTEP)</option><option value="collapsed">Collapsed core (VTEP)</option><option value="spine">Spine / route reflector</option></select></div>
+        <div class="field"><label>Overlay BGP</label><select data-bind="evpn.overlay_type"><option value="internal">iBGP (same AS)</option><option value="external">eBGP (multihop)</option></select></div>
+        <div class="field"><label>Overlay AS (optional)</label><input type="text" data-bind="evpn.overlay_as" placeholder="(local AS)"></div>
+        <div class="field"><label>VRF target</label><input type="text" data-bind="evpn.vrf_target" placeholder="target:65000:1"></div>
+        <div class="field wide"><label>Overlay peers: loopbacks of the spines or other leaves (one per line, add the AS for eBGP)</label><textarea data-bind="evpn.peers" placeholder="10.255.0.1&#10;10.255.0.2"></textarea></div>
+      </div>
+      <p class="hint">On the VLANs tab: <b>VNI</b> stretches the VLAN, <b>anycast gateway</b> is the shared default gateway all leaves answer for (each leaf keeps its own IRB address in the same subnet), and <b>VRF</b> puts the VLAN's IRB in a tenant VRF. On the LAGs tab, an <b>ESI</b> and LACP system ID make a LAG span two switches (ESI-LAG multihoming).</p>
+    </div>
+    <div class="panel">
+      <h2>Tenant VRFs (layer 3 routing between leaves)</h2>
+      <p class="hint">Routes between VLANs in the same VRF across the fabric (EVPN type-5). The ID becomes the route distinguisher and loopback unit; the L3 VNI must be the same on every leaf.</p>
+      <div class="rows compact" data-table="evpn.vrfs"></div>
+      <button class="secondary small" type="button" data-add="evpn.vrfs">Add VRF</button>
     </div>
   </section>
 
@@ -345,6 +418,7 @@ code { font-size: 12.5px; }
     </div>
   </aside>
 </div>
+<datalist id="policy-list"></datalist>
 <datalist id="tz-list">{% for tz in timezones %}<option value="{{ tz }}">{% endfor %}</datalist>
 <input type="hidden" id="csrf" value="{{ csrf_token }}">
 </main>
@@ -383,6 +457,8 @@ const EXAMPLE = {
   services: {bridge_priority: "32k", disable_unused: true}
 };
 
+const EVPN_EXAMPLE = {"version": 1, "name": "EVPN-VXLAN leaf 1", "switch": {"members": [{"fpc": 0, "model": "EX4400-48P", "serial": "", "role": "routing-engine"}]}, "system": {"hostname": "leaf1", "domain": "example.lan", "timezone": "UTC", "name_servers": "10.10.0.10", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}]}, "access": {"users": [{"name": "netadmin", "class": "super-user", "full_name": "Network admin", "password": "", "ssh_keys": ""}]}, "vlans": [{"name": "USERS", "id": "20", "description": "Users", "irb": "10.20.0.2/24", "vni": "10020", "vga": "10.20.0.1", "vrf": "TENANT1"}, {"name": "VOICE", "id": "30", "description": "Phones", "irb": "10.30.0.2/24", "vni": "10030", "vga": "10.30.0.1", "vrf": "TENANT1"}, {"name": "PRINTERS", "id": "40", "description": "Stretched layer 2 only", "vni": "10040"}], "ports": [{"name": "DESKS", "ports": "ge-0/0/0-39", "mode": "access", "vlan": "USERS", "voice": "VOICE", "edge": true}, {"name": "SPINE1", "ports": "xe-0/2/0", "mode": "routed", "address": "10.1.1.1/31", "mtu": "9216", "description": "To spine1", "edge": false}, {"name": "SPINE2", "ports": "xe-0/2/1", "mode": "routed", "address": "10.1.1.3/31", "mtu": "9216", "description": "To spine2", "edge": false}], "lags": [{"name": "ae1", "members": "ge-0/0/46-47", "mode": "trunk", "vlans": "USERS, VOICE, PRINTERS", "description": "Server, multihomed to leaf1+leaf2", "esi": "00:01:01:01:01:01:01:01:01:01", "lacp_system_id": "00:00:00:01:01:01"}], "routing": {"loopback": "10.255.0.11/32", "asn": "65000", "ecmp": true, "ospf": {"enabled": true, "reference_bandwidth": "100g", "areas": [{"area": "0.0.0.0", "type": "normal", "interfaces": "xe-0/2/0, xe-0/2/1, lo0", "passive": "lo0", "p2p": "xe-0/2/0, xe-0/2/1", "md5_key": ""}]}, "bgp_groups": []}, "policy": {"prefix_lists": [], "communities": [], "terms": []}, "evpn": {"enabled": true, "role": "leaf", "overlay_type": "internal", "peers": "10.255.0.1\n10.255.0.2", "vrf_target": "target:65000:1", "vrfs": [{"name": "TENANT1", "id": "100", "l3vni": "9100"}]}, "services": {"stp": "rstp"}};
+
 // ------------------------------------------------------------- table specs
 const VLAN_SEL = "vlan";   // a select filled with the current VLAN names
 const PORT_FIELDS = [
@@ -411,6 +487,8 @@ const LAG_FIELDS = [
   {key: "mode", label: "Mode", type: "select", options: ["trunk", "access", "routed", "disabled"]},
   {key: "description", label: "Description", cls: "span2"},
   ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "address", "mtu"].includes(f.key)),
+  {key: "esi", label: "ESI (EVPN multihoming)", ph: "00:01:01:01:01:01:01:01:01:01", cls: "span2", show: () => state.evpn.enabled},
+  {key: "lacp_system_id", label: "LACP system ID", ph: "00:00:00:01:01:01", show: () => state.evpn.enabled},
 ];
 const TABLES = {
   "switch.members": {fields: [
@@ -454,7 +532,10 @@ const TABLES = {
       {key: "dhcp_relay", label: "DHCP relay", type: "checkbox"},
       {key: "snooping", label: "DHCP snooping", type: "checkbox"},
       {key: "dai", label: "ARP inspection", type: "checkbox"},
-      {key: "ipsg", label: "IP source guard", type: "checkbox"}],
+      {key: "ipsg", label: "IP source guard", type: "checkbox"},
+      {key: "vni", label: "VXLAN VNI", ph: "10020", show: () => state.evpn.enabled},
+      {key: "vga", label: "Anycast gateway", ph: "10.0.20.1", show: () => state.evpn.enabled},
+      {key: "vrf", label: "Tenant VRF", type: "vrf", show: () => state.evpn.enabled}],
     title: r => `${r.name || "New VLAN"}${r.id ? " (" + r.id + ")" : ""}`,
     blank: rows => ({name: "", id: String(rows.reduce((m, r) => Math.max(m, +r.id || 0), 0) + 10), description: "", irb: "", dhcp_relay: false, snooping: false, dai: false, ipsg: false})},
   "ports": {fields: PORT_FIELDS, title: r => `${r.name || "Port group"} · ${r.mode}${r.ports ? " · " + r.ports : ""}`,
@@ -466,6 +547,55 @@ const TABLES = {
       {key: "next_hop", label: "Next hop", ph: "10.0.0.1", cls: "span2"},
       {key: "preference", label: "Preference", ph: "5"}],
     blank: () => ({prefix: "", next_hop: "", preference: ""})},
+  "routing.ospf.areas": {fields: [
+      {key: "area", label: "Area", ph: "0.0.0.0"},
+      {key: "type", label: "Type", type: "select", options: ["normal", "stub", "nssa"]},
+      {key: "interfaces", label: "Interfaces", ph: "xe-0/2/0, irb.20, lo0", cls: "span2"},
+      {key: "passive", label: "Passive interfaces", ph: "irb.20, lo0", cls: "span2"},
+      {key: "p2p", label: "Point-to-point interfaces", ph: "xe-0/2/0", cls: "span2"},
+      {key: "md5_key", label: "MD5 key (optional)", type: "password"}],
+    title: r => `Area ${r.area || "?"}`, blank: rows => ({area: rows.length ? "0.0.0." + rows.length : "0.0.0.0", type: "normal", interfaces: "", passive: "", p2p: "", md5_key: ""})},
+  "routing.bgp_groups": {fields: [
+      {key: "name", label: "Group name", ph: "ISP"},
+      {key: "type", label: "Type", type: "select", options: [["external", "external (eBGP)"], ["internal", "internal (iBGP)"]]},
+      {key: "peer_as", label: "Peer AS", ph: "64512", show: r => r.type === "external"},
+      {key: "local_address", label: "Local address", ph: "10.255.0.11"},
+      {key: "description", label: "Description", cls: "span2"},
+      {key: "neighbors", label: "Neighbors (IP [AS] [description], one per line)", type: "textarea", cls: "full"},
+      {key: "import", label: "Import policies", ph: "FROM-ISP", type: "policy"},
+      {key: "export", label: "Export policies", ph: "TO-ISP", type: "policy"},
+      {key: "bfd", label: "BFD interval (ms)", ph: "300"},
+      {key: "auth_key", label: "MD5 password", type: "password"},
+      {key: "multipath", label: "Multipath (ECMP)", type: "checkbox"}],
+    title: r => `${r.name || "BGP group"} · ${r.type}`, blank: () => ({name: "", type: "external", peer_as: "", local_address: "", description: "", neighbors: "", import: "", export: "", bfd: "", auth_key: "", multipath: false})},
+  "policy.prefix_lists": {fields: [
+      {key: "name", label: "Prefix list", ph: "MY-NETWORKS"},
+      {key: "prefixes", label: "Prefixes", ph: "10.20.0.0/16, 192.168.0.0/24", cls: "span2"}],
+    blank: () => ({name: "", prefixes: ""})},
+  "policy.communities": {fields: [
+      {key: "name", label: "Community", ph: "PREFER"},
+      {key: "members", label: "Members", ph: "65000:200", cls: "span2"}],
+    blank: () => ({name: "", members: ""})},
+  "policy.terms": {fields: [
+      {key: "policy", label: "Policy name", ph: "TO-ISP"},
+      {key: "term", label: "Term", ph: "my-networks"},
+      {key: "protocol", label: "From protocol", type: "select", options: [["", "any"], "direct", "static", "ospf", "bgp", "aggregate", "evpn", "local"]},
+      {key: "prefix_list", label: "From prefix list", type: "prefixlist"},
+      {key: "match", label: "Prefix list match", type: "select", options: ["exact", "orlonger", "longer"], show: r => !!r.prefix_list},
+      {key: "route_filter", label: "From route filter(s)", ph: "0.0.0.0/0 exact, 10.0.0.0/8 orlonger", cls: "span2"},
+      {key: "community", label: "From community", type: "community"},
+      {key: "local_pref", label: "Set local preference", ph: "200"},
+      {key: "med", label: "Set metric (MED)", ph: "50"},
+      {key: "community_add", label: "Add community", type: "community"},
+      {key: "next_hop_self", label: "Next hop self", type: "checkbox"},
+      {key: "action", label: "Then", type: "select", options: ["accept", "reject", ["next", "next term"]]}],
+    title: r => `${r.policy || "Policy"} / ${r.term || "term"} → ${r.action || "accept"}`,
+    blank: rows => { const last = rows[rows.length - 1] || {}; return {policy: last.policy || "", term: "", protocol: "", prefix_list: "", match: "exact", route_filter: "", community: "", local_pref: "", med: "", community_add: "", next_hop_self: false, action: "accept"}; }},
+  "evpn.vrfs": {fields: [
+      {key: "name", label: "VRF name", ph: "TENANT1"},
+      {key: "id", label: "ID", ph: "100"},
+      {key: "l3vni", label: "L3 VNI", ph: "9100"}],
+    blank: rows => ({name: "", id: String(100 * (rows.length + 1)), l3vni: String(9100 + rows.length)})},
 };
 
 // ------------------------------------------------------------------ state
@@ -503,6 +633,8 @@ function load(project) {
 function vlanOptions() {
   return [["", "(none)"], ...state.vlans.filter(v => v.name).map(v => [v.name, `${v.name} (${v.id})`])];
 }
+function namedOptions(rows) { return [["", "(none)"], ...(rows || []).filter(r => r.name).map(r => [r.name, r.name])]; }
+function policyNames() { return [...new Set((state.policy.terms || []).map(t => t.policy).filter(Boolean))]; }
 function optionHtml(options, value) {
   let found = false;
   const html = options.map(o => {
@@ -518,7 +650,9 @@ function fieldHtml(path, f, row) {
   if (f.type === "checkbox")
     return `<div class="rowfield ${cls}"><label>&nbsp;</label><label class="check"><input type="checkbox" data-bind="${p}"${v ? " checked" : ""}> ${esc(f.label)}</label></div>`;
   let input;
-  if (f.type === "select" || f.type === VLAN_SEL) input = `<select data-bind="${p}">${optionHtml(f.type === VLAN_SEL ? vlanOptions() : f.options, v)}</select>`;
+  const dyn = {[VLAN_SEL]: vlanOptions, vrf: () => namedOptions(state.evpn.vrfs), prefixlist: () => namedOptions(state.policy.prefix_lists), community: () => namedOptions(state.policy.communities)};
+  if (f.type === "select" || dyn[f.type]) input = `<select data-bind="${p}">${optionHtml(dyn[f.type] ? dyn[f.type]() : f.options, v)}</select>`;
+  else if (f.type === "policy") input = `<input type="text" data-bind="${p}" value="${esc(v)}" placeholder="${esc(f.ph || "")}" list="policy-list">`;
   else if (f.type === "textarea") input = `<textarea data-bind="${p}">${esc(v)}</textarea>`;
   else input = `<input type="${f.type === "password" ? "password" : "text"}" data-bind="${p}" value="${esc(v)}" placeholder="${esc(f.ph || "")}"${f.type === "password" ? ' autocomplete="new-password"' : ""}>`;
   return `<div class="rowfield ${cls}"><label>${esc(f.label)}</label>${input}</div>`;
@@ -534,7 +668,8 @@ function renderTable(path) {
     return `<div class="row"><div class="head"><span>${title}</span><span>${up}${rm}</span></div><div class="fields">${fields}${el.classList.contains("compact") ? rm : ""}</div></div>`;
   }).join("") || `<p class="hint">Nothing yet.</p>`;
 }
-function renderTables() { Object.keys(TABLES).forEach(renderTable); }
+function renderTables() { Object.keys(TABLES).forEach(renderTable); renderPolicyList(); }
+function renderPolicyList() { document.getElementById("policy-list").innerHTML = policyNames().map(n => `<option value="${esc(n)}">`).join(""); }
 function renderBound() {
   document.querySelectorAll("#sections > section [data-bind]").forEach(el => {
     if (el.closest("[data-table]")) return;
@@ -598,7 +733,8 @@ function compact(list) {
 
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
-                     Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], Services: ["Services"], "My projects": []};
+                     Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services"], "My projects": []};
 let activeTab = "Switch";
 function updateTabs() {
   const nav = document.getElementById("tabs");
@@ -668,7 +804,13 @@ document.addEventListener("input", ev => {
     if (table) renderTable(table.dataset.table);
     if (path.startsWith("switch.members")) { renderPortmap(); renderNotes(); }
   }
-  if (path.startsWith("vlans.") && el.tagName !== "SELECT") { clearTimeout(window._vt); window._vt = setTimeout(() => { renderTable("ports"); renderTable("lags"); }, 600); }
+  // Names used in other tables' dropdowns: refresh those tables (never the one being typed in).
+  const deps = {"vlans.": ["ports", "lags"], "evpn.vrfs.": ["vlans"], "policy.prefix_lists.": ["policy.terms"], "policy.communities.": ["policy.terms"]};
+  for (const [prefix, targets] of Object.entries(deps)) {
+    if (path.startsWith(prefix) && el.tagName !== "SELECT") { clearTimeout(window["_vt" + prefix]); window["_vt" + prefix] = setTimeout(() => targets.forEach(renderTable), 600); }
+  }
+  if (path.startsWith("policy.terms.") && path.endsWith(".policy")) renderPolicyList();
+  if (path === "evpn.enabled") { renderTable("vlans"); renderTable("lags"); }
   if (table && /\.(name|ports|members)$/.test(path)) {
     const head = el.closest(".row").querySelector(".head span"); const spec = TABLES[table.dataset.table];
     if (head && spec.title) head.textContent = spec.title(getPath(path.split(".").slice(0, -1).join(".")));
@@ -717,7 +859,10 @@ document.getElementById("file-open").onchange = async ev => {
   ev.target.value = "";
 };
 document.getElementById("btn-new").onclick = () => { if (confirmReplace()) load({}); };
-document.getElementById("btn-example").onclick = () => { if (confirmReplace()) load(EXAMPLE); };
+document.getElementById("example-pick").onchange = ev => {
+  const pick = ev.target.value; ev.target.value = "";
+  if (pick && confirmReplace()) load(pick === "evpn" ? EVPN_EXAMPLE : EXAMPLE);
+};
 function confirmReplace() {
   const blank = JSON.stringify(merge(DEFAULTS, {})) === JSON.stringify(state);
   return blank || window.confirm("Replace the current project? Download or save it first if you want to keep it.");
