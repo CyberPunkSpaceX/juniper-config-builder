@@ -117,6 +117,7 @@ def policies(ctx) -> None:
     cfg.comment("Routing policies")
     pl_names, comm_names = set(), set()
     for pl in pls:
+        ctx.at("policy.prefix_lists", pl)
         name = _s(pl.get("name"))
         if not NAME.match(name):
             ctx.error("Policies", f"Prefix list name '{name}' must start with a letter (letters, digits, - _ .).")
@@ -131,6 +132,7 @@ def policies(ctx) -> None:
                 ctx.error("Policies", f"Prefix list {name}: '{pfx}' is not a prefix.")
         pl_names.add(name)
     for c in comms:
+        ctx.at("policy.communities", c)
         name = _s(c.get("name"))
         if not NAME.match(name):
             ctx.error("Policies", f"Community name '{name}' must start with a letter.")
@@ -147,6 +149,7 @@ def policies(ctx) -> None:
 
     seen_terms = set()
     for t in terms:
+        ctx.at("policy.terms", t)
         policy, term = _s(t.get("policy")), _s(t.get("term"))
         if not NAME.match(policy):
             ctx.error("Policies", f"Policy name '{policy}' must start with a letter.")
@@ -244,6 +247,7 @@ def ospf(ctx) -> None:
         cfg.add_list(("protocols", "ospf"), "export", [pol])
     seen_if = {}
     for a in areas:
+        ctx.at("routing.ospf.areas", a)
         area = _s(a.get("area")) or "0.0.0.0"
         if not AREA.match(area):
             ctx.error("OSPF", f"Area '{area}' must look like 0.0.0.0 or a number.")
@@ -260,7 +264,7 @@ def ospf(ctx) -> None:
         names = [_iface_name(i) for i in _list(a.get("interfaces"))]
         names += [i for i in sorted(passive | p2p) if i not in names]
         if not names:
-            ctx.error("OSPF", f"Area {area} has no interfaces.")
+            ctx.error("OSPF", f"Area {area} has no interfaces.", "interfaces")
         key = _s(a.get("md5_key"))
         for name in names:
             if name in seen_if:
@@ -314,6 +318,7 @@ def bgp(ctx) -> None:
         ctx.error("BGP", "BGP needs the local AS number (Routing tab).")
     names = set()
     for g in groups:
+        ctx.at("routing.bgp_groups", g)
         name = _s(g.get("name"))
         if not NAME.match(name) or name in names:
             ctx.error("BGP", f"BGP group name '{name}' must start with a letter and be unique.")
@@ -365,7 +370,7 @@ def _bgp_group(ctx, name: str, g: dict, family: str | None = None) -> None:
         cfg.add((*base, "multihop"), "no-nexthop-change")
     neighbors = _neighbors(ctx, section, f"Group {name}", g.get("neighbors", ""))
     if not neighbors:
-        ctx.error(section, f"Group {name} has no neighbors.")
+        ctx.error(section, f"Group {name} has no neighbors.", "neighbors")
     for ip, asn, desc in neighbors:
         path = (*base, f"neighbor {ip}")
         if asn:

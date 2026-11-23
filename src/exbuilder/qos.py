@@ -33,10 +33,10 @@ CLASSIFIER = "VOICE-VIDEO-DSCP"
 SCHED_MAP = "VOICE-VIDEO-MAP"
 
 
-def _pct(ctx, label, v, default):
+def _pct(ctx, label, v, default, field=None):
     v = str(v if v not in (None, "") else default).strip().rstrip("%")
     if not v.isdigit() or not 0 <= int(v) <= 100:
-        ctx.error("QoS", f"{label} must be a percentage (0-100).")
+        ctx.error("QoS", f"{label} must be a percentage (0-100).", field)
         return int(default)
     return int(v)
 
@@ -49,9 +49,9 @@ def apply(ctx) -> None:
     voice = _pct(ctx, "Voice bandwidth", preset["voice"] or q.get("voice_percent"), 20)
     video = _pct(ctx, "Video bandwidth", preset["video"] or q.get("video_percent"), 30)
     if preset is PRESETS["custom"]:
-        voice = _pct(ctx, "Voice bandwidth", q.get("voice_percent"), 20)
-        video = _pct(ctx, "Video bandwidth", q.get("video_percent"), 30)
-    control = _pct(ctx, "Network control bandwidth", q.get("control_percent"), 5)
+        voice = _pct(ctx, "Voice bandwidth", q.get("voice_percent"), 20, "qos.voice_percent")
+        video = _pct(ctx, "Video bandwidth", q.get("video_percent"), 30, "qos.video_percent")
+    control = _pct(ctx, "Network control bandwidth", q.get("control_percent"), 5, "qos.control_percent")
     best = 100 - voice - video - control
     if best < 10:
         ctx.error("QoS", f"Voice, video and network control add up to {100 - best}%; leave at least 10% for everything else.")

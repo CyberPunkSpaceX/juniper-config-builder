@@ -35,10 +35,10 @@ def port(ctx, section: str, label: str, mode: str, base: tuple, phys: list[str],
     dot1x = str(row.get("dot1x") or "")
     if dot1x:
         if dot1x not in DOT1X_MODES:
-            ctx.error(section, f"{label}: unknown 802.1X mode '{dot1x}'.")
+            ctx.error(section, f"{label}: unknown 802.1X mode '{dot1x}'.", "dot1x")
             return
         if mode != "access" or base[1].startswith("ae"):
-            ctx.error(section, f"{label}: 802.1X and MAB only work on access ports.")
+            ctx.error(section, f"{label}: 802.1X and MAB only work on access ports.", "dot1x")
             return
         ctx.dot1x_ports = getattr(ctx, "dot1x_ports", [])
         for p in phys:
@@ -58,7 +58,7 @@ def apply(ctx) -> None:
         if rt.isdigit() and 10 <= int(rt) <= 3600:
             cfg.add(("protocols", "layer2-control"), f"recovery-timeout {rt}")
         else:
-            ctx.error("Security", "Auto-recovery time must be 10-3600 seconds.")
+            ctx.error("Security", "Auto-recovery time must be 10-3600 seconds.", "security.recovery_timeout")
     ports = getattr(ctx, "dot1x_ports", [])
     servers = [s for s in sec.get("radius_servers") or [] if str(s.get("address") or "").strip()]
     if not ports:
@@ -72,15 +72,16 @@ def apply(ctx) -> None:
     prof = ("access", "profile", PROFILE)
     cfg.add(prof, "authentication-order radius")
     for s in servers:
+        ctx.at("security.radius_servers", s)
         addr = str(s["address"]).strip()
         try:
             ipaddress.ip_address(addr)
         except ValueError:
-            ctx.error("Security", f"RADIUS server '{addr}' is not an IP address.")
+            ctx.error("Security", f"RADIUS server '{addr}' is not an IP address.", "address")
             continue
         secret = str(s.get("secret") or "")
         if not secret:
-            ctx.error("Security", f"RADIUS server {addr} needs a shared secret.")
+            ctx.error("Security", f"RADIUS server {addr} needs a shared secret.", "secret")
         else:
             cfg.add(("access", "radius-server", addr), f'secret "{secret}"')
         if str(s.get("port") or "").strip():
@@ -89,10 +90,19 @@ def apply(ctx) -> None:
         if src:
             cfg.add(("access", "radius-server", addr), f"source-address {src}")
         cfg.add((*prof, "radius"), f"authentication-server {addr}")
+    ctx.at("", None)
     auth = ("protocols", "dot1x", "authenticator")
     cfg.add(auth, f"authentication-profile-name {PROFILE}")
     fail = str(sec.get("server_fail") or "")
     vlan_names = {v["name"] for v in ctx.p.get("vlans") or []}
+    reported = set()
+
+    def once(message, field):
+        # These settings apply to every 802.1X port: report a problem once, not per port.
+        if message not in reported:
+            reported.add(message)
+            ctx.error("Security", message, field)
+
     for p in ports:
         path = (*auth, f"interface {p}.0")
         if fail in ("permit", "deny", "use-cache"):
@@ -102,19 +112,19 @@ def apply(ctx) -> None:
             if v in vlan_names:
                 cfg.add((*path, "server-fail"), f"vlan-name {v}")
             else:
-                ctx.error("Security", "Pick the VLAN to use when RADIUS is down.")
+                once("Pick the VLAN to use when RADIUS is down.", "security.server_fail_vlan")
         guest = str(sec.get("guest_vlan") or "")
         if guest:
             if guest in vlan_names:
                 cfg.add(path, f"guest-vlan {guest}")
             else:
-                ctx.error("Security", f"Guest VLAN '{guest}' does not exist.")
+                once(f"Guest VLAN '{guest}' does not exist.", "security.guest_vlan")
         re_ = str(sec.get("reauth") or "").strip()
         if re_:
             if re_.isdigit() and 60 <= int(re_) <= 65535:
                 cfg.add(path, f"reauthentication {re_}")
             else:
-                ctx.error("Security", "Re-authentication must be 60-65535 seconds.")
+                once("Re-authentication must be 60-65535 seconds.", "security.reauth")
     if not fail:
         ctx.warn("Security", "When RADIUS is unreachable, 802.1X ports block everyone. Consider "
                              "'server fail: permit' or a fallback VLAN.")
