@@ -61,3 +61,16 @@ def test_api_generate_formats(app):
     assert resp.status_code == 422 and resp.json["errors"]
     assert c.get("/api/models", headers=basic(*ADMIN)).json["models"]
     assert c.post("/api/generate", json={}).status_code == 401
+
+
+def test_fabric_endpoints(admin):
+    from exbuilder.fabric import TEMPLATES
+    hdr = {"X-CSRF-Token": token(admin)}
+    body = {"fabric": TEMPLATES["campus-erb"]["fabric"], "base": {}}
+    resp = admin.post("/fabric", json=body, headers=hdr)
+    assert resp.status_code == 200 and len(resp.json["switches"]) == 6
+    bad = admin.post("/fabric", json={"fabric": {"vlans": []}, "base": {}}, headers=hdr)
+    assert bad.status_code == 400 and "VLAN" in bad.json["error"]
+    z = admin.post("/fabric/zip", json=body, headers=hdr)
+    assert z.status_code == 200 and z.mimetype == "application/zip" and z.data[:2] == b"PK"
+    assert admin.post("/fabric", json=body).status_code == 400  # CSRF
