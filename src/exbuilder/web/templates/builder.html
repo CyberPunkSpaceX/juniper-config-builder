@@ -83,6 +83,8 @@ button.small { padding: 3px 9px; font-size: 12.5px; }
 .port.camera { background: #8a6d00; color: #fff; border-color: #8a6d00; }
 .port.free { border-style: dashed; }
 .port.picked { outline: 3px solid var(--warn); outline-offset: 1px; }
+.portmap.editing .port:not(.picked) { opacity: 0.55; }
+.portmap.editing .port.picked { outline-color: var(--accent); }
 .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin: 6px 0; }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
 .pglabel { font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
@@ -175,7 +177,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
     </div>
     <div class="panel">
       <h2>Port map</h2>
-      <p class="hint">Click ports to pick them, then make a port group or LAG from the selection. The colour shows what each port does. A dot means PoE.</p>
+      <p class="hint">Click free ports to pick them (Shift-click picks a whole range), then make a new port group or LAG, or add them to an existing one. <b>Click a port that is already in a group to edit that group</b>: its ports light up, click ports to add or remove them, then Save. The colour shows what each port does. A dot means PoE.</p>
       <div class="legend">
         <span style="--c:#2f8f5b">Access</span><span style="--c:#2f6fdf">Trunk</span><span style="--c:#8a4fd1">Routed</span>
         <span style="--c:#0f8f8c">Phones / voice VLAN</span><span style="--c:#c2366e">Access points</span><span style="--c:#8a6d00">Cameras</span>
@@ -185,9 +187,18 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="toolbar" style="margin-top:10px">
         <span class="status" id="picked-label">No ports picked.</span>
         <span class="grow"></span>
-        <button class="secondary small" type="button" id="pick-clear">Clear</button>
-        <button class="small" type="button" id="pick-ports">New port group</button>
-        <button class="small" type="button" id="pick-lag">New LAG</button>
+        <span id="pick-normal" class="toolbar" style="margin:0">
+          <button class="secondary small" type="button" id="pick-clear">Clear</button>
+          <select id="pick-target" style="width:auto"></select>
+          <button class="secondary small" type="button" id="pick-add">Add to group</button>
+          <button class="small" type="button" id="pick-ports">New port group</button>
+          <button class="small" type="button" id="pick-lag">New LAG</button>
+        </span>
+        <span id="pick-edit" class="toolbar hide" style="margin:0">
+          <button class="secondary small" type="button" id="edit-cancel">Cancel</button>
+          <button class="secondary small" type="button" id="edit-open">Open settings</button>
+          <button class="small" type="button" id="edit-save">Save group</button>
+        </span>
       </div>
     </div>
   </section>
@@ -851,6 +862,9 @@ let state = null;
 let result = null;
 let fmt = "set";
 let picked = new Set();
+let editGroup = null;   // {table: "ports" | "lags", index} while editing a group from the port map
+let lastPort = null;    // for Shift-click ranges
+let pickNote = "";      // what the last port map action did
 
 function clone(o) { return JSON.parse(JSON.stringify(o)); }
 function merge(base, data) {
@@ -876,7 +890,7 @@ function load(project) {
   state.fabric = Object.assign(clone(FAB_DEFAULTS), state.fabric || Object.assign(clone(FAB_TEMPLATES["campus-erb"].fabric), {template: "campus-erb"}));
   fabResult = null;
   for (const key of ["vlans", "vrfs"]) state.fabric[key] = state.fabric[key] || [];
-  picked.clear();
+  picked.clear(); editGroup = null; lastPort = null;
   renderAll();
   generate();
 }
@@ -975,7 +989,22 @@ function renderPortmap() {
   }).join("");
   el.innerHTML = html;
   const n = picked.size;
-  document.getElementById("picked-label").textContent = n ? `Picked: ${compact([...picked])}` : "No ports picked.";
+  el.classList.toggle("editing", !!editGroup);
+  document.getElementById("pick-normal").classList.toggle("hide", !!editGroup);
+  document.getElementById("pick-edit").classList.toggle("hide", !editGroup);
+  if (editGroup && state[editGroup.table][editGroup.index]) {
+    document.getElementById("picked-label").innerHTML = `Editing <b>${esc(groupName(editGroup))}</b>: ${n ? esc(compact([...picked])) : "no ports"}. Click ports to add or remove them, then Save.`;
+  } else {
+    editGroup = null;
+    document.getElementById("picked-label").textContent = n ? `Picked: ${compact([...picked])}` : (pickNote || "No ports picked.");
+    pickNote = "";
+  }
+  const tgt = document.getElementById("pick-target"); const was = tgt.value;
+  tgt.innerHTML = [`<option value="">Add to…</option>`,
+    ...state.ports.map((r, i) => `<option value="ports:${i}">${esc(r.name || "group " + (i + 1))} (${esc(r.mode)})</option>`),
+    ...state.lags.map((r, i) => `<option value="lags:${i}">${esc(r.name || "LAG")} (LAG)</option>`),
+    `<option value="none">Remove from their groups</option>`].join("");
+  tgt.value = [...tgt.options].some(o => o.value === was) ? was : "";
 }
 
 function portKey(n) { const m = n.match(/^(\w+)-(\d+)\/(\d+)\/(\d+)$/); return m ? [+m[2], +m[3], m[1], +m[4]] : [99, 0, n, 0]; }
@@ -1097,21 +1126,101 @@ document.addEventListener("click", ev => {
   else if (t.dataset.add) { const rows = getPath(t.dataset.add); rows.push(TABLES[t.dataset.add].blank(rows)); renderTable(t.dataset.add); if (t.dataset.add === "switch.members") renderPortmap(); schedule(); }
   else if (t.dataset.remove) { getPath(t.dataset.remove).splice(+t.dataset.index, 1); renderTable(t.dataset.remove); if (t.dataset.remove === "vlans") { renderTable("ports"); renderTable("lags"); } schedule(); }
   else if (t.dataset.up) { const rows = getPath(t.dataset.up); const i = +t.dataset.index; [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; renderTable(t.dataset.up); schedule(); }
-  else if (t.dataset.port) { picked.has(t.dataset.port) ? picked.delete(t.dataset.port) : picked.add(t.dataset.port); renderPortmap(); }
+  else if (t.dataset.port) portClick(t.dataset.port, ev.shiftKey);
   else if (t.dataset.goto) { const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(t.dataset.goto)); if (tab) showTab(tab); }
   else if (t.dataset.fmt) { fmt = t.dataset.fmt; document.querySelectorAll("[data-fmt]").forEach(b => b.classList.toggle("sel", b === t)); showOutput(); }
 });
-document.getElementById("pick-clear").onclick = () => { picked.clear(); renderPortmap(); };
+// ------------------------------------------------- port map group editing
+function expandPorts(spec) {
+  const out = [];
+  for (let part of String(spec || "").replace(/\s+to\s+/g, "~").split(/[,;\s]+/)) {
+    part = part.replace("~", " to ");
+    if (!part) continue;
+    let m = part.match(/^(ge|xe|mge|et)-(\d+)\/(\d)\/(\d+)$/);
+    if (m) { out.push(part); continue; }
+    m = part.match(/^(ge|xe|mge|et)-(\d+)\/(\d)\/(\d+)\s*(?:-|to)\s*(?:(?:ge|xe|mge|et)-\d+\/\d\/)?(\d+)$/);
+    if (m) for (let n = +m[4]; n <= +m[5]; n++) out.push(`${m[1]}-${m[2]}/${m[3]}/${n}`);
+  }
+  return out;
+}
+const groupField = table => table === "ports" ? "ports" : "members";
+function groupName(g) { const r = state[g.table][g.index] || {}; return r.name || (g.table === "ports" ? `group ${g.index + 1}` : "LAG"); }
+function portOwner(name) {
+  for (const table of ["ports", "lags"])
+    for (let i = 0; i < state[table].length; i++)
+      if (expandPorts(state[table][i][groupField(table)]).includes(name)) return {table, index: i};
+  return null;
+}
+// Put exactly `ports` in group g (null = no group) and take them out of every other group.
+function assignPorts(g, ports) {
+  const set = new Set(ports); const emptied = [];
+  for (const table of ["ports", "lags"]) state[table].forEach((r, i) => {
+    if (g && g.table === table && g.index === i) return;
+    const f = groupField(table); const cur = expandPorts(r[f]); const keep = cur.filter(p => !set.has(p));
+    if (keep.length !== cur.length) { r[f] = compact(keep); if (!keep.length) emptied.push(r.name || "a group"); }
+  });
+  if (g) state[g.table][g.index][groupField(g.table)] = compact(ports);
+  return emptied;
+}
+function portClick(name, shift) {
+  if (!editGroup && !picked.size && !shift) {
+    const own = portOwner(name);
+    if (own) {
+      editGroup = own; picked = new Set(expandPorts(state[own.table][own.index][groupField(own.table)]));
+      lastPort = name; renderPortmap(); return;
+    }
+  }
+  if (shift && lastPort) {
+    const all = [...document.querySelectorAll("#portmap [data-port]")].map(e => e.dataset.port);
+    let a = all.indexOf(lastPort), b = all.indexOf(name);
+    if (a > -1 && b > -1) {
+      if (a > b) [a, b] = [b, a];
+      const adding = picked.has(lastPort);
+      for (const p of all.slice(a, b + 1)) adding ? picked.add(p) : picked.delete(p);
+    }
+  } else picked.has(name) ? picked.delete(name) : picked.add(name);
+  lastPort = name; renderPortmap();
+}
+function afterAssign(emptied, text) {
+  pickNote = text + (emptied.length ? ` ${emptied.join(", ")} now has no ports.` : "");
+  renderTable("ports"); renderTable("lags"); renderPortmap(); schedule();
+  setStatus(text + (emptied.length ? ` ${emptied.join(", ")} now has no ports: delete it or give it some.` : ""), emptied.length ? "" : "ok");
+}
+document.getElementById("edit-cancel").onclick = () => { editGroup = null; picked.clear(); renderPortmap(); };
+document.getElementById("edit-save").onclick = () => {
+  if (!editGroup) return;
+  const g = editGroup; const name = groupName(g);
+  const emptied = assignPorts(g, [...picked]);
+  editGroup = null; picked.clear();
+  afterAssign(emptied, `Saved ${name}: ${state[g.table][g.index][groupField(g.table)] || "no ports"}.`);
+};
+document.getElementById("edit-open").onclick = () => {
+  if (!editGroup) return;
+  const g = editGroup; editGroup = null; picked.clear(); renderPortmap();
+  showTab(g.table === "ports" ? "Ports" : "LAGs");
+  const rows = document.querySelectorAll(`[data-table="${g.table}"] > .row`);
+  if (rows[g.index]) rows[g.index].scrollIntoView({behavior: "smooth", block: "center"});
+};
+document.getElementById("pick-add").onclick = () => {
+  const v = document.getElementById("pick-target").value;
+  if (!picked.size || !v) { setStatus(!picked.size ? "Pick some ports first." : "Choose the group to add them to.", "bad"); return; }
+  const ports = [...picked]; picked.clear();
+  if (v === "none") { afterAssign(assignPorts(null, ports), `Removed ${compact(ports)} from their groups.`); return; }
+  const [table, idx] = v.split(":"); const g = {table, index: +idx};
+  const merged = [...new Set([...expandPorts(state[table][g.index][groupField(table)]), ...ports])];
+  afterAssign(assignPorts(g, merged), `Added ${compact(ports)} to ${groupName(g)}.`);
+};
+document.getElementById("pick-clear").onclick = () => { picked.clear(); editGroup = null; renderPortmap(); };
 document.getElementById("pick-ports").onclick = () => {
   if (!picked.size) return;
-  const row = TABLES.ports.blank(state.ports); row.ports = compact([...picked]); row.name = "GROUP-" + (state.ports.length + 1);
-  state.ports.push(row); picked.clear(); renderTable("ports"); renderPortmap(); showTab("Ports"); schedule();
+  const row = TABLES.ports.blank(state.ports); row.name = "GROUP-" + (state.ports.length + 1);
+  state.ports.push(row); assignPorts({table: "ports", index: state.ports.length - 1}, [...picked]); picked.clear(); renderTable("ports"); renderPortmap(); showTab("Ports"); schedule();
 };
 document.getElementById("pick-lag").onclick = () => {
   if (!picked.size) return;
   const used = new Set(state.lags.map(l => l.name)); let n = 0; while (used.has("ae" + n)) n++;
-  const row = TABLES.lags.blank(state.lags); row.name = "ae" + n; row.members = compact([...picked]);
-  state.lags.push(row); picked.clear(); renderTable("lags"); renderPortmap(); showTab("LAGs"); schedule();
+  const row = TABLES.lags.blank(state.lags); row.name = "ae" + n;
+  state.lags.push(row); assignPorts({table: "lags", index: state.lags.length - 1}, [...picked]); picked.clear(); renderTable("lags"); renderPortmap(); showTab("LAGs"); schedule();
 };
 
 function fileName(ext) { return ((state.system.hostname || state.name || "ex-switch").replace(/[^\w.-]+/g, "-")) + ext; }
