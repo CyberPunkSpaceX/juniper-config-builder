@@ -17,7 +17,10 @@ format, ready to copy or download.
 2. **Start from something.** Choose a model on the Switch tab, load an example,
    import your current config, or fill in the Excel template (see below).
 3. **Work through the tabs.** Click ports on the port map to make a port group or
-   a LAG. The config on the right updates as you type, with errors in red
+   a LAG, or add them to an existing one (Shift-click picks a range). Click a
+   port that is already in a group to edit that group: its ports light up, click
+   ports to add or remove them, then **Save group**. A port added to one group is
+   taken out of any other. The config on the right updates as you type, with errors in red
    (Junos would refuse them) and warnings in orange.
 4. **Copy or download** the set commands or the hierarchical config, then load it
    on the switch as described in [Applying the config](#applying-the-config-on-a-switch).
