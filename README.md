@@ -24,6 +24,27 @@ format, ready to copy or download.
 
 ![Port groups and the port map](docs/screenshots/02-ports.png)
 
+The port map colours each port by what it does: access, trunk, routed, LAG
+member, phones (or a voice VLAN), Wi-Fi access points and cameras ("Connected
+devices" on a port group). Ports that are not provisioned have a dashed border;
+disabled ports are crossed out.
+
+### Voice, QoS, PoE and port security (Services tab)
+
+- **Voice VLAN:** pick one per access port group, or tick "Voice VLAN" on a
+  VLAN to give it to every access port. Phones learn it through LLDP-MED.
+- **QoS presets:** "voice only" or "voice and video". Voice (EF) goes in a
+  strict-priority queue, video and call signalling (AF41, CS3) get their own
+  share, and network control keeps 5%. Custom percentages are in Advanced mode.
+- **PoE:** on all ports, per-group priority, maximum power or off, perpetual and
+  fast PoE, and (Advanced) power management mode and guard band.
+- **Port security:** MAC limit with drop, log or shutdown, sticky MAC, DHCP
+  snooping, ARP inspection and IP source guard per VLAN, storm control, BPDU
+  block, root guard and loop protection on uplinks, auto-recovery, and
+  802.1X / MAB with RADIUS servers, a server-fail action and a guest VLAN.
+
+![PoE, port security and QoS](docs/screenshots/06-poe-security-qos.png)
+
 ### Import and check an existing config
 
 Click **Import…**, paste the output of `show configuration | display set` (or
@@ -83,6 +104,9 @@ config per switch.
 | EVPN-VXLAN fabric wizard | Pick a template or a fabric type (collapsed core, edge-routed ERB, centrally-routed CRB, bridged overlay) with a small picture of each, set how many spines and leaves, the ports between them and the VLANs/VRFs. The wizard assigns loopbacks, /31 links, AS numbers, VNIs, route targets, anycast gateways and ESIs, draws the topology, and writes one config per switch (copy, download, zip of all, or open a switch in the builder). Also `POST /fabric` and `/fabric/zip` with `{fabric, base}` |
 | Import and check | Read an existing set or curly-brace config into the tabs, score it, list recommendations, load it with or without the recommended fixes, and list the lines it did not import. Also `POST /import/config` with `{text, model}` |
 | Excel | Download a template, fill it in and import it; export any project to Excel. `GET /excel/template`, `POST /excel/export`, `POST /import/excel` (file upload) |
+| QoS | Voice and video presets (EF strict priority, AF41/CS3 video and signalling, network control), trust on access ports or all ports, custom percentages |
+| Port security | 802.1X / MAB with RADIUS, server-fail action, guest VLAN, re-authentication, MAC limit action, sticky MAC, root guard, loop protection, BPDU auto-recovery |
+| PoE | All ports, per-group priority / off / maximum power, perpetual and fast PoE, management mode, guard band |
 | Services | LLDP, LLDP-MED, RSTP with bridge priority and BPDU guard on edge ports, storm control, IGMP snooping, PoE on all ports, disable unused ports, interface ranges |
 
 It checks what you enter as you type: bad addresses, duplicate VLAN IDs, a port

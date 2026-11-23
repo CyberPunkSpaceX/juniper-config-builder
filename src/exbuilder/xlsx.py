@@ -46,6 +46,12 @@ SETTINGS = [
     ("Storm control", "services.storm_control", "bool", None, "Limits broadcast storms."),
     ("BPDU block on edge ports", "services.bpdu_block_on_edge", "bool", None, "Shuts a user port that sends spanning tree."),
     ("PoE on all ports", "services.poe_all", "bool", None, "PoE models only."),
+    ("Perpetual PoE", "services.poe_perpetual", "bool", None, "Keeps phones and access points powered while the switch reboots."),
+    ("Fast PoE", "services.poe_fast", "bool", None, "Powers devices straight after power-on, before Junos boots."),
+    ("RADIUS server", "@radius_addr", "text", None, "For 802.1X / MAB ports. IP address."),
+    ("RADIUS secret", "@radius_secret", "text", None, "Shared secret for that RADIUS server."),
+    ("When RADIUS is down", "security.server_fail", "choice", ["", "permit", "use-cache", "deny"], "Empty blocks everyone; permit lets everyone in."),
+    ("QoS for voice and video", "@qos", "choice", ["off", "voice", "voice-video"], "voice-video is recommended when you have IP phones or video."),
     ("Disable unused ports", "services.disable_unused", "bool", None, "Turns off every port not listed on the Ports sheet."),
 ]
 
@@ -67,16 +73,19 @@ TABLES = [
     ("VLANs", "vlans", "One row per VLAN. An IRB address makes the switch route for that VLAN.", [
         ("Name", "name", "text", None, 16), ("VLAN ID", "id", "text", None, 9), ("Description", "description", "text", None, 26),
         ("IRB address", "irb", "text", None, 18), ("DHCP relay", "dhcp_relay", "bool", None, 11),
-        ("DHCP snooping", "snooping", "bool", None, 14), ("ARP inspection", "dai", "bool", None, 14)],
+        ("DHCP snooping", "snooping", "bool", None, 14), ("ARP inspection", "dai", "bool", None, 14),
+        ("Voice VLAN", "voice", "bool", None, 11)],
      VLAN_DEFAULTS),
     ("Ports", "ports", "One row per group of ports with the same settings. Ports like ge-0/0/0-23, xe-0/1/0.", [
         ("Name", "name", "text", None, 14), ("Ports", "ports", "text", None, 20),
         ("Mode", "mode", "choice", ["access", "trunk", "routed", "disabled"], 10),
+        ("Devices", "role", "choice", ["", "pc", "phone", "ap", "camera", "printer", "server", "uplink"], 10),
         ("Access VLAN", "vlan", "text", None, 13), ("Voice VLAN", "voice", "text", None, 12),
         ("Trunk VLANs", "vlans", "text", None, 22), ("Native VLAN", "native", "text", None, 12),
         ("IP address", "address", "text", None, 16), ("Description", "description", "text", None, 22),
-        ("PoE", "poe", "choice", ["", "high", "low", "off"], 7), ("Speed", "speed", "choice", ["", "10m", "100m", "1g", "2.5g", "10g"], 7),
-        ("MTU", "mtu", "text", None, 7), ("Edge port", "edge", "bool", None, 10), ("MAC limit", "mac_limit", "text", None, 10)],
+        ("PoE", "poe", "choice", ["", "high", "low", "off"], 7), ("Max PoE (W)", "poe_max", "text", None, 11), ("Speed", "speed", "choice", ["", "10m", "100m", "1g", "2.5g", "10g"], 7),
+        ("MTU", "mtu", "text", None, 7), ("Edge port", "edge", "bool", None, 10), ("MAC limit", "mac_limit", "text", None, 10),
+        ("802.1X / MAB", "dot1x", "choice", ["", "dot1x", "dot1x-mab", "mab"], 13)],
      PORT_DEFAULTS),
     ("LAGs", "lags", "Link aggregation (ae) bundles.", [
         ("Name", "name", "text", None, 8), ("Member ports", "members", "text", None, 20),
@@ -168,6 +177,11 @@ def workbook(project: dict | None = None) -> bytes:
             v = syslog
         elif path == "@gateway":
             v = gw
+        elif path in ("@radius_addr", "@radius_secret"):
+            rs = (p.get("security", {}).get("radius_servers") or [{}])[0] if p.get("security", {}).get("radius_servers") else {}
+            v = rs.get("address" if path == "@radius_addr" else "secret", "")
+        elif path == "@qos":
+            v = p["qos"].get("preset", "voice-video") if p.get("qos", {}).get("enabled") else "off"
         else:
             try:
                 v = _get(p, path)
@@ -253,6 +267,14 @@ def read(data: bytes) -> dict:
         elif path == "@gateway":
             if v:
                 p["routing"]["static"].append({"prefix": "0.0.0.0/0", "next_hop": v, "preference": ""})
+        elif path in ("@radius_addr", "@radius_secret"):
+            if v:
+                rs = p["security"]["radius_servers"] or [{"address": "", "secret": "", "port": ""}]
+                rs[0]["address" if path == "@radius_addr" else "secret"] = v
+                p["security"]["radius_servers"] = rs
+        elif path == "@qos":
+            if v and v != "off":
+                p["qos"].update(enabled=True, preset=v if v in ("voice", "voice-video") else "voice-video")
         elif kind == "bool" and (row[1] is None or str(row[1]).strip() == ""):
             continue    # keep the builder default
         else:

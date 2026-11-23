@@ -75,3 +75,29 @@ def test_evpn_example_imports_vni_and_routing():
     p = res["project"]
     assert next(v for v in p["vlans"] if v["name"] == "USERS")["vni"] == "10020"
     assert p["routing"]["loopback"] == "10.255.0.11/32" and p["routing"]["ospf"]["enabled"]
+
+
+def test_round_trip_qos_poe_security():
+    proj = json.load(open(EX / "office-switch.json"))
+    proj["services"].update(poe_management="class", poe_guard_band="5", poe_fast=True, poe_perpetual=True)
+    proj["ports"][0].update(dot1x="dot1x-mab", mac_action="shutdown", sticky=True, poe_max="15.4")
+    proj["lags"][0].update(root_guard=True, loop_protect=True)
+    proj["security"] = {"radius_servers": [{"address": "10.10.0.30", "secret": "s3cret", "port": ""}],
+                        "server_fail": "permit", "guest_vlan": "WIFI", "recovery_timeout": "300"}
+    proj["qos"] = {"enabled": True, "preset": "voice-video", "trust": "access"}
+    proj["vlans"][2]["voice"] = False
+    original = build(proj)
+    assert "set class-of-service schedulers VOICE priority strict-high" in original.set_text
+    assert "set protocols dot1x authenticator interface ge-0/0/0.0 mac-radius" in original.set_text
+    assert "set poe fpc 0 perpetual-poe" in original.set_text
+    res = check(original.set_text, "EX2300-48P")
+    assert res["unparsed"] == [], res["unparsed"][:5]
+    assert sets(build(res["project"]).set_text) == sets(original.set_text)
+
+
+def test_voice_vlan_flag_applies_to_access_ports():
+    proj = json.load(open(EX / "office-switch.json"))
+    proj["ports"][0]["voice"] = ""
+    proj["vlans"][2]["voice"] = True
+    out = build(proj).set_text
+    assert "set switch-options voip interface ge-0/0/0.0 vlan VOICE" in out

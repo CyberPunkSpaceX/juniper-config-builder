@@ -40,7 +40,7 @@ def test_filled_template():
         if row[0].value == "Default gateway":
             row[1].value = "10.0.10.1"
     wb["VLANs"].append(["USERS", 20, "Staff", "", "no", "yes", "no"])
-    wb["Ports"].append(["DESKS", "ge-0/0/0-23", "access", "USERS", "", "", "", "", "Desks", "", "", "", "yes", ""])
+    wb["Ports"].append(["DESKS", "ge-0/0/0-23", "access", "pc", "USERS", "", "", "", "", "Desks", "", "", "", "yes", ""])
     buf = BytesIO()
     wb.save(buf)
     p = xlsx.read(buf.getvalue())
@@ -50,7 +50,7 @@ def test_filled_template():
     out = build(p).set_text
     assert "set vlans USERS vlan-id 20" in out
     assert "set routing-options static route 0.0.0.0/0 next-hop 10.0.10.1" in out
-    assert "ge-0/0/0" in out
+    assert "set interfaces interface-range DESKS unit 0 family ethernet-switching vlan members USERS" in out
 
 
 def test_bad_file():

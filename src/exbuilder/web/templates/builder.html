@@ -78,6 +78,10 @@ button.small { padding: 3px 9px; font-size: 12.5px; }
 .port.routed { background: #8a4fd1; color: #fff; border-color: #8a4fd1; }
 .port.lag { background: #c4661f; color: #fff; border-color: #c4661f; }
 .port.disabled { background: transparent; color: var(--muted); text-decoration: line-through; }
+.port.voice { background: #0f8f8c; color: #fff; border-color: #0f8f8c; }
+.port.ap { background: #c2366e; color: #fff; border-color: #c2366e; }
+.port.camera { background: #8a6d00; color: #fff; border-color: #8a6d00; }
+.port.free { border-style: dashed; }
 .port.picked { outline: 3px solid var(--warn); outline-offset: 1px; }
 .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin: 6px 0; }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; background: var(--c); }
@@ -174,7 +178,8 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <p class="hint">Click ports to pick them, then make a port group or LAG from the selection. The colour shows what each port does. A dot means PoE.</p>
       <div class="legend">
         <span style="--c:#2f8f5b">Access</span><span style="--c:#2f6fdf">Trunk</span><span style="--c:#8a4fd1">Routed</span>
-        <span style="--c:#c4661f">LAG member</span><span style="--c:var(--border)">Unused</span>
+        <span style="--c:#0f8f8c">Phones / voice VLAN</span><span style="--c:#c2366e">Access points</span><span style="--c:#8a6d00">Cameras</span>
+        <span style="--c:#c4661f">LAG member</span><span style="--c:var(--border)">Not provisioned (dashed)</span><span style="--c:transparent;outline:1px solid var(--muted)">Disabled (crossed out)</span>
       </div>
       <div class="portmap" id="portmap"></div>
       <div class="toolbar" style="margin-top:10px">
@@ -288,7 +293,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="VLANs">
     <div class="panel">
       <h2>VLANs</h2>
-      <p class="hint">Give a VLAN an IRB address to route it (layer 3). Several addresses can be comma-separated, including IPv6. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
+      <p class="hint">Give a VLAN an IRB address to route it (layer 3). Several addresses can be comma-separated, including IPv6. Tick <b>Voice VLAN</b> on your phone VLAN to give it to every access port that has no voice VLAN of its own: phones learn it through LLDP-MED and their calls get priority. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
       <div class="rows" data-table="vlans"></div>
       <button class="secondary small" type="button" data-add="vlans">Add VLAN</button>
     </div>
@@ -527,7 +532,49 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div class="adv field"><label>Storm control limit (% of bandwidth)</label><input type="text" data-bind="services.storm_percent"></div>
         <div class="adv field"><label>Storm control on</label><select data-bind="services.storm_scope"><option value="access">access ports</option><option value="all">access and trunk ports</option></select></div>
         <label class="adv check"><input type="checkbox" data-bind="services.igmp_snooping"> IGMP snooping on all VLANs</label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>PoE (power over Ethernet)</h2>
+      <p class="hint">Per-port priority, maximum power or PoE off are on each port group (Ports tab). When the switch runs short of power, low-priority ports lose power first.</p>
+      <div class="grid">
         <label class="check"><input type="checkbox" data-bind="services.poe_all"> PoE on all ports (PoE models)</label>
+        <label class="check"><input type="checkbox" data-bind="services.poe_perpetual"> Perpetual PoE: keep power on while the switch reboots</label>
+        <label class="check"><input type="checkbox" data-bind="services.poe_fast"> Fast PoE: power up straight after power-on, before Junos boots</label>
+        <div class="field adv"><label>Power management</label><select data-bind="services.poe_management"><option value="">(default)</option><option value="class">class: reserve what the device class asks for</option><option value="static">static: reserve the configured maximum</option></select></div>
+        <div class="field adv"><label>Guard band (W kept in reserve)</label><input type="text" data-bind="services.poe_guard_band" placeholder="0-19"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>Port security</h2>
+      <p class="hint">What is where: <b>MAC limit</b>, sticky MAC and <b>802.1X / MAB</b> are on each access port group (Ports tab). <b>DHCP snooping</b>, ARP inspection and IP source guard are per VLAN (VLANs tab). <b>Root guard</b> and loop protection are on trunk port groups and LAGs. BPDU block and storm control are above.</p>
+      <h3>802.1X and MAC authentication (RADIUS)</h3>
+      <p class="hint">802.1X asks each device to log in through your RADIUS server (for example NPS or FreeRADIUS). MAB lets devices that can't do 802.1X (printers, phones, cameras) in by their MAC address.</p>
+      <div class="rows compact" data-table="security.radius_servers"></div>
+      <button class="secondary small" type="button" data-add="security.radius_servers">Add RADIUS server</button>
+      <div class="grid" style="margin-top:10px">
+        <div class="field"><label>When RADIUS is down</label><select data-bind="security.server_fail"><option value="">block (default)</option><option value="permit">let everyone in</option><option value="use-cache">use the last answer</option><option value="vlan">put devices in a VLAN</option><option value="deny">deny</option></select></div>
+        <div class="field"><label>VLAN when RADIUS is down</label><input type="text" data-bind="security.server_fail_vlan" placeholder="VLAN name"></div>
+        <div class="field"><label>Guest VLAN (no 802.1X)</label><input type="text" data-bind="security.guest_vlan" placeholder="VLAN name"></div>
+        <div class="field adv"><label>Re-authenticate every (s)</label><input type="text" data-bind="security.reauth" placeholder="3600"></div>
+        <div class="field adv"><label>RADIUS source address</label><input type="text" data-bind="security.radius_source" placeholder="10.0.10.2"></div>
+      </div>
+      <h3>Auto-recovery</h3>
+      <div class="grid">
+        <div class="field"><label>Bring BPDU-blocked ports back after (s)</label><input type="text" data-bind="security.recovery_timeout" placeholder="300 (empty = stay down)"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>QoS for voice and video</h2>
+      <p class="hint">When a link is busy, QoS lets calls and video go first so they don't break up. Phones mark voice as <b>EF</b> (DSCP 46) and video as <b>AF41</b> (DSCP 34). The switch puts voice in a strict-priority queue, gives video its own share, keeps some bandwidth for network control, and gives the rest to everything else. Pair it with a voice VLAN on your phone ports and LLDP-MED.</p>
+      <div class="grid">
+        <label class="check"><input type="checkbox" data-bind="qos.enabled"> Turn on QoS</label>
+        <div class="field"><label>Preset</label><select data-bind="qos.preset"><option value="voice">Voice only (voice 20%)</option><option value="voice-video">Voice and video (voice 20%, video 30%) recommended</option><option value="custom">Custom percentages</option></select></div>
+        <div class="field"><label>Trust DSCP markings from</label><select data-bind="qos.trust"><option value="access">access ports (phones, cameras)</option><option value="all">all ports, including uplinks</option></select></div>
+        <div class="field adv"><label>Voice % (custom)</label><input type="text" data-bind="qos.voice_percent" placeholder="20"></div>
+        <div class="field adv"><label>Video % (custom)</label><input type="text" data-bind="qos.video_percent" placeholder="30"></div>
+        <div class="field adv"><label>Network control %</label><input type="text" data-bind="qos.control_percent" placeholder="5"></div>
+        <label class="check adv"><input type="checkbox" data-bind="qos.signalling_as_video"> Put call signalling (CS3/AF31) with video</label>
       </div>
     </div>
     <div class="panel">
@@ -637,8 +684,8 @@ const EXAMPLE = {
     {name: "VOICE", id: "30", description: "IP phones", irb: "10.10.30.1/24", dhcp_relay: true},
     {name: "WIFI", id: "40", description: "Access points"}],
   ports: [
-    {name: "DESKS", ports: "ge-0/0/0-39", mode: "access", vlan: "USERS", voice: "VOICE", description: "Desk ports", edge: true, mac_limit: "3"},
-    {name: "APS", ports: "ge-0/0/40-45", mode: "trunk", vlans: "WIFI, USERS", native: "MGMT", description: "Wi-Fi access points", poe: "high", edge: false},
+    {name: "DESKS", ports: "ge-0/0/0-39", mode: "access", role: "phone", vlan: "USERS", voice: "VOICE", description: "Desk ports", edge: true, mac_limit: "3"},
+    {name: "APS", ports: "ge-0/0/40-45", mode: "trunk", role: "ap", vlans: "WIFI, USERS", native: "MGMT", description: "Wi-Fi access points", poe: "high", edge: false},
     {name: "UPLINK-FW", ports: "ge-0/0/47", mode: "routed", address: "10.255.0.2/30", description: "To firewall", poe: "off", edge: false}],
   lags: [{name: "ae0", members: "xe-0/1/0-1", lacp: "active", lacp_fast: true, mode: "trunk", vlans: "MGMT, USERS, VOICE, WIFI", description: "To core"}],
   routing: {static: [{prefix: "0.0.0.0/0", next_hop: "10.255.0.1", preference: ""}], dhcp_relay_servers: "10.10.0.10"},
@@ -654,15 +701,22 @@ const PORT_FIELDS = [
   {key: "ports", label: "Ports", ph: "ge-0/0/0-23", cls: "span2"},
   {key: "mode", label: "Mode", type: "select", options: ["access", "trunk", "routed", "disabled"]},
   {key: "description", label: "Description", cls: "span2"},
+  {key: "role", label: "Connected devices", type: "select", options: [["", "(not set)"], ["pc", "computers"], ["phone", "IP phones"], ["ap", "Wi-Fi access points"], ["camera", "cameras"], ["printer", "printers"], ["server", "servers"], ["uplink", "uplink / other switch"]], show: r => r.mode !== "disabled"},
   {key: "vlan", label: "Access VLAN", type: VLAN_SEL, show: r => r.mode === "access"},
   {key: "voice", label: "Voice VLAN", type: VLAN_SEL, show: r => r.mode === "access"},
   {key: "vlans", label: "Trunk VLANs (names or 'all')", ph: "USERS, VOICE", cls: "span2", show: r => r.mode === "trunk"},
   {key: "native", label: "Native (untagged) VLAN", type: VLAN_SEL, show: r => r.mode === "trunk"},
   {key: "address", label: "IP address / prefix", ph: "10.0.0.1/30", cls: "span2", show: r => r.mode === "routed"},
   {key: "poe", label: "PoE", type: "select", options: [["", "default"], ["high", "priority high"], ["low", "priority low"], ["off", "off"]], show: r => r.mode !== "disabled"},
+  {key: "poe_max", label: "Max PoE (W)", ph: "30", adv: true, show: r => r.mode !== "disabled" && r.poe !== "off"},
   {key: "speed", adv: true, label: "Speed", type: "select", options: [["", "auto"], "10m", "100m", "1g", "2.5g", "10g"], show: r => r.mode !== "disabled"},
   {key: "mtu", label: "MTU", adv: true, ph: "9216", show: r => r.mode !== "disabled"},
   {key: "mac_limit", adv: true, label: "MAC limit", ph: "e.g. 3", show: r => r.mode === "access"},
+  {key: "mac_action", label: "At the MAC limit", type: "select", adv: true, options: [["drop", "drop new MACs"], ["drop-and-log", "drop and log"], ["log", "log only"], ["shutdown", "shut the port down"]], show: r => r.mode === "access" && !!r.mac_limit},
+  {key: "sticky", label: "Sticky MAC (remember learned MACs)", type: "checkbox", adv: true, show: r => r.mode === "access"},
+  {key: "dot1x", label: "802.1X / MAB", type: "select", options: [["", "off"], ["dot1x", "802.1X"], ["dot1x-mab", "802.1X, else MAC (MAB)"], ["mab", "MAC only (MAB)"]], show: r => r.mode === "access"},
+  {key: "root_guard", label: "Root guard", type: "checkbox", adv: true, show: r => r.mode === "trunk"},
+  {key: "loop_protect", label: "Loop protection", type: "checkbox", adv: true, show: r => r.mode === "trunk"},
   {key: "edge", label: "Edge port (RSTP)", type: "checkbox", show: r => r.mode === "access"},
   {key: "dhcp_trusted", adv: true, label: "DHCP trusted", type: "checkbox", show: r => r.mode === "access"},
 ];
@@ -674,7 +728,7 @@ const LAG_FIELDS = [
   {key: "min_links", adv: true, label: "Minimum links", ph: "1"},
   {key: "mode", label: "Mode", type: "select", options: ["trunk", "access", "routed", "disabled"]},
   {key: "description", label: "Description", cls: "span2"},
-  ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "address", "mtu"].includes(f.key)),
+  ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "address", "mtu", "root_guard", "loop_protect"].includes(f.key)),
   {key: "esi", label: "ESI (EVPN multihoming)", ph: "00:01:01:01:01:01:01:01:01:01", cls: "span2", show: () => state.evpn.enabled},
   {key: "lacp_system_id", label: "LACP system ID", ph: "00:00:00:01:01:01", show: () => state.evpn.enabled},
 ];
@@ -717,6 +771,7 @@ const TABLES = {
       {key: "id", label: "VLAN ID", ph: "20"},
       {key: "description", label: "Description", cls: "span2"},
       {key: "irb", label: "IRB address(es) (layer 3)", ph: "10.0.20.1/24", cls: "span2"},
+      {key: "voice", label: "Voice VLAN for all access ports", type: "checkbox", cls: "span2"},
       {key: "dhcp_relay", label: "DHCP relay", type: "checkbox"},
       {key: "snooping", label: "DHCP snooping", type: "checkbox"},
       {key: "dai", adv: true, label: "ARP inspection", type: "checkbox"},
@@ -730,6 +785,11 @@ const TABLES = {
     blank: () => ({name: "", ports: "", mode: "access", vlan: "", vlans: "", native: "", voice: "", description: "", poe: "", edge: true, mac_limit: "", dhcp_trusted: false, address: "", mtu: "", speed: ""})},
   "lags": {fields: LAG_FIELDS, title: r => `${r.name || "LAG"} · ${r.mode}${r.members ? " · " + r.members : ""}`,
     blank: rows => ({name: "ae" + rows.length, members: "", lacp: "active", lacp_fast: true, min_links: "", mode: "trunk", vlan: "", vlans: "", native: "", voice: "", description: "", address: "", mtu: ""})},
+  "security.radius_servers": {fields: [
+      {key: "address", label: "RADIUS server", ph: "10.0.0.30"},
+      {key: "secret", label: "Shared secret", type: "password"},
+      {key: "port", label: "Port", ph: "1812"}],
+    blank: () => ({address: "", secret: "", port: ""})},
   "routing.static": {fields: [
       {key: "prefix", label: "Destination", ph: "0.0.0.0/0", cls: "span2"},
       {key: "next_hop", label: "Next hop", ph: "10.0.0.1", cls: "span2"},
@@ -897,8 +957,15 @@ function renderPortmap() {
       // Junos numbers top row even, bottom row odd, like the front panel.
       const cells = ports.map(p => {
         const u = used[p.name]; const n = p.name.split("/").pop();
-        const cls = ["port", p.poe ? "poe" : "", u ? u.use : "", picked.has(p.name) ? "picked" : ""].join(" ");
-        const tip = `${p.name} · ${p.speed}${p.poe ? " · PoE" : ""}${u ? " · " + u.use + " (" + u.label + ")" : ""}`;
+        let look = u ? u.use : "free";
+        if (u && u.use !== "disabled" && u.use !== "lag") {
+          if (u.role === "ap") look = "ap"; else if (u.role === "camera") look = "camera";
+          else if (u.role === "phone" || (u.voice && u.use === "access")) look = "voice";
+        }
+        if (u && u.label === "Unused" && u.use === "disabled") look = "disabled free";
+        const cls = ["port", p.poe ? "poe" : "", look, picked.has(p.name) ? "picked" : ""].join(" ");
+        const role = u && u.role ? " · " + u.role : "";
+        const tip = `${p.name} · ${p.speed}${p.poe ? " · PoE" : ""}${u ? " · " + u.use + (u.voice ? " + voice VLAN" : "") + role + " (" + u.label + ")" : " · not provisioned"}`;
         return `<div class="${cls}" data-port="${p.name}" title="${esc(tip)}">${n}</div>`;
       });
       const chunks = [];
@@ -926,7 +993,7 @@ function compact(list) {
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
-                     "EVPN-VXLAN": ["EVPN"], Services: ["Services"], "Import & check": [], "My projects": []};
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "My projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}

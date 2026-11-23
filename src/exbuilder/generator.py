@@ -14,6 +14,8 @@ import re
 from dataclasses import dataclass, field
 
 from . import __version__, models
+from . import qos as Q
+from . import security as SEC
 from . import routing as R
 from . import ports as P
 from .cryptpw import is_hashed, sha512_crypt
@@ -55,12 +57,14 @@ DEFAULTS: dict = {
     "routing": {"static": [], "dhcp_relay_servers": "", **R.ROUTING_DEFAULTS},
     "policy": R.POLICY_DEFAULTS,
     "evpn": R.EVPN_DEFAULTS,
+    "qos": Q.QOS_DEFAULTS,
+    "security": SEC.SECURITY_DEFAULTS,
     "services": {
         "lldp": True, "lldp_med": True,
         "stp": "rstp", "bridge_priority": "", "bpdu_block_on_edge": True,
         "storm_control": True, "storm_percent": "5", "storm_scope": "access",
         "igmp_snooping": False,
-        "poe_all": True,
+        "poe_all": True, "poe_management": "", "poe_guard_band": "", "poe_fast": False, "poe_perpetual": False,
         "disable_unused": False,
         "use_ranges": True,
         "delete_first": True,
@@ -68,13 +72,14 @@ DEFAULTS: dict = {
 }
 
 PORT_DEFAULTS = {"name": "", "ports": "", "mode": "access", "vlan": "", "vlans": "", "native": "",
-                 "voice": "", "description": "", "poe": "", "edge": True, "mac_limit": "",
+                 "voice": "", "description": "", "role": "", "poe": "", "poe_max": "", "edge": True, "mac_limit": "",
+                 "mac_action": "drop", "sticky": False, "dot1x": "", "root_guard": False, "loop_protect": False,
                  "dhcp_trusted": False, "address": "", "mtu": "", "speed": ""}
 LAG_DEFAULTS = {**PORT_DEFAULTS, "name": "ae0", "members": "", "lacp": "active", "lacp_fast": True,
                 "min_links": "", "mode": "trunk", "edge": False, "esi": "", "lacp_system_id": ""}
 VLAN_DEFAULTS = {"name": "", "id": "", "description": "", "irb": "", "dhcp_relay": False,
                  "snooping": False, "dai": False, "ipsg": False,
-                 "vni": "", "vga": "", "vrf": ""}
+                 "vni": "", "vga": "", "vrf": "", "voice": False}
 
 HOSTNAME = re.compile(r"^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$")
 DOMAIN = re.compile(r"^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$")
@@ -634,7 +639,12 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
         elif not _s(row.get("vlan")):
             ctx.warn(section, f"{label}: no access VLAN, so the port uses the default VLAN.")
         voice = _vlan_name(ctx, section, f"{label} voice", row.get("voice"))
+        if not voice and not _s(row.get("voice")):
+            # A VLAN ticked as "voice VLAN" is offered to every access port that has none of its own.
+            voice = next((v["name"] for v in ctx.p["vlans"] if _truthy(v.get("voice")) and v["name"] != vlan), "")
         if voice:
+            if not _truthy(ctx.p["services"].get("lldp_med")):
+                ctx.warn(section, f"{label}: turn on LLDP-MED (Services tab) so phones learn voice VLAN {voice} by themselves.")
             if voice == vlan:
                 ctx.error(section, f"{label}: the voice VLAN must differ from the data VLAN.")
             else:
@@ -652,9 +662,13 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
                 for port in phys:
                     path = ("switch-options", f"interface {port}.0")
                     cfg.add(path, f"interface-mac-limit {limit}")
-                    cfg.add((*path, "interface-mac-limit"), "packet-action drop")
+                    action = _s(row.get("mac_action")) or "drop"
+                    cfg.add((*path, "interface-mac-limit"), f"packet-action {action if action in SEC.MAC_ACTIONS else 'drop'}")
             else:
                 ctx.error(section, f"{label}: MAC limit must be 1-16383.")
+        if _truthy(row.get("sticky")):
+            for port in phys:
+                cfg.add(("switch-options", f"interface {port}.0"), "persistent-learning")
         if _truthy(row.get("dhcp_trusted")) and vlan:
             ctx.trusted.setdefault(vlan, []).extend(phys)
     elif mode == "trunk":
@@ -692,6 +706,8 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
     else:
         ctx.error(section, f"{label}: unknown mode '{mode}'.")
         return
+    if mode in ("access", "trunk"):
+        SEC.port(ctx, section, label, mode, base, phys, row)
 
     if mode != "routed":
         for key in ("address",):
@@ -708,6 +724,19 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
                 ctx.cfg.add(("poe", f"interface {port}"), "disable")
             elif poe in ("high", "low"):
                 ctx.cfg.add(("poe", f"interface {port}"), f"priority {poe}")
+    pmax = _s(row.get("poe_max"))
+    if pmax and poe != "off" and not base[1].startswith("ae"):
+        try:
+            watts = float(pmax)
+        except ValueError:
+            watts = -1
+        if not 0 < watts <= 90:
+            ctx.error(section, f"{label}: maximum PoE power must be 0.1-90 watts.")
+        else:
+            for port in phys:
+                info = ctx.known.get(port)
+                if info is None or info.get("poe"):
+                    ctx.cfg.add(("poe", f"interface {port}"), f"maximum-power {pmax}")
 
 
 def _range_name(row: dict, index: int) -> str:
@@ -751,7 +780,10 @@ def _ports(ctx: Ctx) -> None:
             for port in names:
                 _iface_settings(ctx, "Ports", label, ("interfaces", port), row, [port])
         for port in names:
-            ctx.res.ports[port] = {"use": row.get("mode") or "access", "label": label}
+            mode_ = row.get("mode") or "access"
+            voice_ = mode_ == "access" and (bool(_s(row.get("voice"))) or any(
+                _truthy(v.get("voice")) and v["name"] != _s(row.get("vlan")) for v in ctx.p["vlans"]))
+            ctx.res.ports[port] = {"use": mode_, "label": label, "voice": voice_, "role": _s(row.get("role"))}
 
 
 def _lags(ctx: Ctx) -> None:
@@ -896,8 +928,28 @@ def _services(ctx: Ctx) -> None:
             cfg.add(("forwarding-options", "storm-control-profiles storm-default", "all"), f"bandwidth-percentage {pct}")
         else:
             ctx.error("Services", "Storm control percentage must be 1-100.")
-    if _truthy(s.get("poe_all")) and any(m.poe for m in _models(ctx)):
+    poe_models = any(m.poe for m in _models(ctx))
+    if _truthy(s.get("poe_all")) and poe_models:
         cfg.add(("poe",), "interface all")
+    if poe_models:
+        mgmt = _s(s.get("poe_management"))
+        if mgmt in ("class", "static"):
+            cfg.add(("poe",), f"management {mgmt}")
+        gb = _s(s.get("poe_guard_band"))
+        if gb:
+            if gb.isdigit() and 0 <= int(gb) <= 19:
+                cfg.add(("poe",), f"guard-band {gb}")
+            else:
+                ctx.error("Services", "PoE guard band must be 0-19 watts.")
+        fpcs = sorted({int(m.get("fpc", 0)) for m in ctx.p["switch"].get("members") or []
+                       if str(m.get("fpc", 0)).isdigit() and (models.get(m.get("model", "")) or models.Model("", "", ())).poe})
+        for fpc in fpcs:
+            if _truthy(s.get("poe_fast")):
+                cfg.add(("poe", f"fpc {fpc}"), "fast-poe")
+            if _truthy(s.get("poe_perpetual")):
+                cfg.add(("poe", f"fpc {fpc}"), "perpetual-poe")
+    elif any(_truthy(s.get(k)) for k in ("poe_fast", "poe_perpetual")) or _s(s.get("poe_guard_band")):
+        ctx.warn("Services", "PoE settings skipped: no member of this switch has PoE.")
     for vlan, ports in ctx.trusted.items():
         v = ctx.vlan_by_name.get(vlan)
         if v and (_truthy(v.get("snooping")) or _truthy(v.get("dai")) or _truthy(v.get("ipsg"))):
@@ -941,6 +993,8 @@ def build(project: dict) -> Result:
         ctx.cfg.raw_set("delete protocols rstp")
         ctx.cfg.raw_set("delete switch-options")
         ctx.cfg.raw_set("delete poe")
+        if _truthy((p.get("qos") or {}).get("enabled")):
+            ctx.cfg.raw_set("delete class-of-service")
 
     _switch(ctx)
     ctx.models = _models(ctx)
@@ -958,6 +1012,8 @@ def build(project: dict) -> Result:
     R.bgp(ctx)
     R.evpn(ctx)
     _services(ctx)
+    SEC.apply(ctx)
+    Q.apply(ctx)
 
     hostname = _s(p["system"].get("hostname")) or "switch"
     ctx.res.set_text = ctx.cfg.to_set()

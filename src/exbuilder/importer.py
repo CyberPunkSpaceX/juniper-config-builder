@@ -136,6 +136,11 @@ def parse(text: str, model: str = "") -> dict:
     plists: dict[str, list] = {}
     members: dict[int, dict] = {}
     edge_ports: set[str] = set()
+    ifs_flags: list = []
+    cos_trust: set[str] = set()
+    builder_qos = any("VOICE-VIDEO-DSCP" in ln for ln in lines)
+    if builder_qos:
+        p["qos"]["signalling_as_video"] = False
     voice: dict[str, str] = {}
     irb_units: dict[str, dict] = {}
     relay_ifaces: set[str] = set()
@@ -380,6 +385,10 @@ def parse(text: str, model: str = "") -> dict:
                 elif n > 3 and w[1] == "interface" and w[3] == "interface-mac-limit":
                     if w[4] != "packet-action":
                         iface(w[2].removesuffix(".0"))["mac_limit"] = w[4]
+                    else:
+                        iface(w[2].removesuffix(".0"))["mac_action"] = w[5]
+                elif n > 3 and w[1] == "interface" and w[3] == "persistent-learning":
+                    iface(w[2].removesuffix(".0"))["sticky"] = True
                 elif w[1] in ("vtep-source-interface",):
                     pass
                 elif w[1] in ("route-distinguisher", "vrf-target"):
@@ -414,7 +423,21 @@ def parse(text: str, model: str = "") -> dict:
                 else:
                     ok = False
             elif w[0] == "protocols":
-                ok = _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts)
+                if w[1:3] == ["dot1x", "authenticator"]:
+                    ok = True
+                    if n > 4 and w[3] == "interface":
+                        d = iface(w[4].removesuffix(".0"))
+                        d.setdefault("dot1x", "dot1x")
+                        if "mac-radius" in w:
+                            d["dot1x"] = "mab" if "restrict" in w else "dot1x-mab"
+                        elif "server-fail" in w:
+                            p["security"]["server_fail"] = w[w.index("server-fail") + 1] if w[-1] != "vlan-name" else "vlan"
+                        elif "guest-vlan" in w:
+                            p["security"]["guest_vlan"] = w[w.index("guest-vlan") + 1]
+                elif w[1:3] == ["layer2-control", "recovery-timeout"]:
+                    p["security"]["recovery_timeout"] = w[3]
+                else:
+                    ok = _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts, ifs_flags)
             elif w[0] == "forwarding-options":
                 if n > 1 and w[1] == "storm-control-profiles":
                     sv["storm_control"] = True
@@ -434,6 +457,14 @@ def parse(text: str, model: str = "") -> dict:
             elif w[0] == "poe":
                 if n > 2 and w[1] == "interface" and w[2] == "all":
                     sv["poe_all"] = True
+                elif n > 2 and w[1] == "management":
+                    sv["poe_management"] = w[2]
+                elif n > 2 and w[1] == "guard-band":
+                    sv["poe_guard_band"] = w[2]
+                elif n > 3 and w[1] == "fpc" and w[3] in ("fast-poe", "perpetual-poe"):
+                    sv["poe_fast" if w[3] == "fast-poe" else "poe_perpetual"] = True
+                elif n > 4 and w[1] == "interface" and w[3] == "maximum-power":
+                    iface(w[2])["poe_max"] = w[4]
                 elif n > 3 and w[1] == "interface":
                     port = w[2]
                     if w[3] == "disable":
@@ -444,6 +475,33 @@ def parse(text: str, model: str = "") -> dict:
                         ok = False
                 else:
                     ok = False
+            elif w[0] == "access" and n > 3 and w[1] == "radius-server":
+                rs = {x["address"]: x for x in p["security"]["radius_servers"]}
+                e = rs.get(w[2]) or {"address": w[2], "secret": "", "port": ""}
+                if w[3] == "secret":
+                    e["secret"] = w[4]
+                elif w[3] == "port":
+                    e["port"] = w[4]
+                elif w[3] == "source-address":
+                    p["security"]["radius_source"] = w[4]
+                if w[2] not in rs:
+                    p["security"]["radius_servers"].append(e)
+            elif w[0] == "access" and n > 2 and w[1] == "profile":
+                pass
+            elif w[0] == "class-of-service":
+                facts.add("cos")
+                ok = builder_qos
+                if builder_qos:
+                    qo = p["qos"]
+                    qo.update(enabled=True, preset="custom")
+                    if n > 4 and w[1] == "schedulers" and w[3] == "transmit-rate" and w[4] == "percent":
+                        key = {"VOICE": "voice_percent", "VIDEO": "video_percent", "NETWORK-CONTROL": "control_percent"}.get(w[2])
+                        if key:
+                            qo[key] = w[5]
+                    elif n > 4 and w[1] == "classifiers" and "cs3" in w:
+                        qo["signalling_as_video"] = True
+                    elif n > 3 and w[1] == "interfaces" and "classifiers" in w:
+                        cos_trust.add(w[2])
             elif w[0] == "policy-options" and n > 3 and w[1] == "prefix-list":
                 plists.setdefault(w[2], []).append(w[3])
             elif w[0] == "policy-options" and n > 2 and w[2] == "ECMP-LOAD-BALANCE":
@@ -475,6 +533,14 @@ def parse(text: str, model: str = "") -> dict:
                 else:
                     d.setdefault(k2, v2)
             range_of[port] = rname
+
+    if builder_qos:
+        q = p["qos"]
+        q["trust"] = "all" if any(ifs.get(x, {}).get("mode") == "trunk" or AE.match(x) for x in cos_trust) else "access"
+        if q["voice_percent"] == "20" and q["video_percent"] == "30":
+            q["preset"] = "voice-video"
+    for name, flag in ifs_flags:
+        ifs.setdefault(name, {"vlans": [], "addr": []})[flag] = True
 
     # ------------------------------------------------ VLANs and IRBs
     by_id = {}
@@ -522,6 +588,12 @@ def parse(text: str, model: str = "") -> dict:
         row["mtu"] = d.get("mtu", "")
         row["speed"] = d.get("speed", "")
         row["poe"] = d.get("poe", "")
+        row["poe_max"] = d.get("poe_max", "")
+        row["mac_action"] = d.get("mac_action", "drop")
+        row["sticky"] = bool(d.get("sticky"))
+        row["dot1x"] = d.get("dot1x", "")
+        row["root_guard"] = bool(d.get("root_guard"))
+        row["loop_protect"] = bool(d.get("loop_protect"))
         row["mac_limit"] = d.get("mac_limit", "")
         row["edge"] = name in edge_ports
         vl = [vname(x) for x in d.get("vlans", [])]
@@ -694,7 +766,7 @@ def _iface_line(name: str, w: list[str], d: dict, irb_units: dict) -> bool:
     return True
 
 
-def _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts) -> bool:
+def _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts, ifs_flags) -> bool:
     sv, r = p["services"], p["routing"]
     n = len(w)
     k = w[1] if n > 1 else ""
@@ -713,6 +785,8 @@ def _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts) -> bool:
             sv["bpdu_block_on_edge"] = True
         elif n > 4 and w[2] == "interface" and w[4] == "edge":
             edge_ports.add(w[3].removesuffix(".0"))
+        elif n > 4 and w[2] == "interface" and w[4] in ("no-root-port", "bpdu-timeout-action"):
+            ifs_flags.append((w[3].removesuffix(".0"), "root_guard" if w[4] == "no-root-port" else "loop_protect"))
         elif n > 3 and w[2] == "interface":
             pass
         elif n == 2:
@@ -852,6 +926,13 @@ def recommendations(project: dict, facts: list[str] | None = None, unparsed: lis
         if lag.get("lacp") == "static":
             rec("medium", f"{lag['name']} has no LACP", "Without LACP a mis-cabled or half-dead link keeps sending traffic.",
                 "LAGs tab: LACP active, and the same on the other side.")
+    has_voice = any(x.get("voice") for x in access_ports) or any(v.get("voice") for v in p["vlans"])
+    if has_voice and "cos" not in f and not (p.get("qos") or {}).get("enabled"):
+        rec("medium", "Voice VLAN without QoS", "Calls can break up when a link is busy.",
+            "Services tab: turn on QoS with the voice and video preset.")
+    if has_voice and not sv.get("lldp_med"):
+        rec("medium", "Voice VLAN without LLDP-MED", "Phones only learn the voice VLAN automatically through LLDP-MED.",
+            "Services tab: turn on LLDP-MED.")
     if not sv.get("lldp"):
         rec("low", "LLDP is off", "LLDP shows which device is on each port and helps IP phones and access points.",
             "Services tab: turn on LLDP and LLDP-MED.")
