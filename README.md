@@ -5,6 +5,63 @@ running Junos with ELS (EX2300, EX3400, EX4100, EX4300, EX4400). Fill in forms, 
 config appears live as `set` commands and as the hierarchical (curly brace)
 format, ready to copy or download.
 
+![The builder in Basic mode with the office example loaded](docs/screenshots/01-builder-basic.png)
+
+## How to use it
+
+1. **Pick Basic or Advanced** (top left). Basic shows what a normal access switch
+   needs: system, users, SNMP and logs, VLANs, ports, LAGs, static routes and
+   services. Advanced adds OSPF, BGP, policies, EVPN-VXLAN and the less common
+   fields (speed, MTU, MAC limit, VC pre-provisioning and so on). Settings you
+   already made stay in the config when you switch to Basic.
+2. **Start from something.** Choose a model on the Switch tab, load an example,
+   import your current config, or fill in the Excel template (see below).
+3. **Work through the tabs.** Click ports on the port map to make a port group or
+   a LAG. The config on the right updates as you type, with errors in red
+   (Junos would refuse them) and warnings in orange.
+4. **Copy or download** the set commands or the hierarchical config, then load it
+   on the switch as described in [Applying the config](#applying-the-config-on-a-switch).
+
+![Port groups and the port map](docs/screenshots/02-ports.png)
+
+### Import and check an existing config
+
+Click **Import…**, paste the output of `show configuration | display set` (or
+the curly-brace config), or drop a `.conf`/`.txt` file, then **Check config**.
+
+- Every line is either read into the builder's tabs or listed under "not
+  imported", so nothing is lost silently.
+- The config gets a score out of 100 and a list of recommendations, the
+  important ones first. Examples: Telnet or HTTP turned on, SNMP `public`,
+  root SSH login, no NTP or syslog server, no BPDU protection, storm control or
+  DHCP snooping, LAGs without LACP.
+- **Load as it is** puts the config in the tabs. **Load with recommended fixes**
+  also applies the safe fixes (deny root SSH, login retry limits, SSH limits,
+  banner, RSTP edge ports, BPDU block, storm control, LLDP).
+
+![Import and check with recommendations](docs/screenshots/05-import-check.png)
+
+### Excel workbook
+
+**Import… → Download the Excel template** gives a workbook with a Settings sheet
+and one sheet each for Users, SNMP, SNMPv3, VLANs, Ports, LAGs and static
+routes, with drop-down lists. Fill it in and drop it on the Import page; the
+tabs fill themselves. **Save as Excel** (top right) exports the switch you are
+working on in the same format, so you can edit it in Excel and import it again.
+OSPF, BGP, policies and EVPN-VXLAN stay in the builder.
+
+### EVPN-VXLAN fabric wizard (Advanced)
+
+The EVPN-VXLAN tab opens with a wizard: pick a template or a fabric type (each
+has a small picture showing where the gateway lives), the number of spines and
+leaves, the ports between them, and your VLANs and VRFs. It works out every
+address, AS number, VNI and route target, draws the fabric, and writes one
+config per switch.
+
+![Fabric wizard: templates and fabric types](docs/screenshots/03-fabric-wizard.png)
+
+![Fabric wizard result: topology, switches and cabling](docs/screenshots/04-fabric-result.png)
+
 ## What it covers
 
 | Area | What you can set |
@@ -24,6 +81,8 @@ format, ready to copy or download.
 | Policies | Prefix lists, communities, policy statements with terms: from protocol / prefix list / route filter / community, then local preference, MED, community add, next-hop self, accept / reject / next term |
 | EVPN-VXLAN | Leaf, collapsed-core or spine (route reflector) role, iBGP or eBGP overlay, VNI per VLAN, anycast gateway (virtual-gateway-address), tenant VRFs with EVPN type-5 routes, ESI-LAG multihoming. EX4100, EX4400 and EX4300-48MP |
 | EVPN-VXLAN fabric wizard | Pick a template or a fabric type (collapsed core, edge-routed ERB, centrally-routed CRB, bridged overlay) with a small picture of each, set how many spines and leaves, the ports between them and the VLANs/VRFs. The wizard assigns loopbacks, /31 links, AS numbers, VNIs, route targets, anycast gateways and ESIs, draws the topology, and writes one config per switch (copy, download, zip of all, or open a switch in the builder). Also `POST /fabric` and `/fabric/zip` with `{fabric, base}` |
+| Import and check | Read an existing set or curly-brace config into the tabs, score it, list recommendations, load it with or without the recommended fixes, and list the lines it did not import. Also `POST /import/config` with `{text, model}` |
+| Excel | Download a template, fill it in and import it; export any project to Excel. `GET /excel/template`, `POST /excel/export`, `POST /import/excel` (file upload) |
 | Services | LLDP, LLDP-MED, RSTP with bridge priority and BPDU guard on edge ports, storm control, IGMP snooping, PoE on all ports, disable unused ports, interface ranges |
 
 It checks what you enter as you type: bad addresses, duplicate VLAN IDs, a port
