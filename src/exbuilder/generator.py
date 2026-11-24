@@ -1072,6 +1072,9 @@ def build(project: dict) -> Result:
     if vendor.key == "cisco":
         from . import ios
         return ios.build(project)
+    if vendor.key == "aruba":
+        from . import aoscx
+        return aoscx.build(project)
     if vendor.key == "ruckus":
         from . import fastiron
         return fastiron.build(project)

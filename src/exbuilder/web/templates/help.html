@@ -138,6 +138,14 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
     <li><code>reload cancel</code>, then <code>write memory</code>.</li>
   </ol>
+  <h3>HPE Aruba CX (AOS-CX)</h3>
+  <ol>
+    <li>Save a restore point: <code>copy running-config checkpoint before-change</code>.</li>
+    <li>On a remote switch: <code>checkpoint auto 10</code> (rolls back after 10 minutes unless you confirm).</li>
+    <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
+    <li><code>checkpoint auto confirm</code>, then <code>write memory</code>. To undo later:
+      <code>checkpoint rollback before-change</code>.</li>
+  </ol>
 </div>
 
 <h2 id="vendors">6. Notes per vendor</h2>
@@ -171,6 +179,18 @@ if you lose the connection. The steps for each vendor are below the config in th
       and <code>sntp</code>.</li>
     <li>Not written: storm control (FastIron uses a rate, not a percentage) and VLAN translation.</li>
   </ul>
+  <h3>HPE Aruba CX (AOS-CX): CX 6000, 6100, 6200, 6300, 8320, 8325, 8360 and the CX simulator</h3>
+  <ul>
+    <li>Ports: <code>1/1/1</code> (member/slot/port); ranges like <code>1/1/1-1/1/24</code> or <code>1/1/1-24</code>. The
+      6200 and 6300 stack with VSF (members 1-10). LAGs are <code>lag1</code>; VLAN addresses are <code>interface vlan 20</code>.</li>
+    <li>The root password sets the built-in <b>admin</b> user. AOS-CX encrypts passwords with its own key, so the config
+      carries them as plain text and the switch encrypts them when you load it. They stay readable in the saved project,
+      so keep it private.</li>
+    <li>The management port (<code>mgmt</code>) is always in the <code>mgmt</code> VRF. The 6000 and 6100 have no management
+      port; manage them through a VLAN address.</li>
+    <li>Phone ports become "native VLAN + voice VLAN" trunks, which is how AOS-CX hands a voice VLAN to phones.</li>
+    <li>Not written yet: storm control, VLAN translation, EVPN, policies, QoS and the Tools.</li>
+  </ul>
 </div>
 
 <h2 id="translation">7. VLAN translation</h2>
@@ -182,12 +202,14 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Arista: <code>switchport vlan translation</code>.</li>
   <li>Cisco: <code>switchport vlan mapping</code> on the 9300 and 9500 (not the 9200).</li>
   <li>Brocade / Ruckus: not available.</li>
+  <li>HPE Aruba CX: not written yet.</li>
 </ul>
 
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco, MD5-crypt on Ruckus), so plain text is never saved in a project.</li>
+    Cisco, MD5-crypt on Ruckus), so plain text is never saved in a project. The exception is Aruba CX, which only takes
+    plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>
   <li>SNMP communities, RADIUS secrets and BGP/OSPF keys are in the config as you typed them. Keep downloaded

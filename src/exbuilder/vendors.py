@@ -63,6 +63,12 @@ VENDORS: dict[str, Vendor] = {
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
                    "virtual_chassis"}),
         ready=True),
+    "aruba": Vendor(
+        "aruba", "HPE Aruba CX", "AOS-CX", "CX 6000, 6100, 6200, 6300, 8320, 8325, 8360 and the CX simulator",
+        # What the AOS-CX builder writes today; EVPN, policies, QoS, VLAN translation and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
+                   "virtual_chassis"}),
+        ready=True),
 }
 
 DEFAULT = "juniper"
