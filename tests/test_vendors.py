@@ -15,8 +15,9 @@ def test_vendor_catalog_and_fallback():
     assert vendors.get("arista").has("vlan_translation")
 
 
-def test_not_ready_vendor_says_so():
-    res = build(base(vendor="ruckus"))
+def test_not_ready_vendor_says_so(monkeypatch):
+    monkeypatch.setitem(vendors.VENDORS, "nokia", vendors.Vendor("nokia", "Nokia", "SR Linux", "lab", frozenset()))
+    res = build(base(vendor="nokia"))
     assert res.errors and "not ready" in res.errors[0]["message"]
 
 

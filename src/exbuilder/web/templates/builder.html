@@ -248,6 +248,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <h3>Switches</h3>
       <p class="hint" data-only="juniper">One row for a standalone switch. Add rows to build a Virtual Chassis: each member gets its own number (FPC), so its ports are named ge-<b>1</b>/0/0 and so on.</p>
       <p class="hint" data-only="cisco">One row per switch. Add rows to build a StackWise stack: each switch gets its number (1-8), so its ports are named Gi<b>2</b>/0/1 and so on. Short names like <code>Gi1/0/1-24</code> and <code>Te1/1/1</code> work.</p>
+      <p class="hint" data-only="ruckus">One row per switch. Add rows to build an ICX or FCX stack: each unit gets its number (1-12), so its ports are named <b>2</b>/1/1 and so on. FGS and FLS don't stack and number their ports 0/1/1. Write ports like <code>1/1/1-24</code>; <code>ethe 1/1/1</code> also works.</p>
       <p class="hint" data-only="arista">Pick the switch model. Arista switches don't stack: a pair that shares LAGs (MLAG) is two projects, one per switch. Ports are named <code>Ethernet1</code>, and QSFP ports <code>Ethernet49/1</code>.</p>
       <div class="rows compact" data-table="switch.members"></div>
       <button class="secondary small" type="button" data-add="switch.members" data-feature="virtual_chassis"><span data-only="juniper">Add Virtual Chassis member</span><span data-not="juniper">Add stack member</span></button>
@@ -307,12 +308,12 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
     </div>
     <div class="panel">
       <h2>Management port</h2>
-      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0).</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0).</span><span data-only="ruckus">The dedicated out-of-band port (management 1).</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
       <div class="grid">
         <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
         <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>
         <div class="field"><label>Gateway</label><input type="text" data-bind="system.mgmt_gateway" placeholder="192.168.1.1"></div>
-        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (<span data-only="juniper">mgmt_junos</span><span data-only="arista">MGMT</span><span data-only="cisco">Mgmt-vrf</span>)</label>
+        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (<span data-only="juniper">mgmt_junos</span><span data-only="arista">MGMT</span><span data-only="cisco">Mgmt-vrf</span><span data-only="ruckus">not written on FastIron</span>)</label>
         <label class="adv check" data-only="juniper"><input type="checkbox" data-bind="system.ignore_mgmt_alarm"> Ignore the alarm when the port is unplugged</label>
       </div>
     </div>
@@ -326,15 +327,15 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Users">
     <div class="panel">
       <h2>Root account</h2>
-      <p class="hint"><span data-only="juniper">Junos won't commit without a root password.</span><span data-only="arista">Optional on Arista: the root account stays locked without one.</span><span data-only="cisco">On Cisco this is the <b>enable secret</b>.</span> Passwords are turned into SHA-512 hashes as soon as the config is generated, so plain text is never saved in a project.</p>
+      <p class="hint"><span data-only="juniper">Junos won't commit without a root password.</span><span data-only="arista">Optional on Arista: the root account stays locked without one.</span><span data-only="cisco">On Cisco this is the <b>enable secret</b>.</span><span data-only="ruckus">On FastIron this is the <b>enable super-user password</b>.</span> Passwords are turned into hashes as soon as the config is generated, so plain text is never saved in a project.</p>
       <div class="grid">
-        <div class="field"><label><span data-not="cisco">Root password</span><span data-only="cisco">Enable secret</span><span data-only="juniper"> *</span></label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
+        <div class="field"><label><span data-not="cisco ruckus">Root password</span><span data-only="cisco">Enable secret</span><span data-only="ruckus">Super-user password</span><span data-only="juniper"> *</span></label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
         <div class="adv field wide" data-only="juniper"><label>Root SSH public key (optional)</label><textarea data-bind="access.root_ssh_key" placeholder="ssh-ed25519 AAAA... you@laptop"></textarea></div>
       </div>
     </div>
     <div class="panel">
       <h2>Local users</h2>
-      <p class="hint"><span data-only="juniper">super-user = full access, operator = view and clear, read-only = view only.</span><span data-only="arista">super-user = network-admin (privilege 15), operator and read-only = network-operator (view only).</span><span data-only="cisco">super-user = privilege 15 (full access), operator and read-only = privilege 1 (view only).</span></p>
+      <p class="hint"><span data-only="juniper">super-user = full access, operator = view and clear, read-only = view only.</span><span data-only="arista">super-user = network-admin (privilege 15), operator and read-only = network-operator (view only).</span><span data-only="cisco">super-user = privilege 15 (full access), operator and read-only = privilege 1 (view only).</span><span data-only="ruckus">super-user = privilege 0 (full access), operator = privilege 4 (port settings), read-only = privilege 5 (view only).</span></p>
       <div class="rows" data-table="access.users"></div>
       <button class="secondary small" type="button" data-add="access.users">Add user</button>
     </div>
@@ -345,7 +346,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div class="adv field"><label>SSH connection limit</label><input type="text" data-bind="access.ssh_connection_limit"></div>
         <div class="adv field" data-only="juniper"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
         <label class="adv check"><input type="checkbox" data-bind="access.netconf"> NETCONF over SSH (Ansible, automation)</label>
-        <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span><span data-only="cisco">Web UI (HTTPS)</span></label>
+        <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span><span data-only="cisco">Web UI (HTTPS)</span><span data-only="ruckus">Web UI (HTTPS)</span></label>
         <label class="check"><input type="checkbox" data-bind="access.retry_options"> Slow down password guessing</label>
       </div>
     </div>
@@ -397,7 +398,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Ports">
     <div class="panel">
       <h2>Port groups</h2>
-      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code data-only="juniper">ge-0/0/0-23, ge-0/0/30</code><code data-only="arista">Ethernet1-24, Ethernet30</code><code data-only="cisco">Gi1/0/1-24, Gi1/0/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
+      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code data-only="juniper">ge-0/0/0-23, ge-0/0/30</code><code data-only="arista">Ethernet1-24, Ethernet30</code><code data-only="cisco">Gi1/0/1-24, Gi1/0/30</code><code data-only="ruckus">1/1/1-24, 1/1/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
       <div class="rows" data-table="ports"></div>
       <button class="secondary small" type="button" data-add="ports">Add port group</button>
     </div>
@@ -406,7 +407,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <!-- ===================================================== LAGS -->
   <section class="section" data-tab="LAGs">
     <div class="panel">
-      <h2>Link aggregation (LAG / <span data-only="juniper">ae</span><span data-only="arista">Port-Channel</span><span data-only="cisco">Port-channel</span>)</h2>
+      <h2>Link aggregation (LAG / <span data-only="juniper">ae</span><span data-only="arista">Port-Channel</span><span data-only="cisco">Port-channel</span><span data-only="ruckus">lag</span>)</h2>
       <p class="hint">Bundle ports into one logical link with LACP. The other end must be set up the same way. Usually a trunk to a core switch, firewall or server.</p>
       <div class="rows" data-table="lags"></div>
       <button class="secondary small" type="button" data-add="lags">Add LAG</button>
@@ -444,7 +445,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="OSPF & BGP">
     <div class="panel">
       <h2>OSPF</h2>
-      <p class="hint">List the interfaces that run OSPF in each area, like <code data-only="juniper">xe-0/2/0, irb.20, lo0</code><code data-only="arista">Ethernet49/1, Vlan20, Loopback0</code><code data-only="cisco">Te1/1/1, Vlan20, Loopback0</code><span data-only="juniper"> (unit .0 is added when you leave it out)</span>. <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
+      <p class="hint">List the interfaces that run OSPF in each area, like <code data-only="juniper">xe-0/2/0, irb.20, lo0</code><code data-only="arista">Ethernet49/1, Vlan20, Loopback0</code><code data-only="cisco">Te1/1/1, Vlan20, Loopback0</code><code data-only="ruckus">1/2/1, ve 20, loopback 1</code><span data-only="juniper"> (unit .0 is added when you leave it out)</span>. <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="routing.ospf.enabled"> Turn on OSPF</label>
         <div class="field"><label>Reference bandwidth</label><input type="text" data-bind="routing.ospf.reference_bandwidth" placeholder="100g"></div>
@@ -946,13 +947,15 @@ const VENDOR_EXAMPLES = {{ examples|tojson }};
 const JUNOS = VENDOR.key === "juniper";
 const hasFeature = f => VENDOR.features.includes(f);
 // Placeholders and names that depend on the vendor's port naming.
-const PH = VENDOR.key === "cisco" ? {ports: "Gi1/0/1-24", members: "Te1/1/1-2", lag: "Port-channel1", ospf: "Te1/1/1, Vlan20, Loopback0",
+const PH = VENDOR.key === "ruckus" ? {ports: "1/1/1-24", members: "1/2/1-2", lag: "lag1", ospf: "1/2/1, ve 20, loopback 1",
+                    passive: "ve 20, loopback 1", p2p: "1/2/1", custom: "e.g. 1/2/1-4 for a module", mgmt: "management 1", host: "icx-floor2-01"}
+         : VENDOR.key === "cisco" ? {ports: "Gi1/0/1-24", members: "Te1/1/1-2", lag: "Port-channel1", ospf: "Te1/1/1, Vlan20, Loopback0",
                     passive: "Vlan20, Loopback0", p2p: "Te1/1/1", custom: "e.g. Gi1/1/1-4 for a 1G network module", mgmt: "GigabitEthernet0/0", host: "sw-floor2-01"}
          : JUNOS ? {ports: "ge-0/0/0-23", members: "xe-0/1/0-1", lag: "ae0", ospf: "xe-0/2/0, irb.20, lo0", passive: "irb.20, lo0",
                     p2p: "xe-0/2/0", custom: "e.g. ge-0/1/0-1 for 1G optics in the uplinks", mgmt: "(model default)", host: "ex-floor2-01"}
                  : {ports: "Ethernet1-24", members: "Ethernet49-50", lag: "Port-Channel1", ospf: "Ethernet49, Vlan20, Loopback0",
                     passive: "Vlan20, Loopback0", p2p: "Ethernet49", custom: "e.g. Ethernet49/2-4 for breakout lanes", mgmt: "Management1", host: "sw-floor2-01"};
-function lagName(n) { return JUNOS ? "ae" + n : (VENDOR.key === "cisco" ? "Port-channel" : "Port-Channel") + (n + 1); }
+function lagName(n) { return JUNOS ? "ae" + n : ({cisco: "Port-channel", ruckus: "lag"}[VENDOR.key] || "Port-Channel") + (n + 1); }
 // Hide what this vendor's builder can't write: data-feature="x" needs feature x,
 // data-only="juniper arista" shows for those vendors, data-not="juniper" hides for them.
 function applyVendor() {
@@ -1039,7 +1042,7 @@ const LAG_FIELDS = [
 ];
 const TABLES = {
   "switch.members": {fields: [
-      {key: "fpc", label: JUNOS ? "Member (FPC)" : "Stack member (1-8)", ph: JUNOS ? "0" : "1", feat: "virtual_chassis"},
+      {key: "fpc", label: JUNOS ? "Member (FPC)" : VENDOR.key === "ruckus" ? "Stack unit (1-12)" : "Stack member (1-8)", ph: JUNOS ? "0" : "1", feat: "virtual_chassis"},
       {key: "model", label: "Model", type: "select", options: MODEL_NAMES, cls: "span2"},
       {key: "serial", adv: true, label: "Serial number", ph: "for pre-provisioning", feat: "virtual_chassis"},
       {key: "role", label: "Role", adv: true, type: "select", options: ["routing-engine", "line-card"], feat: "virtual_chassis"}],
@@ -1284,7 +1287,8 @@ function memberModels() {
 }
 function renderNotes() {
   document.getElementById("model-notes").textContent = memberModels().filter(m => m.model)
-    .map(m => `${JUNOS ? `Member ${m.fpc}: ` : ""}${m.model.name}. ${m.model.notes}`).join("  ");
+    .map(m => `${JUNOS ? `Member ${m.fpc}: ` : ""}${m.model.name}. ${m.model.notes}`)
+    .filter((n, i, all) => JUNOS || all.indexOf(n) === i).join("  ");
 }
 function renderPortmap() {
   const el = document.getElementById("portmap");
@@ -1479,7 +1483,9 @@ function showOutput() {
   document.getElementById("msgs").innerHTML =
     result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
     result.warnings.map(m => `<li class="warn" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
-  document.getElementById("load-hint").innerHTML = VENDOR.key === "cisco"
+  document.getElementById("load-hint").innerHTML = VENDOR.key === "ruckus"
+    ? "On the switch: back up first with <code>copy running-config tftp &lt;server&gt; before.cfg</code>, then <code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>, then <code>write memory</code>. On a remote switch, schedule <code>reload after 00:00:10</code> (10 minutes) first and <code>reload cancel</code> once you're still connected."
+    : VENDOR.key === "cisco"
     ? "On the switch: <code>copy running-config flash:before.cfg</code>, <code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>, then <code>write memory</code>. On a remote switch, start with <code>reload in 10</code> and <code>reload cancel</code> once you're still connected."
     : VENDOR.key === "arista"
     ? "On the switch: <code>configure session new</code>, paste, <code>show session-config diffs</code>, then <code>commit timer 00:05:00</code> and <code>commit</code> again once you're still connected. On a new switch you can also save it as startup-config."

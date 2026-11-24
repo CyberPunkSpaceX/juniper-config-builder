@@ -57,9 +57,12 @@ VENDORS: dict[str, Vendor] = {
                    "vlan_translation", "virtual_chassis"}),
         ready=True),
     "ruckus": Vendor(
-        "ruckus", "Brocade / Ruckus", "FastIron (ICX)", "ICX 7150, 7250, 7450, 7550, 7650, 7850",
-        # No EVPN-VXLAN on ICX, no ICX image for EVE-NG, and no per-port VLAN translation.
-        _ALL - {"evpn_vxlan", "eve_ng", "vlan_translation"}),
+        "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
+        # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port
+        # VLAN translation; policies, QoS and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
+                   "virtual_chassis"}),
+        ready=True),
 }
 
 DEFAULT = "juniper"

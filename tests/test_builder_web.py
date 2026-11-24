@@ -119,21 +119,30 @@ def test_network_map_endpoints(admin):
     assert bad.status_code == 400
 
 
-def test_vendor_screen_after_login(admin):
+def _soon(monkeypatch):
+    from exbuilder import vendors
+    monkeypatch.setitem(vendors.VENDORS, "nokia", vendors.Vendor("nokia", "Nokia", "SR Linux", "lab", frozenset()))
+
+
+def test_vendor_screen_after_login(admin, monkeypatch):
+    _soon(monkeypatch)
     page = admin.get("/").get_data(as_text=True)
     assert "Which switches are you configuring?" in page
     for name in ("Juniper", "Arista", "Cisco", "Brocade / Ruckus"):
         assert name in page
-    assert 'href="/build/juniper"' in page and "Coming soon" in page
+    assert 'href="/build/juniper"' in page and 'href="/build/ruckus"' in page and "Coming soon" in page
 
 
-def test_builder_per_vendor(admin):
+def test_builder_per_vendor(admin, monkeypatch):
+    _soon(monkeypatch)
     page = admin.get("/build/juniper").get_data(as_text=True)
     assert "Juniper builder" in page and '"vlan_translation"' in page
     assert "Last used" in admin.get("/").get_data(as_text=True)
-    resp = admin.get("/build/ruckus")
+    resp = admin.get("/build/nokia")
     assert resp.status_code == 302 and resp.location.endswith("/")
     assert "not ready yet" in admin.get("/").get_data(as_text=True)
+    from exbuilder import vendors
+    del vendors.VENDORS["nokia"]
     assert admin.get("/build/nokia").status_code == 404
     assert admin.get("/build").location.endswith("/build/juniper")
 
@@ -150,3 +159,12 @@ def test_arista_builder_page_and_generate(admin):
     resp = admin.post("/generate", json={"vendor": "arista", "system": {"hostname": "ar9"}},
                       headers={"X-CSRF-Token": token(admin)})
     assert resp.status_code == 200 and "hostname ar9" in resp.json["set"]
+
+
+def test_ruckus_builder_page_and_generate(admin):
+    page = admin.get("/build/ruckus").get_data(as_text=True)
+    assert "Brocade / Ruckus builder" in page and "ICX7150-48P" in page and "FGS648P" in page
+    assert '"office"' in page and '"fcx-closet"' in page
+    resp = admin.post("/generate", json={"vendor": "ruckus", "system": {"hostname": "icx9"}},
+                      headers={"X-CSRF-Token": token(admin)})
+    assert resp.status_code == 200 and "hostname icx9" in resp.json["set"]

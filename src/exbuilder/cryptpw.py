@@ -89,3 +89,38 @@ def cisco_type8(password: str, salt: str | None = None) -> str:
 
 def is_type8(value: str) -> bool:
     return bool(TYPE8.match(value or ""))
+
+
+# ---------------------------------------------------------------- MD5 crypt
+# "$1$" hashes, what Brocade/Ruckus FastIron shows as 'password 8 $1$...'.
+def md5_crypt(password: str, salt: str | None = None) -> str:
+    if salt is None:
+        salt = "".join(secrets.choice(_ITOA) for _ in range(8))
+    salt = salt[:8]
+    pw, sb, magic = password.encode("utf-8"), salt.encode("ascii"), b"$1$"
+    alt = hashlib.md5(pw + sb + pw).digest()
+    ctx = pw + magic + sb
+    n = len(pw)
+    while n > 0:
+        ctx += alt[:min(16, n)]
+        n -= 16
+    i = len(pw)
+    while i:
+        ctx += b"\0" if i & 1 else pw[:1]
+        i >>= 1
+    final = hashlib.md5(ctx).digest()
+    for r in range(1000):
+        c = (pw if r & 1 else final) + (sb if r % 3 else b"") + (pw if r % 7 else b"") + (final if r & 1 else pw)
+        final = hashlib.md5(c).digest()
+    out = ""
+    for a, b, c in ((0, 6, 12), (1, 7, 13), (2, 8, 14), (3, 9, 15), (4, 10, 5)):
+        out += _b64(final[a], final[b], final[c], 4)
+    out += _b64(0, 0, final[11], 2)
+    return f"$1${salt}${out}"
+
+
+MD5 = re.compile(r"^\$1\$[./0-9A-Za-z]{1,8}\$[./0-9A-Za-z]{22}$")
+
+
+def is_md5(value: str) -> bool:
+    return bool(MD5.match(value or ""))
