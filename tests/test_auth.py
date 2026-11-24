@@ -54,6 +54,22 @@ def test_pages_redirect_to_login(app):
     assert resp.status_code == 302 and "/login" in resp.location
 
 
+def test_login_page_skipped_when_signed_in(admin):
+    # The browser's Back button lands on /login after signing in; it must not
+    # show the form again (or look like a sign-out) while the session is valid.
+    resp = admin.get("/login")
+    assert resp.status_code == 302 and resp.location.endswith("/")
+    resp = admin.get("/login?next=/clients")
+    assert resp.status_code == 302 and resp.location.endswith("/clients")
+    assert admin.get("/login/code").status_code == 302
+    assert admin.get("/").status_code == 200
+
+
+def test_login_page_shown_after_sign_out(admin):
+    admin.post("/logout", data={"csrf_token": csrf(admin)})
+    assert admin.get("/login").status_code == 200
+
+
 def test_wrong_password_rejected(app):
     resp = login(app.test_client(), "admin", "nope")
     assert resp.status_code == 200 and b"Wrong username or password" in resp.data

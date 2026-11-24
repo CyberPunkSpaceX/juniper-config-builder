@@ -288,6 +288,15 @@ def current_user() -> sqlite3.Row | None:
     return g.get("user")
 
 
+def _session_user() -> sqlite3.Row | None:
+    """The signed-in user for this browser session, or None if it's missing or stale."""
+    uid = session.get("uid")
+    user = db().execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone() if uid else None
+    if user is None or not user["active"] or session.get("pwv") != user["password_hash"][-16:]:
+        return None
+    return user
+
+
 def _load_user() -> Response | None:
     g.user = None
     if request.endpoint in PUBLIC_ENDPOINTS:
@@ -310,10 +319,9 @@ def _load_user() -> Response | None:
 
     if db().execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         return redirect(url_for("auth.setup"))
-    uid = session.get("uid")
-    user = db().execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone() if uid else None
-    if user is None or not user["active"] or session.get("pwv") != user["password_hash"][-16:]:
-        if uid:
+    user = _session_user()
+    if user is None:
+        if session.get("uid"):
             session.clear()  # keep a half-finished 2FA sign-in, drop a stale session
         return redirect(url_for("auth.login", next=request.full_path if request.method == "GET" else None))
     g.user = user
@@ -395,6 +403,10 @@ def _locked_message(minutes: int) -> str:
 
 @bp.route("/login", methods=["GET", "POST"])
 def login():
+    # Already signed in (for example the browser's Back button landed here):
+    # go back into the app instead of showing the sign-in form again.
+    if request.method == "GET" and _session_user() is not None:
+        return redirect(_safe_next(request.args.get("next")))
     error = None
     if request.method == "POST":
         username = request.form.get("username", "").strip()
@@ -418,6 +430,8 @@ def login():
 
 @bp.route("/login/code", methods=["GET", "POST"])
 def login_2fa():
+    if request.method == "GET" and _session_user() is not None:
+        return redirect(url_for("index"))
     pending = session.get("pending") or {}
     user = db().execute("SELECT * FROM users WHERE id = ?", (pending.get("uid"),)).fetchone() if pending else None
     if (user is None or not user["active"] or not user["totp_secret"] or time.time() > pending.get("until", 0)
