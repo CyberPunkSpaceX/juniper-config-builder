@@ -110,6 +110,8 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
                              (cid, owner))
         conn.execute("DROP TABLE projects_old")
         log.warning("Moved %d saved project(s) into the client '%s'.", len(rows), FIRST_CLIENT)
+    from . import eve
+    eve.migrate(conn)
     old_known = folder / "ssh_known_hosts"
     if old_known.exists() and first:
         dest = client_folder(first[0], folder)
@@ -287,7 +289,8 @@ def client_page(cid: int):
                                 "ON u.id = m.user_id WHERE m.client_id = ? ORDER BY u.username COLLATE NOCASE",
                                 (cid,)).fetchall()
     nets, problems = sshfetch.check_networks(r["ssh_networks"])
-    return render_template("auth/client.html", c=r, members=members, roles=ROLES, server_admin=_is_server_admin(),
+    from . import eve
+    return render_template("auth/client.html", c=r, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
                            problems=problems, ceiling=[str(n) for n in sshfetch.ceiling()],
                            ssh_off=sshfetch.disabled(), server_key=bool(sshfetch.key_file()),
                            known=sshfetch.known_hosts(client_folder(cid)))
@@ -384,6 +387,22 @@ def client_update(cid: int):
         db.execute("UPDATE clients SET ssh_key = NULL, ssh_key_pub = NULL WHERE id = ?", (cid,))
         audit("deleted the SSH key")
         flash("SSH key deleted.", "ok")
+    elif action == "eve":
+        from . import eve
+        problems = eve.save_settings(cid, request.form)
+        for p in problems:
+            flash(p, "error")
+        if not problems:
+            audit(f"set EVE-NG to {request.form.get('eve_url', '').strip() or 'none'}")
+            flash("EVE-NG settings saved.", "ok")
+    elif action == "eve_test":
+        from .. import eveng
+        from . import eve
+        try:
+            flash(eve.test(dict(row(cid))), "ok")
+        except eveng.EveError as exc:
+            flash(str(exc), "error")
+        return redirect(url_for("clients.client_page", cid=cid) + "#eve")
     elif action == "forget_host":
         host = request.form.get("host", "")
         if sshfetch.forget_host(client_folder(cid), host):

@@ -41,6 +41,8 @@ a { color: var(--accent); }
 [hidden] { display: none !important; }
 .modelnote { margin: 4px 0 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--ok, #16a34a); background: rgba(22, 163, 74, .08); font-size: 14px; }
 .modelnote.guess { border-left-color: var(--warn, #d97706); background: rgba(217, 119, 6, .08); }
+.howto { margin: 6px 0 10px; padding-left: 20px; }
+.howto li { margin: 3px 0; }
 .savedmaps { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--bg); }
 .authpick { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 8px 0 10px; }
 .authpick > .hint, .authpick > .authwarn { flex-basis: 100%; margin: 0; }
@@ -79,6 +81,7 @@ button.small { padding: 3px 9px; font-size: 12.5px; }
 .msgs li { padding: 4px 8px; border-left: 3px solid; margin-bottom: 3px; border-radius: 3px; cursor: pointer; background: var(--bg); }
 .msgs li.err { border-color: var(--bad); }
 .msgs li.warn { border-color: var(--warn); }
+.msgs li.ok { border-color: var(--ok); }
 .msgs li b { font-weight: 600; }
 .status { font-size: 12.5px; color: var(--muted); }
 .status.ok { color: var(--ok); }
@@ -703,6 +706,34 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div id="ssh-known" class="hide"></div>
         {% endif %}
       </details>
+      <details class="explain" id="eve-box" style="margin-top:10px"><summary>Test in an EVE-NG lab</summary>
+        {% if not client %}
+        <p class="hint">You are not in any client yet.</p>
+        {% elif not eve.configured %}
+        <p class="hint">EVE-NG is not set up for {{ client.name }} yet. {% if client.role == 'admin' %}Add the server under <a href="{{ url_for('clients.client_page', cid=client.id) }}#eve">Clients → {{ client.name }} → EVE-NG</a>.{% else %}Ask an admin of {{ client.name }} to add it.{% endif %}</p>
+        {% else %}
+        <ol class="hint howto">
+          <li>Put the switches on the map (files, paste, SSH fetch or a saved map) and draw it, so the links between them are known.</li>
+          <li>{% if client.role == 'admin' %}Pick a vJunos-switch image, name the lab and click <b>Build lab</b>.{% else %}An admin of {{ client.name }} builds the lab.{% endif %} Each switch becomes a lab node, and each link between two switches becomes a cable between the matching lab ports (the real ports are mapped to <code>ge-0/0/0</code> to <code>ge-0/0/9</code>; the mapping is listed under each lab).</li>
+          <li>The lab starts and each config is typed into its node's console and committed. vJunos takes 5 to 10 minutes to boot, so this takes a while; you can leave the page.</li>
+          <li>Test in EVE-NG ({{ eve.url }}). Change things on the nodes if you like.</li>
+          <li><b>Pull configs</b> reads every node's config back, with the real port names again, so you can load it into the map and open it in the builder.</li>
+        </ol>
+        {% if client.role == 'admin' %}
+        <div class="grid">
+          <div class="field"><label>Lab name</label><input type="text" id="eve-name" placeholder="office-test" maxlength="48"></div>
+          <div class="field wide"><label>Image</label><select id="eve-image"><option value="">Loading the images from EVE-NG…</option></select></div>
+        </div>
+        <label class="check"><input type="checkbox" id="eve-start" checked> Start the lab and load the configs</label>
+        <label class="check"><input type="checkbox" id="eve-replace"> Replace a lab with the same name</label>
+        <div class="toolbar" style="margin-top:8px"><button type="button" id="eve-build">Build lab in EVE-NG</button><span class="status" id="eve-status"></span></div>
+        {% endif %}
+        <ul class="msgs" id="eve-steps"></ul>
+        <div id="eve-pulled" class="hide"></div>
+        <h3 style="margin:14px 0 6px;font-size:15px">Labs of {{ client.name }}</h3>
+        <table class="plist"><tbody id="eve-labs"></tbody></table>
+        {% endif %}
+      </details>
       {% if client %}
       <div id="map-saved" class="savedmaps hide">
         <div class="toolbar">
@@ -812,7 +843,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 
 <script>
 const CATALOG = {{ catalog|tojson }};
-const SSH = {{ ssh|tojson }}; const CLIENT = {{ client|tojson }};
+const SSH = {{ ssh|tojson }}; const CLIENT = {{ client|tojson }}; const EVE = {{ eve|tojson }};
 const DEFAULTS = {{ defaults|tojson }};
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
@@ -2087,6 +2118,94 @@ document.getElementById("map-clear").onclick = () => {
   document.getElementById("map-result").classList.add("hide");
 };
 document.getElementById("map-draw").onclick = drawMap;
+// ------------------------------------------------------------ EVE-NG labs
+if (EVE.configured && document.getElementById("eve-box")) {
+  const eveStatus = (t, c) => { const el = document.getElementById("eve-status"); if (el) { el.textContent = t || ""; el.className = "status " + (c || ""); } };
+  let imagesLoaded = false, polling = null;
+  async function loadImages() {
+    const sel = document.getElementById("eve-image"); if (!sel || imagesLoaded) return;
+    try {
+      const data = await api("eve/images"); imagesLoaded = true;
+      const opts = [];
+      data.images.forEach(t => t.images.forEach(img => opts.push([`${t.template}|${img}`, `${t.label}: ${img}${t.supported ? "" : " (not usable for labs yet)"}`, t.supported])));
+      const usable = opts.filter(o => o[2]);
+      sel.innerHTML = usable.length ? usable.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("")
+        : `<option value="">No vJunos-switch image found on the EVE-NG server</option>`;
+      const want = `${EVE.template}|${EVE.image}`; if (usable.some(o => o[0] === want)) sel.value = want;
+    } catch (e) { sel.innerHTML = `<option value="">Could not list images: ${esc(e.message)}</option>`; }
+  }
+  function showSteps(job) {
+    document.getElementById("eve-steps").innerHTML = job.steps.map(s =>
+      `<li class="${s.level === "error" ? "err" : s.level === "warn" ? "warn" : s.level === "ok" ? "ok" : "note"}"><span class="note">${esc(s.t)} UTC</span> ${esc(s.text)}</li>`).join("")
+      + (job.status === "running" ? `<li class="note">Working…</li>` : "");
+  }
+  function watchJob(id) {
+    clearInterval(polling);
+    const tick = async () => {
+      let job; try { job = await api("eve/jobs/" + id); } catch (e) { return; }
+      showSteps(job);
+      if (job.status !== "running") {
+        clearInterval(polling); eveStatus(job.status === "done" ? "Done." : "Failed, see below.", job.status === "done" ? "ok" : "bad");
+        refreshLabs();
+        if (job.kind === "pull" && job.result) showPulled(job.result.items || []);
+      }
+    };
+    polling = setInterval(tick, 3000); tick();
+  }
+  function showPulled(items) {
+    const box = document.getElementById("eve-pulled"); box.classList.toggle("hide", !items.length);
+    window._evePulled = items;
+    box.innerHTML = `<div class="toolbar"><b>${items.length} config(s) read from the lab.</b><span class="grow"></span>
+      <button class="secondary small" type="button" id="eve-pulled-dl">Download</button>
+      <button class="small" type="button" id="eve-pulled-load">Put them on the map</button></div>`;
+    document.getElementById("eve-pulled-dl").onclick = () => {
+      const text = items.map(i => `# ===== ${i.name}\n${i.text}`).join("\n");
+      const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type: "text/plain"}));
+      a.download = "lab-configs.txt"; a.click();
+    };
+    document.getElementById("eve-pulled-load").onclick = () => {
+      if (mapItems.length && !window.confirm("Replace the switches on the map with the configs from the lab? Save the current map first if you want to keep it.")) return;
+      mapItems = items.map(i => ({name: i.name, text: i.text, lldp: ""})); saveMap(); renderMapList(); drawMap();
+    };
+  }
+  async function refreshLabs() {
+    let data; try { data = await api("eve/labs"); } catch (e) { return; }
+    const admin = data.can_build; const canPull = EVE.role !== "viewer";
+    document.getElementById("eve-labs").innerHTML = data.labs.map(l => `<tr><td><b>${esc(l.name)}</b>
+        <div class="note">${esc(l.image)} · ${esc(l.created_at)} by ${esc(l.created_by)}</div>
+        <details><summary class="note">Port mapping</summary><div class="note">${l.nodes.map(n => `${esc(n.hostname)}: ${Object.entries(n.ports).map(([a, b]) => `${esc(a)} → ${esc(b)}`).join(", ") || "no links"}`).join("<br>")}</div></details></td>
+      <td style="text-align:right;white-space:nowrap">
+        ${canPull ? `<button class="secondary small" type="button" data-eve="pull" data-lab="${l.id}">Pull configs</button>` : ""}
+        ${admin ? `<button class="secondary small" type="button" data-eve="start" data-lab="${l.id}">Start</button>
+        <button class="secondary small" type="button" data-eve="stop" data-lab="${l.id}">Stop</button>
+        <button class="danger small" type="button" data-eve="delete" data-lab="${l.id}" data-name="${esc(l.name)}">Delete</button>` : ""}</td></tr>`).join("")
+      || `<tr><td class="note">No labs yet.</td></tr>`;
+    if (data.running.length && !polling) watchJob(data.running[0].id);
+  }
+  document.getElementById("eve-labs").addEventListener("click", async ev => {
+    const b = ev.target.closest("[data-eve]"); if (!b) return;
+    const what = b.dataset.eve;
+    if (what === "delete" && !window.confirm(`Delete the lab ${b.dataset.name} from EVE-NG? Its nodes and their configs are lost.`)) return;
+    try {
+      const r = await api(`eve/labs/${b.dataset.lab}/${what}`, {});
+      if (r.job) { document.getElementById("eve-pulled").classList.add("hide"); watchJob(r.job); }
+      else { eveStatus(what === "delete" ? "Lab deleted." : `Lab ${what === "start" ? "started" : "stopped"}.`, "ok"); refreshLabs(); }
+    } catch (e) { eveStatus(e.message, "bad"); }
+  });
+  const buildBtn = document.getElementById("eve-build");
+  if (buildBtn) buildBtn.onclick = async () => {
+    const [template, image] = (document.getElementById("eve-image").value || "|").split("|");
+    const name = document.getElementById("eve-name").value.trim();
+    if (!mapItems.length) { eveStatus("Add switches to the map first.", "bad"); return; }
+    try {
+      const r = await api("eve/labs", {name, template, image, items: mapItems, positions: mapPos,
+        start: document.getElementById("eve-start").checked, replace: document.getElementById("eve-replace").checked});
+      eveStatus("Building…"); watchJob(r.job);
+    } catch (e) { eveStatus(e.message, "bad"); }
+  };
+  document.getElementById("eve-box").addEventListener("toggle", ev => { if (ev.target.open) { loadImages(); refreshLabs(); } });
+}
+
 // Saved maps: kept on the server, per client.
 async function refreshSavedMaps() {
   const tb = document.getElementById("map-saved-list"); if (!tb) return;
