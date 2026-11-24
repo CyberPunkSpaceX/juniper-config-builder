@@ -180,6 +180,65 @@ change is in the audit log (`audit: … EVE-NG lab …`).
 
 ![Building a lab in EVE-NG from the network map](docs/screenshots/10-eve-ng-lab.png)
 
+### Config backups and compare
+
+The **Backups & compare** tab (under Tools) keeps the configs of each client's
+switches and compares any two configs.
+
+**Config backups.** Every config fetched over SSH and every config pulled back
+from an EVE-NG lab is kept as a backup, with its date, where it came from and
+who got it. A config that has not changed since the last backup of that switch
+is not kept again, and the newest 50 versions of each switch are kept. Editors
+can also **Upload configs** (files or a .zip), **Keep the map's switches** or
+**Keep the builder's config**. Download one version, or **Download newest of
+each switch** as a .zip. Only client admins delete backups.
+
+**Compare.** Pick a config for side A and side B:
+
+* **Live switch**: fetched now over SSH (client admins; the client's SSH key is
+  used when it has one), and kept as a backup too.
+* **A config backup**, for example last week's.
+* **The builder's config**: what the builder makes for the current project.
+* **A switch on the network map**, for example one pulled from an EVE-NG lab.
+* **Pasted** text.
+
+Both sides are read as `set` lines, so the order and the format do not matter.
+The differences are listed per interface, unit, VLAN or protocol, with a few
+unchanged lines around them. Encrypted passwords and keys (`$9$…`, `$6$…`) are
+ignored by default, because Junos re-encrypts them every time. Below the
+differences are the commands that **make A like B** and **make B like A**: a
+whole interface or VLAN that is missing is deleted with one line, and a changed
+value is simply set again. Read them before you use them, then on the switch:
+`configure`, paste, `show | compare`, `commit check` and `commit confirmed 5`.
+Things written differently but meaning the same (an `interface-range` against
+single ports, for example) show up as differences.
+
+Typical uses: *drift* (live switch against its last backup or against the
+builder's project), *before a change* (builder against live, then paste the
+"make A like B" commands), and *after a lab test* (lab pull against the
+builder's config).
+
+![Comparing a backup with the builder's config](docs/screenshots/11-backups-compare.png)
+
+### Back up and restore a client
+
+On a client's page (**Clients → the client**), **Download a backup** saves one
+JSON file with the client's projects, network maps, config backups, settings
+and people. Tick **Leave out the switch config backups** for a smaller file.
+The SSH key and the EVE-NG password are left out unless you tick **Include the
+SSH key and the EVE-NG password**; even then they stay encrypted with this
+server's master key and only work on this server. The file still holds the
+switch configs, with the switches' own secrets in them, so store it like a
+password.
+
+**Load a backup** adds the projects, maps and config backups from a file to the
+client (nothing is deleted). Projects and maps with the same name are replaced,
+or kept if you pick **skip**. Settings and people are only restored when you
+tick them; people are only added if their user exists on this server. Server
+admins can also **Make a client from a backup** on the Clients page, for
+example to move a client to another server. Each export and import is in the
+audit log.
+
 ### Clients (several networks or customers)
 
 Every saved project and network map belongs to a **client**. Pick the client at
@@ -194,7 +253,7 @@ People only see the clients they are added to:
 
 Server admins (the `admin` role on the Users page) see every client and create,
 rename and delete clients under **Clients**. Deleting a client asks you to type
-its name, and removes its projects, maps and settings. On the first start after
+its name, and removes its projects, maps, config backups and settings. On the first start after
 upgrading, everything saved before moves into a client called **Default**
 (rename it to suit), and people who had saved projects become its editors.
 

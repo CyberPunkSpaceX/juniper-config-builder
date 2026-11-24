@@ -422,6 +422,8 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         core_text = next(i["text"] for i in pulled["result"]["items"] if i["name"] == "core-sw1")
         assert "set interfaces xe-0/1/0 ether-options 802.3ad ae0" in core_text
         assert "exb-lab" not in core_text
+        kept = [b for b in c.get("/backups").json["backups"] if b["source"] == "eve"]
+        assert {b["host"] for b in kept} >= {"core-sw1"} and kept[0]["note"] == "lab office-test"
 
         assert c.post(f"/eve/labs/{labs[0]['id']}/delete", json={}, headers=hdr).json["ok"]
         assert "/exbuilder/office-test.unl" not in fake.labs and c.get("/eve/labs").json["labs"] == []
