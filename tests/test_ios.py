@@ -99,3 +99,37 @@ def test_routing_and_dot1x():
     assert "passive-interface Loopback0" in t
     assert "neighbor 10.9.9.2 remote-as 65000" in t and "neighbor 10.9.9.2 description ISP" in t
     assert "authentication order dot1x mab" in t and "radius server RADIUS-1" in t and "dot1x system-auth-control" in t
+
+
+def test_older_catalyst_2960x_classic_ios():
+    p = json.loads(EXAMPLE.read_text())
+    for m in p["switch"]["members"]:
+        m["model"] = "WS-C2960X-48FPD-L"
+    p["lags"][0]["members"] = "Te1/0/1, Te2/0/1"
+    res = build(p)
+    assert not res.errors, msgs(res.errors)
+    t = res.set_text
+    assert t.startswith("! Cisco IOS configuration") and "switch 2 provision ws-c2960x-48fpd-l" in t
+    assert "ip domain-name example.lan" in t and "Mgmt-vrf" not in t
+    assert "interface FastEthernet0\n ip address 192.168.100.31" in t and "ip default-gateway 192.168.100.1" in t
+    assert "enable secret 5 $1$" in t and "username netadmin privilege 15 secret 5 $1$" in t
+    assert "switchport vlan mapping" not in t and "can't translate VLANs" in msgs(res.warnings)
+    assert "channel-group 1 mode active" in t.split("interface TenGigabitEthernet2/0/1\n")[1]
+    res = build(base(switch={"members": [{"fpc": 1, "model": "WS-C2960X-24PS-L"}]},
+                     routing={"ospf": {"enabled": True, "areas": [{"area": "0", "interfaces": "Vlan20"}]},
+                              "asn": "65001", "bgp_groups": [{"name": "UP", "neighbors": "10.0.0.2 65000"}]}))
+    assert "can't run OSPF" in msgs(res.errors) and "can't run BGP" in msgs(res.errors)
+    # a type 8 hash made for a 9300 can't be reused on a 2960-X
+    res = build(base(switch={"members": [{"fpc": 1, "model": "WS-C2960X-24PS-L"}]},
+                     access={"users": [{"name": "u1", "class": "super-user", "password": cisco_type8("Secret-pass-1")}]}))
+    assert "type it again" in msgs(res.errors)
+
+
+def test_3650_and_3850_are_ios_xe():
+    res = build(base(switch={"members": [{"fpc": 1, "model": "WS-C3850-48P"}, {"fpc": 2, "model": "WS-C3850-48P"}]},
+                     ports=[{"ports": "Te1/1/1", "mode": "trunk", "vlans": "USERS", "vlan_translate": "120>20"}]))
+    assert not res.errors, msgs(res.errors)
+    t = res.set_text
+    assert "switch 2 provision ws-c3850-48p" in t and "secret 8 $8$" in t and "switchport vlan mapping 120 20" in t
+    ports = [p["name"] for p in ios_models.get("WS-C3650-48PD").ports(1)]
+    assert ports[-2:] == ["TenGigabitEthernet1/1/3", "TenGigabitEthernet1/1/4"]
