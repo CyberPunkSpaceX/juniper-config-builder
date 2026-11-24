@@ -39,6 +39,7 @@ a { color: var(--accent); }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
 .check input { width: auto; }
 [hidden] { display: none !important; }
+.savedmaps { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--bg); }
 .authpick { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 8px 0 10px; }
 .authpick > .hint, .authpick > .authwarn { flex-basis: 100%; margin: 0; }
 .authpick > .hint:empty { display: none; }
@@ -204,7 +205,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <input type="file" id="file-open" accept=".json,application/json" class="hide">
   <button class="secondary" id="btn-save-file" type="button" title="Download the project as a JSON file">Save JSON</button>
   <button class="secondary" id="btn-excel" type="button" title="Download this project as an Excel workbook you can edit and import again">Save as Excel</button>
-  <button id="btn-save-server" type="button">Save to my projects</button>
+  <button id="btn-save-server" type="button" title="Save this project in the client picked at the top of the page">Save to {{ client.name if client else "client" }}</button>
 </div>
 
 <div class="layout">
@@ -667,18 +668,22 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <button class="secondary small" type="button" id="map-paste-add" style="margin-top:6px">Add this switch</button>
       </details>
       <details class="explain" id="ssh-box" style="margin-top:10px"><summary>Fetch from switches over SSH</summary>
-        {% if not is_admin %}
-        <p class="hint">Only admins can fetch configs from switches.</p>
+        {% if not client %}
+        <p class="hint">You are not in any client yet. Ask an admin to add you to one.</p>
+        {% elif not ssh.can_fetch %}
+        <p class="hint">Only admins of {{ client.name }} can fetch configs from switches.</p>
+        {% elif ssh.off %}
+        <p class="hint">SSH fetch is turned off on this server.</p>
         {% elif not ssh.enabled %}
-        <p class="hint">Turned off. An admin of the server turns it on by setting <code>EXB_SSH_ALLOW</code> to the networks the switches are in (for example <code>10.40.0.0/16</code>). Optionally set <code>EXB_SSH_KEY_FILE</code> to a private key (a Docker secret) for a read-only switch account, so nobody types a password.</p>
+        <p class="hint">Off for {{ client.name }}: no switch networks are set yet. Add them under <a href="{{ url_for('clients.client_page', cid=client.id) }}#ssh">Clients → {{ client.name }}</a>, where you can also make an SSH key so nobody types a password.</p>
         {% else %}
-        <p class="hint">Runs <code>show configuration | display set</code> and <code>show lldp neighbors</code> on each switch and adds the result to the list. Allowed networks: <b>{{ ssh.allow|join(", ") }}</b>. Use a read-only Junos account (not root). A switch's SSH key is remembered on first contact; if it ever changes, the fetch stops.</p>
+        <p class="hint">Runs <code>show configuration | display set</code> and <code>show lldp neighbors</code> on each switch of <b>{{ client.name }}</b> and adds the result to the list. Allowed networks: <b>{{ ssh.allow|join(", ") }}</b> (<a href="{{ url_for('clients.client_page', cid=client.id) }}#ssh">change</a>). Use a read-only Junos account (not root). A switch's SSH key is remembered on first contact; if it ever changes, the fetch stops.</p>
         <div class="authpick">
           <b>Sign in with</b>
           <label class="check"><input type="radio" name="ssh-auth" value="key"{% if ssh.key %} checked{% else %} disabled{% endif %}> SSH key <span class="tag ok">Recommended</span></label>
           <label class="check"><input type="radio" name="ssh-auth" value="password"{% if not ssh.key %} checked{% endif %}> Password</label>
           <p class="hint" id="ssh-auth-note-key"{% if not ssh.key %} hidden{% endif %}>The server signs in with its stored key{% if ssh.key_user %} as <b>{{ ssh.key_user }}</b>{% endif %}. Nobody types or sends a password.</p>
-          <p class="hint" id="ssh-auth-note-pw">{% if not ssh.key %}<b>No SSH key is set up yet</b>, so only the password option is available. A server admin can add one (see "SSH key sign-in" in the README). {% endif %}</p>
+          <p class="hint" id="ssh-auth-note-pw">{% if not ssh.key %}<b>No SSH key is set up yet</b>, so only the password option is available. You can make one under <a href="{{ url_for('clients.client_page', cid=client.id) }}#ssh">Clients → {{ client.name }}</a>. {% endif %}</p>
           <div class="authwarn" id="ssh-pw-warn"{% if ssh.key %} hidden{% endif %}><b>Less safe:</b> the password travels from your browser to this server, and then to each switch. The server uses it for this one fetch and never saves or logs it. However, anyone who controls this server or your browser could still see it. Use a read-only account with its own password, never an admin or root password. The SSH key option avoids this.</div>
         </div>
         <div class="grid">
@@ -696,10 +701,22 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div id="ssh-known" class="hide"></div>
         {% endif %}
       </details>
+      {% if client %}
+      <div id="map-saved" class="savedmaps hide">
+        <div class="toolbar">
+          <b>Saved maps of {{ client.name }}</b><span class="grow"></span>
+          {% if client.role != 'viewer' %}<input type="text" id="map-save-name" placeholder="Map name, e.g. Head office" style="width:220px">
+          <button class="small" type="button" id="map-save">Save current map</button>{% endif %}
+        </div>
+        <table class="plist"><tbody id="map-saved-list"></tbody></table>
+        <p class="status" id="map-saved-status"></p>
+      </div>
+      {% endif %}
       <ul class="maplist" id="map-list"></ul>
       <div class="toolbar" style="margin-top:10px">
         <button class="secondary small" type="button" id="map-example">Load the example (3 switches)</button>
         <button class="secondary small" type="button" id="map-clear">Clear</button>
+        {% if client %}<button class="secondary small" type="button" id="map-saved-btn">Saved maps of {{ client.name }}…</button>{% endif %}
         <span class="grow"></span>
         <span class="status" id="map-status"></span>
         <button type="button" id="map-draw">Draw map</button>
@@ -758,10 +775,10 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   </section>
 
   <!-- ===================================================== PROJECTS -->
-  <section class="section" data-tab="My projects">
+  <section class="section" data-tab="Projects">
     <div class="panel">
-      <h2>My saved projects</h2>
-      <p class="hint">Projects saved here are kept on the server and only visible to you. "Save to my projects" (top right) saves the current project under its project name, replacing an older save with the same name.</p>
+      <h2>Saved projects{% if client %} of {{ client.name }}{% endif %}</h2>
+      <p class="hint">{% if client %}Projects saved here are kept on the server and shared with everyone in {{ client.name }}. Pick another client at the top of the page to see its projects. "Save to {{ client.name }}" (top right) saves the current project under its project name, replacing an older save with the same name.{% else %}You are not in any client yet, so you can build configs but not save them here. Ask an admin to add you to a client.{% endif %}</p>
       <table class="plist"><thead><tr><th>Name</th><th>Saved</th><th></th></tr></thead><tbody id="plist"></tbody></table>
       <p class="status" id="plist-status"></p>
     </div>
@@ -792,7 +809,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 
 <script>
 const CATALOG = {{ catalog|tojson }};
-const SSH = {{ ssh|tojson }}; const IS_ADMIN = {{ is_admin|tojson }};
+const SSH = {{ ssh|tojson }}; const CLIENT = {{ client|tojson }};
 const DEFAULTS = {{ defaults|tojson }};
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
@@ -1177,10 +1194,10 @@ function compact(list) {
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
-                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "My projects": []};
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "Projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
 const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
-                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "My projects"]]];
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Projects"]]];
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
 function isAdvanced() { return LEVEL === "advanced"; }
@@ -1217,7 +1234,7 @@ function showTab(t) {
   activeTab = t; updateTabs(); renderFabric();
   if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
-  if (t === "My projects") refreshProjects();
+  if (t === "Projects") refreshProjects();
 }
 
 // ---------------------------------------------------------------- generate
@@ -1427,9 +1444,9 @@ async function refreshProjects() {
   const tb = document.getElementById("plist");
   try {
     const data = await api("projects");
-    tb.innerHTML = data.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="note">${esc(p.updated_at)}</td>
+    tb.innerHTML = data.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="note">${esc(p.updated_at)}${p.updated_by ? " by " + esc(p.updated_by) : ""}</td>
       <td style="text-align:right"><button class="secondary small" data-open="${p.id}" type="button">Open</button>
-      <button class="danger small" data-del="${p.id}" data-name="${esc(p.name)}" type="button">Delete</button></td></tr>`).join("")
+      ${data.can_edit ? `<button class="danger small" data-del="${p.id}" data-name="${esc(p.name)}" type="button">Delete</button>` : ""}</td></tr>`).join("")
       || `<tr><td colspan="3" class="note">No saved projects yet.</td></tr>`;
   } catch (e) { document.getElementById("plist-status").textContent = "Could not load projects: " + e.message; }
 }
@@ -1442,7 +1459,7 @@ document.getElementById("btn-save-server").onclick = async () => {
   const name = (state.name || state.system.hostname || "").trim();
   if (!name) { showTab("Switch"); setStatus("Give the project a name (Switch tab) before saving.", "bad"); return; }
   await generate();  // hash any new passwords first
-  try { await api("projects", {name, data: state}); setStatus(`Saved "${name}" to your projects.`, "ok"); if (activeTab === "My projects") refreshProjects(); }
+  try { await api("projects", {name, data: state}); setStatus(`Saved "${name}" to ${CLIENT ? CLIENT.name : "the client"}.`, "ok"); if (activeTab === "Projects") refreshProjects(); }
   catch (e) { setStatus("Save failed: " + e.message, "bad"); }
 };
 
@@ -1823,7 +1840,7 @@ fillModelSelect(document.getElementById("imp-model"), "");
 // ---------------------------------------------------------------- drafts
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) {} }
 // ------------------------------------------------------------- network map
-const MAP_KEY = "exbuilder-map";
+const MAP_KEY = "exbuilder-map" + (CLIENT ? "-" + CLIENT.id : "");  // each client has its own working map
 let mapItems = [];      // [{name, text, lldp}]
 let mapData = null;     // result of POST /map
 let mapPos = {};        // hostname -> {x, y}
@@ -2053,6 +2070,42 @@ document.getElementById("map-clear").onclick = () => {
   document.getElementById("map-result").classList.add("hide");
 };
 document.getElementById("map-draw").onclick = drawMap;
+// Saved maps: kept on the server, per client.
+async function refreshSavedMaps() {
+  const tb = document.getElementById("map-saved-list"); if (!tb) return;
+  try {
+    const data = await api("maps");
+    tb.innerHTML = data.maps.map(m => `<tr><td>${esc(m.name)}</td><td class="note">${esc(m.updated_at)}${m.updated_by ? " by " + esc(m.updated_by) : ""}</td>
+      <td style="text-align:right"><button class="secondary small" data-map-load="${m.id}" type="button">Open</button>
+      ${data.can_edit ? `<button class="danger small" data-map-del="${m.id}" data-name="${esc(m.name)}" type="button">Delete</button>` : ""}</td></tr>`).join("")
+      || `<tr><td colspan="3" class="note">No saved maps yet.</td></tr>`;
+  } catch (e) { document.getElementById("map-saved-status").textContent = "Could not load saved maps: " + e.message; }
+}
+if (document.getElementById("map-saved-btn")) {
+  document.getElementById("map-saved-btn").onclick = () => {
+    const box = document.getElementById("map-saved"); box.classList.toggle("hide");
+    if (!box.classList.contains("hide")) refreshSavedMaps();
+  };
+  const saveBtn = document.getElementById("map-save");
+  if (saveBtn) saveBtn.onclick = async () => {
+    const name = document.getElementById("map-save-name").value.trim(); const st = document.getElementById("map-saved-status");
+    if (!name) { st.textContent = "Give the map a name first."; st.className = "status bad"; return; }
+    if (!mapItems.length) { st.textContent = "Add some switches first."; st.className = "status bad"; return; }
+    try { await api("maps", {name, data: {items: mapItems, pos: mapPos}}); st.textContent = `Saved "${name}".`; st.className = "status ok"; refreshSavedMaps(); }
+    catch (e) { st.textContent = "Save failed: " + e.message; st.className = "status bad"; }
+  };
+  document.getElementById("map-saved-list").addEventListener("click", async ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.mapLoad) {
+      if (mapItems.length && !window.confirm("Replace the switches on the map with this saved map?")) return;
+      const m = await api("maps/" + b.dataset.mapLoad);
+      mapItems = m.data.items || []; mapPos = m.data.pos || {}; saveMap(); renderMapList();
+      const n = document.getElementById("map-save-name"); if (n) n.value = m.name;
+      drawMap();
+    }
+    if (b.dataset.mapDel && window.confirm(`Delete the saved map "${b.dataset.name}"?`)) { await api(`maps/${b.dataset.mapDel}/delete`, {}); refreshSavedMaps(); }
+  });
+}
 document.getElementById("map-relayout").onclick = () => { if (mapData) { layoutMap(true); renderMap(); } };
 document.getElementById("map-svg").onclick = () => mapDownload(new Blob([mapSvgText()], {type: "image/svg+xml"}), "network-map.svg");
 document.getElementById("map-png").onclick = () => {
@@ -2067,7 +2120,7 @@ renderMapList();
 
 
 // --------------------------------------------------- fetch over SSH (admins)
-if (SSH.enabled && IS_ADMIN) {
+if (SSH.enabled && SSH.can_fetch) {
   const sshStatus = (t, c) => { const el = document.getElementById("ssh-status"); el.textContent = t || ""; el.className = "status " + (c || ""); };
   document.querySelectorAll('input[name="ssh-auth"]').forEach(r => r.addEventListener("change", () => {
     const key = r.value === "key" && r.checked;
@@ -2127,7 +2180,7 @@ if (SSH.enabled && IS_ADMIN) {
   load(draft || {});
   if (!isAdvanced() && ADVANCED_TABS.includes(activeTab)) activeTab = "Switch";
   updateTabs();
-  if (activeTab === "My projects") refreshProjects();
+  if (activeTab === "Projects") refreshProjects();
   if (activeTab === "EVPN-VXLAN") generateFabric();
 })();
 </script>

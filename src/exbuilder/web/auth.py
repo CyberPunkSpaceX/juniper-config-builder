@@ -10,8 +10,10 @@ must choose a new password at its first sign-in.
 
 Roles:
 
-* ``admin``: build configs, and create, edit, disable and delete users.
-* ``user``: build configs and change their own password.
+* ``admin``: server admin. Builds configs, manages users, and sees and manages
+  every client (see clients.py).
+* ``user``: builds configs and changes their own password; sees the clients
+  they are a member of, with the role they have there.
 
 Two-factor sign-in: each user can turn on authenticator-app codes (TOTP) on
 "My account". ``EXB_REQUIRE_2FA=true`` makes it compulsory. Admins can
@@ -81,15 +83,8 @@ CREATE TABLE IF NOT EXISTS login_failures (
     at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS login_failures_user ON login_failures (username, at);
-CREATE TABLE IF NOT EXISTS projects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    owner_id INTEGER NOT NULL,
-    name TEXT NOT NULL,
-    data TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (owner_id, name)
-);
 """
+# Projects, maps and clients: see clients.py.
 # Columns added after the first release, added to existing databases on start.
 NEW_COLUMNS = {
     "totp_secret": "TEXT",       # base32 TOTP secret; NULL = 2FA off
@@ -256,6 +251,8 @@ def _init_db(folder: Path) -> None:
             )
             log.warning("No users yet: created '%s' with password '%s'. Sign in and change it now.",
                         DEFAULT_ADMIN, DEFAULT_ADMIN)
+        from . import clients
+        clients.migrate(conn, folder)
         conn.commit()
     finally:
         conn.close()
@@ -606,7 +603,7 @@ def users_update(uid: int):
         elif target["role"] == "admin" and count_admins(exclude_id=uid) == 0:
             flash("You can't delete the last active admin.", "error")
         else:
-            db().execute("DELETE FROM projects WHERE owner_id = ?", (uid,))
+            db().execute("DELETE FROM client_members WHERE user_id = ?", (uid,))
             db().execute("DELETE FROM users WHERE id = ?", (uid,))
             flash(f"User {name} deleted.", "ok")
     elif action == "role":

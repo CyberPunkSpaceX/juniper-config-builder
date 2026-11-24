@@ -1,0 +1,133 @@
+{% extends "auth/base.html" %}
+{% block title %}{{ c['name'] }} · Clients · EX Config Builder{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('clients.clients_page') }}">← All clients</a></p>
+<h1>{{ c['name'] }}</h1>
+
+<section class="panel">
+  <h2>People</h2>
+  <p class="hint"><b>Viewer</b> opens projects and maps. <b>Editor</b> also saves and deletes them.
+    <b>Admin</b> also manages people and SSH settings, and fetches configs from switches.
+    Server admins can open every client without being listed here.</p>
+  <form method="post" class="row" style="grid-template-columns: 2fr 1fr auto; margin-bottom: 14px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="member_add">
+    <div><label for="mu">Username</label><input id="mu" type="text" name="username" required autocomplete="off"></div>
+    <div><label for="mr">Role</label><select id="mr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+    <div><button type="submit">Add</button></div>
+  </form>
+  <div class="scroll"><table>
+    <tr><th>User</th><th>Role</th><th></th></tr>
+    {% for m in members %}
+    <tr>
+      <td><b>{{ m['username'] }}</b>{% if not m['active'] %} <span class="badge off">disabled</span>{% endif %}</td>
+      <td>
+        <form class="inline" method="post">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="member_role">
+          <input type="hidden" name="user_id" value="{{ m['id'] }}">
+          <select name="role" onchange="this.form.submit()" aria-label="Role for {{ m['username'] }}">
+            {% for r in roles %}<option value="{{ r }}" {% if r == m['role'] %}selected{% endif %}>{{ r }}</option>{% endfor %}
+          </select>
+          <noscript><button class="small secondary">Save</button></noscript>
+        </form>
+      </td>
+      <td>
+        <form class="inline" method="post" onsubmit="return confirm('Remove {{ m['username'] }} from {{ c['name'] }}?')">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <input type="hidden" name="action" value="member_remove">
+          <input type="hidden" name="user_id" value="{{ m['id'] }}">
+          <button class="small danger">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">Nobody yet (server admins can always open it).</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+<section class="panel" id="ssh">
+  <h2>Fetching configs over SSH</h2>
+  {% if ssh_off %}<p class="flash error">SSH fetch is turned off on this server (EXB_SSH_DISABLE).</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="ssh">
+    <div class="field">
+      <label for="nets">Switch management networks <span class="hint">(one per line or comma separated; empty = SSH fetch off for this client)</span></label>
+      <textarea id="nets" name="networks" rows="3" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 14px ui-monospace, Menlo, Consolas, monospace" placeholder="10.40.10.0/24">{{ c['ssh_networks'] }}</textarea>
+      <div class="hint">The app only connects to switch addresses inside these networks. This server allows networks inside {{ ceiling|join(", ") }}.</div>
+      {% for p in problems %}<div class="flash error" style="margin-top:6px">{{ p }}</div>{% endfor %}
+    </div>
+    <div class="field" style="max-width: 320px">
+      <label for="su">Switch username for the SSH key</label>
+      <input id="su" type="text" name="ssh_user" value="{{ c['ssh_user'] }}" placeholder="exbuilder-ro" autocomplete="off">
+    </div>
+    <button type="submit">Save SSH settings</button>
+  </form>
+
+  <h2 style="margin-top: 22px">SSH key <span class="badge on">recommended</span></h2>
+  <p class="hint">With a key, nobody types a switch password. The server makes the key; the private half never leaves
+    the server and is stored encrypted. Add the public half to a read-only account on each switch.</p>
+  {% if c['ssh_key_pub'] %}
+  <label for="pub">Public key</label>
+  <textarea id="pub" readonly rows="2" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 12px ui-monospace, Menlo, Consolas, monospace">{{ c['ssh_key_pub'] }}</textarea>
+  <p class="hint">On each switch (in configure mode), make a read-only account with this key:</p>
+  <pre style="white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px">set system login class exbuilder-ro permissions view-configuration
+set system login class exbuilder-ro permissions view
+set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro authentication {{ c['ssh_key_pub'].split(' ')[0] }} "{{ c['ssh_key_pub'].split(' ')[:2]|join(' ') }}"</pre>
+  <form class="inline" method="post" onsubmit="return confirm('Make a new key? The old key stops working, so every switch needs the new public key.')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="key_generate">
+    <button class="small secondary">Make a new key</button>
+  </form>
+  <form class="inline" method="post" onsubmit="return confirm('Delete this client\'s SSH key?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="key_delete">
+    <button class="small danger">Delete key</button>
+  </form>
+  {% else %}
+  <p>{% if server_key %}No key of its own yet: this client uses the server-wide key.{% else %}No key yet, so only password sign-in works.{% endif %}</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="key_generate">
+    <button type="submit">Make an SSH key</button>
+  </form>
+  {% endif %}
+
+  <h2 style="margin-top: 22px">Known switches</h2>
+  <p class="hint">Each switch's SSH host key is remembered the first time. If it changes (the switch was replaced or
+    reset, or someone is in the middle), fetching stops until you clear the old key here.</p>
+  <div class="scroll"><table>
+    <tr><th>Switch</th><th>Key</th><th></th></tr>
+    {% for k in known %}
+    <tr><td><code>{{ k.host }}</code></td><td class="muted" style="font-size:12px">{{ k.type }} {{ k.fingerprint }}</td>
+      <td><form class="inline" method="post" onsubmit="return confirm('Forget the key of {{ k.host }}?')">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="action" value="forget_host"><input type="hidden" name="host" value="{{ k.host }}">
+        <button class="small danger">Clear</button></form></td></tr>
+    {% else %}
+    <tr><td colspan="3" class="muted">None yet.</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+{% if server_admin %}
+<section class="panel">
+  <h2>Rename or delete</h2>
+  <form method="post" class="row" style="grid-template-columns: 1fr auto; margin-bottom: 16px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="rename">
+    <div><label for="rn">Name</label><input id="rn" type="text" name="name" value="{{ c['name'] }}" required maxlength="80"></div>
+    <div><button class="secondary" type="submit">Rename</button></div>
+  </form>
+  <form method="post" class="row" style="grid-template-columns: 1fr auto">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="delete">
+    <div><label for="dc">Delete this client with all its projects, maps and settings. Type <b>{{ c['name'] }}</b> to confirm.</label>
+      <input id="dc" type="text" name="confirm" autocomplete="off" required></div>
+    <div><button class="danger" type="submit">Delete client</button></div>
+  </form>
+</section>
+{% endif %}
+{% endblock %}

@@ -31,22 +31,16 @@ def test_generate_returns_hashes(admin):
     assert h.startswith("$6$") and "Secret-123" not in resp.json["set"]
 
 
-def test_projects_are_per_user(app, admin):
+def test_projects_save_open_delete(app, admin):
     t = token(admin)
     hdr = {"X-CSRF-Token": t}
     resp = admin.post("/projects", json={"name": "Floor 2", "data": {"system": {"hostname": "f2"}}}, headers=hdr)
     pid = resp.json["id"]
+    assert resp.json["client"] == "Default"
     admin.post("/projects", json={"name": "Floor 2", "data": {"system": {"hostname": "f2b"}}}, headers=hdr)
     listing = admin.get("/projects").json["projects"]
-    assert [p["name"] for p in listing] == ["Floor 2"]
+    assert [p["name"] for p in listing] == ["Floor 2"] and listing[0]["updated_by"] == "admin"
     assert admin.get(f"/projects/{pid}").json["data"]["system"]["hostname"] == "f2b"
-
-    add_user(admin)
-    bob = app.test_client()
-    login(bob, "bob", "bob-password-1")
-    assert bob.get("/projects").json["projects"] == []
-    assert bob.get(f"/projects/{pid}").status_code == 404
-    assert bob.post(f"/projects/{pid}/delete", json={}, headers={"X-CSRF-Token": token(bob)}).status_code == 404
     assert admin.post(f"/projects/{pid}/delete", json={}, headers=hdr).status_code == 200
     assert admin.get("/projects").json["projects"] == []
     assert admin.post("/projects", json={"name": "", "data": {}}, headers=hdr).status_code == 400

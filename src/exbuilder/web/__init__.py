@@ -2,8 +2,8 @@
 
 The page is a single-page form. Every change is sent to ``/generate`` as JSON
 and the config comes back; nothing is stored unless the user saves the
-project. Saved projects live in the same SQLite database as the users, one
-list per user.
+project. Saved projects and network maps belong to a client (see clients.py)
+and live in the same SQLite database as the users.
 
 Settings (environment variables):
 
@@ -25,7 +25,7 @@ from flask import Flask, Response, abort, render_template, request
 
 from .. import __version__, fabric, importer, models, sshfetch, topology, xlsx
 from ..generator import DEFAULTS, build
-from . import auth
+from . import auth, clients
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -52,9 +52,10 @@ def create_app() -> Flask:
     @app.before_request
     def _bigger_uploads_for_the_map():
         # Many switch configs at once: allow more than the usual 2 MB.
-        if request.path in ("/map", "/map/unzip"):
+        if request.path in ("/map", "/map/unzip", "/maps"):
             request.max_content_length = 25 * 1024 * 1024
     auth.init_app(app)
+    clients.init_app(app)
     zones = _timezones()
 
     @app.after_request
@@ -69,7 +70,7 @@ def create_app() -> Flask:
         return render_template("builder.html", version=__version__, catalog=models.catalog(),
                                defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
                                fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
-                               ssh=sshfetch.settings(), is_admin=auth.current_user()["role"] == "admin")
+                               ssh=clients.ssh_settings(), client=clients.current())
 
     @app.get("/healthz")
     def healthz():
@@ -137,11 +138,14 @@ def create_app() -> Flask:
 
     # -------------------------------------------- fetch configs over SSH
     @app.post("/ssh/fetch")
-    @auth.admin_required
     def ssh_fetch():
         body = _project_from_request()
-        if not sshfetch.enabled():
-            return {"error": "SSH fetch is turned off. Set EXB_SSH_ALLOW to the networks your switches are in."}, 403
+        c = clients.need("admin")
+        row = clients.row(c["id"])
+        nets, _ = sshfetch.check_networks(row["ssh_networks"])
+        if sshfetch.disabled() or not nets:
+            return {"error": f"SSH fetch is off for {c['name']}. A client admin adds the switch networks on "
+                             "the client page."}, 403
         hosts = body.get("hosts") or []
         if isinstance(hosts, str):
             hosts = hosts.replace(",", "\n").split("\n")
@@ -153,8 +157,17 @@ def create_app() -> Flask:
         use_key = bool(body.get("use_key"))
         username = str(body.get("username") or "").strip()
         password = str(body.get("password") or "")
-        if not use_key and not (username and password):
-            return {"error": "Enter the switch username and password, or use the stored key."}, 400
+        pkey = None
+        if use_key:
+            pkey = clients.ssh_key_for(row)
+            if pkey is None:
+                return {"error": "This client has no SSH key yet. A client admin makes one on the client page."}, 400
+            username = username or row["ssh_user"] or sshfetch.key_user()
+            if not username:
+                return {"error": "Enter the switch username for the key."}, 400
+            password = ""
+        elif not (username and password):
+            return {"error": "Enter the switch username and password, or sign in with the SSH key."}, 400
         try:
             port = int(body.get("port") or 22)
             if not 1 <= port <= 65535:
@@ -166,22 +179,24 @@ def create_app() -> Flask:
             sshfetch.check_rate(me)
         except sshfetch.FetchError as exc:
             return {"error": str(exc)}, 429
-        results = sshfetch.fetch(hosts, username, password, auth.data_dir(), me, port, use_key)
+        results = sshfetch.fetch(hosts, username, password, clients.client_folder(c["id"]), me, port,
+                                 nets=nets, pkey=pkey, client=c["name"])
         del password
         return {"results": results}
 
     @app.get("/ssh/known")
-    @auth.admin_required
     def ssh_known():
-        return {"hosts": sshfetch.known_hosts(auth.data_dir())}
+        c = clients.need("admin")
+        return {"hosts": sshfetch.known_hosts(clients.client_folder(c["id"]))}
 
     @app.post("/ssh/forget")
-    @auth.admin_required
     def ssh_forget():
+        c = clients.need("admin")
         host = str(_project_from_request().get("host") or "")
-        if not sshfetch.forget_host(auth.data_dir(), host):
+        if not sshfetch.forget_host(clients.client_folder(c["id"]), host):
             return {"error": "Not a known switch."}, 404
-        sshfetch.log.warning("audit: %r cleared the SSH host key of %s", auth.current_user()["username"], host)
+        sshfetch.log.warning("audit: %r cleared the SSH host key of %s (client %r)",
+                             auth.current_user()["username"], host, c["name"])
         return {"ok": True}
 
     @app.post("/map/unzip")
@@ -240,18 +255,19 @@ def create_app() -> Flask:
                 "recommendations": importer.recommendations(project, [], [])}
 
     # -------------------------------------------------------- saved projects
-    def _uid() -> int:
-        return auth.current_user()["id"]
-
+    # Projects belong to the client picked at the top of the page.
     @app.get("/projects")
     def projects_list():
-        rows = auth.db().execute(
-            "SELECT id, name, updated_at FROM projects WHERE owner_id = ? ORDER BY name COLLATE NOCASE", (_uid(),))
-        return {"projects": [dict(r) for r in rows]}
+        c = clients.need("viewer")
+        rows = auth.db().execute("SELECT id, name, updated_at, updated_by FROM projects WHERE client_id = ? "
+                                 "ORDER BY name COLLATE NOCASE", (c["id"],))
+        return {"projects": [dict(r) for r in rows], "client": c["name"],
+                "can_edit": clients.RANK[c["role"]] >= clients.RANK["editor"]}
 
     @app.get("/projects/<int:pid>")
     def projects_get(pid: int):
-        row = auth.db().execute("SELECT * FROM projects WHERE id = ? AND owner_id = ?", (pid, _uid())).fetchone()
+        c = clients.need("viewer")
+        row = auth.db().execute("SELECT * FROM projects WHERE id = ? AND client_id = ?", (pid, c["id"])).fetchone()
         if row is None:
             abort(404)
         return {"id": row["id"], "name": row["name"], "data": json.loads(row["data"])}
@@ -259,6 +275,7 @@ def create_app() -> Flask:
     @app.post("/projects")
     def projects_save():
         body = _project_from_request()
+        c = clients.need("editor")
         name = str(body.get("name") or "").strip()[:100]
         data = body.get("data")
         if not name or not isinstance(data, dict):
@@ -268,17 +285,19 @@ def create_app() -> Flask:
             return {"error": "Project is too large."}, 400
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         db = auth.db()
-        db.execute("INSERT INTO projects (owner_id, name, data, updated_at) VALUES (?, ?, ?, ?) "
-                   "ON CONFLICT (owner_id, name) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
-                   (_uid(), name, text, now))
+        db.execute("INSERT INTO projects (client_id, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?) "
+                   "ON CONFLICT (client_id, name) DO UPDATE SET data = excluded.data, "
+                   "updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+                   (c["id"], name, text, now, auth.current_user()["username"]))
         db.commit()
-        pid = db.execute("SELECT id FROM projects WHERE owner_id = ? AND name = ?", (_uid(), name)).fetchone()[0]
-        return {"id": pid, "name": name, "updated_at": now}
+        pid = db.execute("SELECT id FROM projects WHERE client_id = ? AND name = ?", (c["id"], name)).fetchone()[0]
+        return {"id": pid, "name": name, "updated_at": now, "client": c["name"]}
 
     @app.post("/projects/<int:pid>/delete")
     def projects_delete(pid: int):
+        c = clients.need("editor")
         db = auth.db()
-        cur = db.execute("DELETE FROM projects WHERE id = ? AND owner_id = ?", (pid, _uid()))
+        cur = db.execute("DELETE FROM projects WHERE id = ? AND client_id = ?", (pid, c["id"]))
         db.commit()
         if cur.rowcount == 0:
             abort(404)

@@ -3,6 +3,18 @@
 <nav class="fw-nav">
   <a class="brand" href="{{ url_for('index') }}">EX Config Builder</a>
   <a href="{{ url_for('index') }}">Builder</a>
+  {% if my_clients %}
+  <form class="client-pick" method="post" action="{{ url_for('clients.select') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <label for="client-pick">Client</label>
+    <select id="client-pick" name="client_id" onchange="this.form.submit()">
+      {% for c in my_clients %}<option value="{{ c.id }}"{% if current_client and c.id == current_client.id %} selected{% endif %}>{{ c.name }}{% if current_user['role'] != 'admin' %} ({{ c.role }}){% endif %}</option>{% endfor %}
+    </select>
+    <noscript><button class="link" type="submit">Switch</button></noscript>
+  </form>
+  {% endif %}
+  {% if current_user['role'] == 'admin' or (my_clients and my_clients|selectattr('role', 'equalto', 'admin')|list) %}<a href="{{ url_for('clients.clients_page') }}">Clients</a>{% endif %}
   {% if current_user['role'] == 'admin' %}<a href="{{ url_for('auth.users') }}">Users</a>{% endif %}
   <a href="{{ url_for('auth.account') }}">My account</a>
   <span class="who">{{ current_user['username'] }}{% if current_user['role'] == 'admin' %} (admin){% endif %}</span>

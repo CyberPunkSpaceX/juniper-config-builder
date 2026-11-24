@@ -16,15 +16,19 @@ services:
       # Set to "true" once users only reach the UI over HTTPS.
       EXB_SECURE_COOKIES: ${EXB_SECURE_COOKIES:-false}
       EXB_REQUIRE_2FA: ${EXB_REQUIRE_2FA:-false}
-      # Fetch configs from switches over SSH (Network map tab, admins only).
-      # Off while empty. List the networks your switches' management addresses
-      # are in, e.g. "10.40.45.0/24, 10.50.0.0/16". Nothing outside them is reached.
+      # Fetch configs from switches over SSH (Network map tab). Each client sets
+      # its own switch networks and SSH key on its client page. These are only
+      # server-wide limits:
+      # - EXB_SSH_ALLOW: networks any client may use (empty = the private ranges
+      #   10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7).
+      # - EXB_SSH_DISABLE: "true" turns SSH fetch off for everyone.
       EXB_SSH_ALLOW: ${EXB_SSH_ALLOW:-}
-      # Optional: sign in with a key for a read-only Junos account instead of a
-      # password. Create the secret first, then uncomment the secrets parts below:
-      #   docker secret create exbuilder_ssh_key ./id_ed25519
-      # EXB_SSH_KEY_FILE: /run/secrets/exbuilder_ssh_key
-      # EXB_SSH_KEY_USER: exbuilder-ro
+      EXB_SSH_DISABLE: ${EXB_SSH_DISABLE:-false}
+      # Client SSH keys are stored encrypted with a master key. Without this it is
+      # made in /data/master_key, next to the database (and in its backups). Better:
+      #   head -c 32 /dev/urandom | base64 | docker secret create exbuilder_master_key -
+      # then uncomment this and the secrets parts below.
+      # EXB_MASTER_KEY_FILE: /run/secrets/exbuilder_master_key
     ports:
       # Published on every node through the swarm routing mesh.
       # The reverse proxy (exbuilder.cyberpunkx.ca) forwards here.
@@ -58,11 +62,11 @@ services:
         app: exbuilder
 
     # secrets:
-    #   - exbuilder_ssh_key
+    #   - exbuilder_master_key
 
 volumes:
   exbuilder_data:
 
 # secrets:
-#   exbuilder_ssh_key:
+#   exbuilder_master_key:
 #     external: true
