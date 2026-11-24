@@ -1,8 +1,9 @@
 {% include "auth/_style.html" %}
 {% if current_user %}
 <nav class="fw-nav">
-  <a class="brand" href="{{ url_for('index') }}">Multi-Vendor Switch Config Builder</a>
+  <a class="brand" href="{{ url_for('index') }}"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
   <a href="{{ url_for('index') }}">Vendors</a>
+  <a href="{{ url_for('help_page') }}">Help</a>
   {% if my_clients %}
   <form class="client-pick" method="post" action="{{ url_for('clients.select') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

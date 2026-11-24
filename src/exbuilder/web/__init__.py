@@ -116,6 +116,11 @@ def create_app() -> Flask:
         return render_template("vendors.html", vendors=vendors.VENDORS.values(), version=__version__,
                                last=session.get("vendor"))
 
+    @app.get("/help")
+    def help_page():
+        """The built-in how-to guide."""
+        return render_template("help.html", version=__version__)
+
     @app.get("/build")
     def build_default():
         return redirect(url_for("builder", vendor=vendors.DEFAULT))

@@ -9,9 +9,12 @@
     --accent: #5b8ff0; --accent-text: #0b0e12; --ok: #5cc48f; --warn: #e3a944; --bad: #f07a70;
   }
 }
-.fw-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 18px;
+.fw-nav { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 18px;
   padding-bottom: 12px; border-bottom: 1px solid var(--border); font-size: 14px; }
-.fw-nav .brand { font-weight: 700; color: var(--text); text-decoration: none; margin-right: auto; }
+.fw-nav .brand { font-weight: 700; color: var(--text); text-decoration: none; margin-right: auto;
+  display: inline-flex; align-items: center; gap: 10px; }
+.fw-nav .brand .logo { height: 26px; width: auto; }
+.login-logo { display: block; width: 260px; max-width: 80%; height: auto; margin: 0 auto 18px; }
 .fw-nav a { color: var(--accent); text-decoration: none; }
 .fw-nav .who { color: var(--muted); }
 .fw-nav form { margin: 0; }

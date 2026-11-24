@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <title>{{ vendor.name }} builder · Multi-Vendor Switch Config Builder</title>
 <style>
 * { box-sizing: border-box; }
@@ -924,6 +926,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <ul class="msgs" id="msgs"></ul>
       <pre id="output"></pre>
       <p class="note" id="load-hint"></p>
+      <p class="note"><a href="{{ url_for('help_page') }}#apply">Step-by-step loading guide for every vendor</a> · <a href="{{ url_for('help_page') }}">How to use the builder</a></p>
     </div>
   </aside>
 </div>
