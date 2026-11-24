@@ -120,7 +120,7 @@ def test_backups_store_list_export_and_roles(app, admin):
 
 
 def test_backups_page_parts(app, admin):
-    page = admin.get("/").get_data(as_text=True)
+    page = admin.get("/build/juniper").get_data(as_text=True)
     assert 'data-tab="Backups &amp; compare"' in page or 'data-tab="Backups & compare"' in page
     assert 'id="cmp-go"' in page and 'id="bk-upload-btn"' in page
 

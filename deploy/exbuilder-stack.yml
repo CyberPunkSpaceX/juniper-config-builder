@@ -1,4 +1,4 @@
-# Docker Swarm stack for the EX Config Builder web UI.
+# Docker Swarm stack for the Multi-Vendor Switch Config Builder web UI.
 # Deploy in Portainer (Stacks > Add stack > Web editor) or with:
 #   docker stack deploy -c deploy/exbuilder-stack.yml --with-registry-auth exbuilder
 #

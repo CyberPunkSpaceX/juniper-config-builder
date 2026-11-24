@@ -1,5 +1,5 @@
 {% extends "auth/base.html" %}
-{% block title %}{{ c['name'] }} · Clients · EX Config Builder{% endblock %}
+{% block title %}{{ c['name'] }} · Clients · Multi-Vendor Switch Config Builder{% endblock %}
 {% block content %}
 <p><a href="{{ url_for('clients.clients_page') }}">← All clients</a></p>
 <h1>{{ c['name'] }}</h1>
@@ -148,7 +148,7 @@ set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro a
   <h2>Back up and restore</h2>
   <p class="hint">One file with everything of {{ c['name'] }}: its saved projects, network maps, switch config backups
     ({{ n_backups[0] }} from {{ n_backups[1] }} switch{{ '' if n_backups[1] == 1 else 'es' }}), settings and people. Keep it
-    somewhere safe, or load it into another client or another EX Config Builder server.</p>
+    somewhere safe, or load it into another client or another Multi-Vendor Switch Config Builder server.</p>
   <form method="get" action="{{ url_for('backups.client_export', cid=c['id']) }}">
     <label style="font-weight:400"><input type="checkbox" name="configs" value="0"> Leave out the switch config backups (smaller file)</label><br>
     <label style="font-weight:400"><input type="checkbox" name="secrets" value="1"> Include the SSH key and the EVE-NG password</label>

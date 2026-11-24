@@ -7,7 +7,7 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels '.[web]'
 
 FROM python:3.12-slim
 LABEL org.opencontainers.image.source="https://github.com/CyberPunkSpaceX/juniper-config-builder" \
-      org.opencontainers.image.description="EX Config Builder: web GUI that builds Juniper EX switch configs"
+      org.opencontainers.image.description="Multi-Vendor Switch Config Builder: web GUI that builds Juniper EX switch configs"
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 RUN useradd --system --uid 10001 --no-create-home exbuilder \
  && mkdir -p /data && chown exbuilder /data

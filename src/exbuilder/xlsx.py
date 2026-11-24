@@ -144,7 +144,7 @@ def workbook(project: dict | None = None) -> bytes:
 
     ws = wb.active
     ws.title = "Read me"
-    for row in [["EX Config Builder workbook"], [],
+    for row in [["Multi-Vendor Switch Config Builder workbook"], [],
                 ["1. Fill in the Settings sheet and the table sheets (Users, SNMP, SNMPv3, VLANs, Ports, LAGs, Static routes)."],
                 ["2. Use the drop-down lists where a cell has one. yes/no cells take yes or no."],
                 ["3. Leave a row empty to skip it. Add as many rows as you need."],

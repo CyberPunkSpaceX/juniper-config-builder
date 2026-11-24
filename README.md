@@ -1,9 +1,26 @@
-# EX Config Builder
+# Multi-Vendor Switch Config Builder
 
-A web GUI (and a small CLI) that builds configuration for **Juniper EX switches**
-running Junos with ELS (EX2300, EX3400, EX4100, EX4300, EX4400). Fill in forms, and the
-config appears live as `set` commands and as the hierarchical (curly brace)
-format, ready to copy or download.
+A web GUI (and a small CLI) that builds switch configuration. After you sign in,
+pick a vendor:
+
+| Vendor | Writes config for | Status |
+|---|---|---|
+| Juniper | Junos ELS: EX2300, EX3400, EX4100, EX4300, EX4400 | ready |
+| Arista | EOS | coming next |
+| Cisco | IOS-XE: Catalyst 9200/9300/9400/9500 | planned |
+| Brocade / Ruckus | FastIron: ICX 7150 and up | planned |
+
+Fill in forms, and the config appears live, ready to copy or download (for Juniper
+as `set` commands and as the hierarchical, curly brace, format). Clients, saved
+projects, network maps and backups are shared by all vendors.
+
+The project used to be called *EX Config Builder*. The Python package and the
+`EXB_` settings keep their old names, so existing installs upgrade in place.
+
+**VLAN translation.** On a trunk port (Advanced mode) write pairs such as
+`120>20, 130>30`: frames that arrive tagged 120 join VLAN 20 on this switch and
+leave tagged 120 again. On Juniper this is `vlan-rewrite translate`, which the
+EX4100, EX4300 and EX4400 support (EX2300 and EX3400 do not, and you get a warning).
 
 ![The builder in Basic mode with the office example loaded](docs/screenshots/01-builder-basic.png)
 

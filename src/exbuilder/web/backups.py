@@ -276,7 +276,7 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
     from .. import eveng
     from . import eve
     if not isinstance(data, dict) or data.get("format") != FORMAT:
-        return [("error", "That is not a client backup from EX Config Builder.")]
+        return [("error", "That is not a client backup from Multi-Vendor Switch Config Builder.")]
     db, who, notes, now = auth.db(), auth.current_user()["username"], [], _now()
     counts = {"projects": [0, 0], "maps": [0, 0]}
     try:
@@ -426,7 +426,7 @@ def client_restore_new():
     """Server admins: make a new client from a backup file."""
     data, problem = _read_backup_file()
     if problem is None and (not isinstance(data, dict) or data.get("format") != FORMAT):
-        problem = "That is not a client backup from EX Config Builder."
+        problem = "That is not a client backup from Multi-Vendor Switch Config Builder."
     name = (request.form.get("name") or "").strip() or str(((data or {}).get("client") or {}).get("name") or "").strip()
     if problem is None and not clients.NAME_RE.match(name):
         problem = "Give the new client a name (1 to 80 characters, without < > quotes or backslashes)."

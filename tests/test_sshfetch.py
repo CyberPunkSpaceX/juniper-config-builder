@@ -174,11 +174,11 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
     hdr = {"X-CSRF-Token": token(client)}
     body = {"hosts": "127.0.0.1", "username": "netops", "password": "Secret-123", "port": switch["port"]}
     # No networks for the client yet: off.
-    assert 'id="ssh-go"' not in client.get("/").get_data(as_text=True)
+    assert 'id="ssh-go"' not in client.get("/build/juniper").get_data(as_text=True)
     assert client.post("/ssh/fetch", json=body, headers=hdr).status_code == 403
     form = {"csrf_token": csrf(client, "/clients/1"), "action": "ssh", "networks": "127.0.0.0/24", "ssh_user": ""}
     assert client.post("/clients/1", data=form).status_code == 302
-    page = client.get("/").get_data(as_text=True)
+    page = client.get("/build/juniper").get_data(as_text=True)
     assert 'id="ssh-go"' in page and "127.0.0.0/24" in page
     with caplog.at_level("WARNING", logger="exbuilder.ssh"):
         resp = client.post("/ssh/fetch", json=body, headers=hdr)
@@ -210,7 +210,7 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
                                      "role": "editor"})
     bob = application.test_client()
     assert login(bob, "bob", "bob-password-1").status_code == 302
-    assert 'id="ssh-go"' not in bob.get("/").get_data(as_text=True)
+    assert 'id="ssh-go"' not in bob.get("/build/juniper").get_data(as_text=True)
     assert bob.post("/ssh/fetch", json=body, headers={"X-CSRF-Token": token(bob)}).status_code == 403
     assert bob.get("/ssh/known").status_code == 403
     assert bob.get("/clients/1").status_code == 403

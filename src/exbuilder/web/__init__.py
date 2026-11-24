@@ -1,4 +1,4 @@
-"""Web GUI for EX Config Builder.
+"""Web GUI for Multi-Vendor Switch Config Builder.
 
 The page is a single-page form. Every change is sent to ``/generate`` as JSON
 and the config comes back; nothing is stored unless the user saves the
@@ -21,9 +21,9 @@ import json
 import zoneinfo
 from datetime import datetime, timezone
 
-from flask import Flask, Response, abort, render_template, request
+from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, fabric, importer, models, sshfetch, topology, xlsx
+from .. import __version__, fabric, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -70,7 +70,24 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("builder.html", version=__version__, catalog=models.catalog(),
+        """The vendor screen: the first page after signing in."""
+        return render_template("vendors.html", vendors=vendors.VENDORS.values(), version=__version__,
+                               last=session.get("vendor"))
+
+    @app.get("/build")
+    def build_default():
+        return redirect(url_for("builder", vendor=vendors.DEFAULT))
+
+    @app.get("/build/<vendor>")
+    def builder(vendor: str):
+        v = vendors.VENDORS.get(vendor.lower())
+        if v is None:
+            abort(404)
+        if not v.ready:
+            flash(f"The {v.name} builder is not ready yet. It is coming in a later update.", "info")
+            return redirect(url_for("index"))
+        session["vendor"] = v.key
+        return render_template("builder.html", vendor=v.to_dict(), version=__version__, catalog=models.catalog(),
                                defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
                                fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
                                ssh=clients.ssh_settings(), client=clients.current(),

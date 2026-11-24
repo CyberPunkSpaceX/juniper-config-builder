@@ -363,7 +363,7 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         c = app.test_client()
         assert login(c, *ADMIN).status_code == 302
         hdr = {"X-CSRF-Token": token(c)}
-        page = c.get("/").get_data(as_text=True)
+        page = c.get("/build/juniper").get_data(as_text=True)
         assert "EVE-NG is not set up" in page
         assert c.get("/eve/images").status_code == 400
         f = csrf(c, "/clients/1")
@@ -379,7 +379,7 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         assert "Connected to EVE-NG 6.2.0-test" in resp.get_data(as_text=True)
         imgs = c.get("/eve/images").json["images"]
         assert imgs[0]["images"] == ["vjunos-switch-23.2R1.14"]
-        assert "Build lab in EVE-NG" in c.get("/").get_data(as_text=True)
+        assert "Build lab in EVE-NG" in c.get("/build/juniper").get_data(as_text=True)
 
         items = example_items()
         body = {"name": "office-test", "template": "vjunosswitch", "image": "vjunos-switch-23.2R1.14",
