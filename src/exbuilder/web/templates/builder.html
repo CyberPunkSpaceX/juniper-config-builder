@@ -311,7 +311,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
     </div>
     <div class="panel">
       <h2>Management port</h2>
-      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0).</span><span data-only="ruckus">The dedicated out-of-band port (management 1).</span><span data-only="aruba">The dedicated out-of-band port (mgmt), always in the mgmt VRF. The 6000 and 6100 have none.</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0, or FastEthernet0 on the 2960-X).</span><span data-only="ruckus">The dedicated out-of-band port (management 1).</span><span data-only="aruba">The dedicated out-of-band port (mgmt), always in the mgmt VRF. The 6000 and 6100 have none.</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
       <div class="grid">
         <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
         <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>

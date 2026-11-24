@@ -1,4 +1,4 @@
-"""Turn a project into Cisco IOS-XE configuration (Catalyst 9000).
+"""Turn a project into Cisco Catalyst configuration (IOS-XE, and classic IOS on the 2960-X).
 
 Uses the same project format as the other builders (see generator.py). Port
 names are IOS-XE names (GigabitEthernet1/0/1, Te1/1/1), stack members are
@@ -15,7 +15,7 @@ from datetime import datetime
 from . import __version__, ios_models, vendors
 from . import ports as P
 from . import routing as R
-from .cryptpw import cisco_type8, is_type8
+from .cryptpw import cisco_type8, is_md5, is_type8, md5_crypt
 from .eos import _dedupe, _vid_list
 from .generator import (DOMAIN, HOSTNAME, NAME, USERNAME, Ctx, Result, _addresses, _ip, _list, _s, _truthy,
                         _vlan_name, normalize)
@@ -91,6 +91,7 @@ class IosCtx(Ctx):
         self.dai: list[int] = []
         self.ipsg: list[int] = []
         self.banner = None
+        self.classic = False    # classic IOS (2960-X)
 
 
 # ------------------------------------------------------------------ sections
@@ -122,6 +123,7 @@ def _switch(ctx: IosCtx) -> None:
             ctx.error("Switch", f"Unknown Cisco model '{m.get('model')}'. Pick one from the list or Custom.", "model")
     ctx.at("", None)
     families = {mod.family for _, mod in ctx.imodels}
+    ctx.classic = any(mod.classic for _, mod in ctx.imodels)
     if len(families) > 1:
         ctx.error("Switch", f"A stack can't mix {' and '.join(sorted(families))} switches.")
     if len(members) > 1:
@@ -140,7 +142,7 @@ def _secret(ctx: IosCtx, section: str, label: str, value, key: str) -> str | Non
     value = _s(value)
     if not value:
         return None
-    if is_type8(value):
+    if ctx.classic and is_md5(value) or not ctx.classic and is_type8(value):
         return value
     if value.startswith("$"):
         ctx.error(section, f"{label}: this password was hashed for another vendor; type it again for Cisco.",
@@ -152,9 +154,14 @@ def _secret(ctx: IosCtx, section: str, label: str, value, key: str) -> str | Non
     if "?" in value:
         ctx.error(section, f"{label}: IOS can't take a '?' in a password.", key if not ctx.row else key.rsplit(".", 1)[-1])
         return None
-    hashed = cisco_type8(value)
+    hashed = md5_crypt(value) if ctx.classic else cisco_type8(value)
     ctx.res.hashed[key] = hashed
     return hashed
+
+
+def _stype(ctx: IosCtx) -> str:
+    """Secret type: 5 (MD5) on classic IOS, 8 (PBKDF2-SHA256) on IOS-XE."""
+    return "5" if ctx.classic else "8"
 
 
 def _system(ctx: IosCtx) -> None:
@@ -173,12 +180,17 @@ def _system(ctx: IosCtx) -> None:
     domain = _s(s.get("domain"))
     if domain:
         if DOMAIN.match(domain):
-            cfg.line(f"ip domain name {domain}")
+            cfg.line(f"ip domain{'-' if ctx.classic else ' '}name {domain}")
         else:
             ctx.error("System", f"Domain '{domain}' is not a valid domain name.", "system.domain")
     elif _s(host):
         ctx.warn("System", "Cisco needs a domain name to make the SSH key; add one.")
     vrf = _truthy(s.get("mgmt_vrf"))
+    if vrf and ctx.classic:
+        ctx.warn("System", "The 2960-X has no management VRF; FastEthernet0 uses the main table and "
+                           "'ip default-gateway'. The management VRF option is ignored.")
+        vrf = False
+        s["mgmt_vrf"] = False  # a normalized copy, so logging and the rest follow
     dns = [ns for ns in _list(s.get("name_servers")) if _ip(ctx, "System", "DNS server", ns)]
     if dns:
         cfg.line(f"ip name-server {'vrf Mgmt-vrf ' if vrf else ''}{' '.join(dns[:6])}")
@@ -220,6 +232,8 @@ def _system(ctx: IosCtx) -> None:
                 ctx.warn("System", f"Management gateway {gw} is not in the management subnet.")
             if vrf:
                 ctx.mgmt_route = f"ip route vrf Mgmt-vrf 0.0.0.0 0.0.0.0 {gw}"
+            elif ctx.classic:
+                cfg.line(f"ip default-gateway {gw}")
             else:
                 ctx.mgmt_gateway = gw
     elif _s(s.get("mgmt_gateway")):
@@ -237,7 +251,7 @@ def _access(ctx: IosCtx) -> None:
     cfg.comment("Accounts and remote access")
     enable = _secret(ctx, "Access", "Enable secret (root password)", a.get("root_password"), "access.root_password")
     if enable:
-        cfg.line(f"enable secret 8 {enable}")
+        cfg.line(f"enable secret {_stype(ctx)} {enable}")
     names = set()
     keys_by_user: dict[str, list] = {}
     for i, u in enumerate(a.get("users") or []):
@@ -269,7 +283,7 @@ def _access(ctx: IosCtx) -> None:
                 continue
             keys.append(m.group(2))
         if hashed:
-            cfg.line(f"username {name} privilege {priv} secret 8 {hashed}")
+            cfg.line(f"username {name} privilege {priv} secret {_stype(ctx)} {hashed}")
         elif keys:
             cfg.line(f"username {name} privilege {priv}")
         else:
@@ -299,7 +313,9 @@ def _access(ctx: IosCtx) -> None:
     if _truthy(a.get("retry_options")):
         cfg.line("login block-for 120 attempts 5 within 60")
         cfg.line("login on-failure log")
-    if _truthy(a.get("netconf")):
+    if _truthy(a.get("netconf")) and ctx.classic:
+        ctx.warn("Access", "NETCONF is not available on classic IOS (2960-X); skipped.")
+    elif _truthy(a.get("netconf")):
         cfg.line("netconf-yang")
     cfg.line("no ip http server")
     if _truthy(a.get("web")):
@@ -487,6 +503,10 @@ def _translate(ctx: IosCtx, section: str, label: str, body: list, row: dict, all
         pairs = P.translations(spec)
     except ValueError as exc:
         ctx.error(section, f"{label}: VLAN translation: {exc}", "vlan_translate")
+        return
+    if ctx.classic:
+        ctx.warn(section, f"{label}: the 2960-X can't translate VLANs (switchport vlan mapping); the mapping is "
+                          "ignored. Use a 3850 or a 9300.")
         return
     if any(mod.family == "C9200" for _, mod in ctx.imodels):
         ctx.warn(section, f"{label}: the Catalyst 9200 can't translate VLANs (switchport vlan mapping); "
@@ -793,7 +813,15 @@ def _l3(ctx: IosCtx) -> None:
             ctx.asn = int(asn)
         else:
             ctx.error("Routing", "AS number must be 1-4294967295.", "routing.asn")
-    if ctx.svis or lo or any(row.get("mode") == "routed" for row in ctx.p["ports"] + ctx.p["lags"]):
+    routed = any(row.get("mode") == "routed" for row in ctx.p["ports"] + ctx.p["lags"])
+    if ctx.classic:
+        if routed:
+            ctx.error("Routing", "The 2960-X LAN Base has no routed ports; use a VLAN interface (SVI) instead.")
+        if len(ctx.svis) > 1 or lo:
+            ctx.warn("Routing", "The 2960-X only routes between VLANs after 'sdm prefer lanbase-routing' and a "
+                                "reload, and only with static routes. 'ip routing' is written; set the SDM template first.")
+            cfg.line("ip routing")
+    elif ctx.svis or lo or routed:
         cfg.line("ip routing")
     if any(a.version == 6 for _, a in ctx.l3_networks):
         cfg.line("ipv6 unicast-routing")
@@ -844,6 +872,9 @@ def _static(ctx: IosCtx) -> None:
 def _ospf(ctx: IosCtx) -> None:
     o = ctx.p["routing"].get("ospf") or {}
     if not _truthy(o.get("enabled")):
+        return
+    if ctx.classic:
+        ctx.error("OSPF", "The 2960-X LAN Base can't run OSPF (static routes only). Turn OSPF off or pick a 3650/3850 or 9300.")
         return
     cfg = ctx.cfg
     cfg.comment("OSPF")
@@ -896,6 +927,9 @@ def _ospf(ctx: IosCtx) -> None:
 def _bgp(ctx: IosCtx) -> None:
     groups = [g for g in ctx.p["routing"].get("bgp_groups") or [] if _s(g.get("name")) or _s(g.get("neighbors"))]
     if not groups:
+        return
+    if ctx.classic:
+        ctx.error("BGP", "The 2960-X can't run BGP. Remove the BGP groups or pick a 9300 or 9500.")
         return
     if not ctx.asn:
         ctx.error("BGP", "BGP needs the switch's AS number (Routing tab).", "routing.asn")
@@ -1041,7 +1075,9 @@ def _unsupported(ctx: IosCtx) -> None:
 def header(p: dict) -> list[str]:
     name = _s(p.get("name")) or _s(p.get("system", {}).get("hostname")) or "switch"
     models = ", ".join(f"{_s(m.get('model'))} (switch {m.get('fpc', 1) or 1})" for m in p["switch"].get("members") or [])
-    return [f"Cisco IOS-XE configuration for {name}", f"Hardware: {models}",
+    classic = any((ios_models.get(_s(m.get("model"))) or ios_models.CUSTOM_MODEL).classic
+                  for m in p["switch"].get("members") or [])
+    return [f"Cisco {'IOS' if classic else 'IOS-XE'} configuration for {name}", f"Hardware: {models}",
             f"Made by Multi-Vendor Switch Config Builder {__version__}. Review before you load it."]
 
 

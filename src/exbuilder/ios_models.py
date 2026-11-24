@@ -1,4 +1,8 @@
-"""Cisco Catalyst 9000 (IOS-XE) models and their front-panel ports.
+"""Cisco Catalyst models and their front-panel ports.
+
+Catalyst 9000 and the older 3650/3850 run IOS-XE; the 2960-X runs classic IOS
+(``classic``), which takes type 5 (MD5) secrets, has no management VRF, no
+VLAN mapping and only static routing.
 
 Port names are IOS-XE names: ``GigabitEthernet1/0/1`` is switch 1 of a stack,
 slot 0, port 1. Uplink module ports are on slot 1 (``TenGigabitEthernet1/1/1``).
@@ -33,6 +37,7 @@ class IosModel:
     mgmt: str = "GigabitEthernet0/0"
     notes: str = ""
     stack: bool = True
+    classic: bool = False  # classic IOS (2960-X): type 5 secrets, no Mgmt-vrf, no VLAN mapping, static routes only
 
     @property
     def poe(self) -> bool:
@@ -50,8 +55,8 @@ class IosModel:
 _M: list[IosModel] = []
 
 
-def _add(name, family, groups, notes="", stack=True, mgmt="GigabitEthernet0/0"):
-    _M.append(IosModel(name, family, tuple(groups), name.lower(), mgmt, notes, stack))
+def _add(name, family, groups, notes="", stack=True, mgmt="GigabitEthernet0/0", classic=False, provision=None):
+    _M.append(IosModel(name, family, tuple(groups), provision or name.lower(), mgmt, notes, stack, classic))
 
 
 def _acc(word, last, speed, poe=False, first=1):
@@ -62,6 +67,31 @@ def _up(word, last, speed, kind="uplink"):
     return Group(kind, word, 1, 1, last, speed)
 
 
+# ------------------------------------------------------------------ 2960-X (classic IOS 15.2)
+_FA0 = "FastEthernet0"
+_add("WS-C2960X-24PS-L", "C2960X", [_acc(GI, 24, "1G", True), Group("uplink", GI, 0, 25, 28, "1G SFP")],
+     "PoE+, classic IOS 15.2. FlexStack (needs the stack module), up to 8.", mgmt=_FA0, classic=True)
+_add("WS-C2960X-48LPS-L", "C2960X", [_acc(GI, 48, "1G", True), Group("uplink", GI, 0, 49, 52, "1G SFP")],
+     "PoE+ (370 W), classic IOS 15.2. FlexStack (needs the stack module), up to 8.", mgmt=_FA0, classic=True)
+_add("WS-C2960X-48FPS-L", "C2960X", [_acc(GI, 48, "1G", True), Group("uplink", GI, 0, 49, 52, "1G SFP")],
+     "PoE+ (740 W), classic IOS 15.2. FlexStack (needs the stack module), up to 8.", mgmt=_FA0, classic=True)
+_add("WS-C2960X-48FPD-L", "C2960X", [_acc(GI, 48, "1G", True), Group("uplink", TE, 0, 1, 2, "10G SFP+")],
+     "PoE+ (740 W), 2x 10G SFP+ (Te1/0/1-2), classic IOS 15.2. FlexStack, up to 8.", mgmt=_FA0, classic=True)
+_add("WS-C2960X-48TS-L", "C2960X", [_acc(GI, 48, "1G"), Group("uplink", GI, 0, 49, 52, "1G SFP")],
+     "Classic IOS 15.2. FlexStack (needs the stack module), up to 8.", mgmt=_FA0, classic=True)
+# ------------------------------------------------------------------ 3650 / 3850 (IOS-XE 16.x)
+_add("WS-C3650-24PS", "C3650", [_acc(GI, 24, "1G", True), _up(GI, 4, "1G SFP")],
+     "PoE+, IOS-XE 16. Fixed 4x 1G SFP uplinks. StackWise-160 with the stack kit.")
+_add("WS-C3650-48PS", "C3650", [_acc(GI, 48, "1G", True), _up(GI, 4, "1G SFP")],
+     "PoE+, IOS-XE 16. Fixed 4x 1G SFP uplinks. StackWise-160 with the stack kit.")
+_add("WS-C3650-48PD", "C3650", [_acc(GI, 48, "1G", True), _up(GI, 2, "1G SFP"), Group("uplink", TE, 1, 3, 4, "10G SFP+")],
+     "PoE+, IOS-XE 16. Uplinks Gi1/1/1-2 and Te1/1/3-4.")
+_add("WS-C3850-24P", "C3850", [_acc(GI, 24, "1G", True), _up(TE, 4, "10G SFP+", "module")],
+     "PoE+, IOS-XE 16. Uplinks need a network module (C3850-NM-4-10G shown).")
+_add("WS-C3850-48P", "C3850", [_acc(GI, 48, "1G", True), _up(TE, 4, "10G SFP+", "module")],
+     "PoE+, IOS-XE 16. Uplinks need a network module (C3850-NM-4-10G shown).")
+_add("WS-C3850-48U", "C3850", [_acc(GI, 48, "1G", True), _up(TE, 4, "10G SFP+", "module")],
+     "UPOE, IOS-XE 16. Uplinks need a network module (C3850-NM-4-10G shown).")
 # ------------------------------------------------------------------ 9200
 _add("C9200L-24T-4G", "C9200", [_acc(GI, 24, "1G"), _up(GI, 4, "1G SFP")], "Fixed 4x 1G SFP uplinks.")
 _add("C9200L-24P-4G", "C9200", [_acc(GI, 24, "1G", True), _up(GI, 4, "1G SFP")], "PoE+. Fixed 4x 1G SFP uplinks.")
@@ -99,9 +129,11 @@ _add("Cat9kv", "C9KV", [_acc(GI, 8, "1G")], "Catalyst 9000 virtual switch for la
 
 MODELS: dict[str, IosModel] = {m.name: m for m in _M}
 CUSTOM = "Custom"
+CUSTOM_MODEL = IosModel(CUSTOM, "Custom", (), "")
 ALIASES = {
     "gi": GI, "gig": GI, "gigabitethernet": GI,
     "tw": TW, "two": TW, "twogigabitethernet": TW,
+    "fa": "FastEthernet", "fastethernet": "FastEthernet",
     "fi": FI, "fivegigabitethernet": FI,
     "te": TE, "ten": TE, "tengigabitethernet": TE,
     "twe": TWE, "twentyfivegige": TWE,

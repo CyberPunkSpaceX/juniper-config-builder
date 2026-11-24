@@ -162,12 +162,16 @@ if you lose the connection. The steps for each vendor are below the config in th
       <code>Port-Channel1</code>.</li>
     <li>Not written yet: EVPN-VXLAN, policies, QoS and the Tools.</li>
   </ul>
-  <h3>Cisco (IOS-XE): Catalyst 9200, 9300, 9500 and Cat9kv lab</h3>
+  <h3>Cisco (IOS-XE and IOS): Catalyst 9200, 9300, 9500, older 2960-X, 3650, 3850, and Cat9kv lab</h3>
   <ul>
     <li>Ports: <code>GigabitEthernet1/0/1</code> (short: <code>Gi1/0/1-24</code>, <code>Te1/1/1</code>). The first
       number is the stack member (1-8); slot 1 is the uplink module. LAGs are <code>Port-channel1</code> (<code>Po1</code>).</li>
     <li>The root password becomes the <b>enable secret</b>. Cisco needs a domain name to make the SSH key.</li>
     <li>The 9200 can't translate VLANs; you get a warning.</li>
+    <li><b>Older switches:</b> the 3650 and 3850 run IOS-XE 16 and get the same config as the 9300. The 2960-X runs
+      classic IOS 15.2, so it gets type 5 secrets, <code>ip domain-name</code>, its management port
+      <code>FastEthernet0</code> with <code>ip default-gateway</code> (no management VRF), and no VLAN mapping. It only does
+      static routes, after <code>sdm prefer lanbase-routing</code> and a reload; OSPF and BGP give an error.</li>
   </ul>
   <h3>Brocade / Ruckus (FastIron): ICX 7000 and 6000, FCX, FGS, FLS</h3>
   <ul>
@@ -200,7 +204,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <ul>
   <li>Juniper: <code>vlan-rewrite</code> on EX4100, EX4300 and EX4400 (not EX2300 or EX3400).</li>
   <li>Arista: <code>switchport vlan translation</code>.</li>
-  <li>Cisco: <code>switchport vlan mapping</code> on the 9300 and 9500 (not the 9200).</li>
+  <li>Cisco: <code>switchport vlan mapping</code> on the 9300, 9500, 3650 and 3850 (not the 9200 or 2960-X).</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
 </ul>
@@ -208,7 +212,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco, MD5-crypt on Ruckus), so plain text is never saved in a project. The exception is Aruba CX, which only takes
+    Cisco (type 5 on the 2960-X), MD5-crypt on Ruckus), so plain text is never saved in a project. The exception is Aruba CX, which only takes
     plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>

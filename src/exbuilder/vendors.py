@@ -51,7 +51,7 @@ VENDORS: dict[str, Vendor] = {
                    "vlan_translation"}),
         ready=True),
     "cisco": Vendor(
-        "cisco", "Cisco", "IOS-XE", "Catalyst 9200, 9300, 9500 and Cat9kv lab",
+        "cisco", "Cisco", "IOS-XE and IOS", "Catalyst 9200, 9300, 9500, older 2960-X, 3650, 3850, and Cat9kv lab",
         # What the Cisco builder writes today; EVPN, policies, QoS and the tools come later.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
                    "vlan_translation", "virtual_chassis"}),
