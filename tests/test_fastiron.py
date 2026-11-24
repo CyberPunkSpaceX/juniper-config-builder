@@ -113,3 +113,11 @@ def test_routing_dot1x_and_poe():
     assert "router bgp\n local-as 65002" in t and "neighbor 10.9.9.2 remote-as 65000" in t
     assert "dot1x port-control auto ethe 1/1/1" in t and "mac-authentication enable ethe 1/1/1" in t
     assert "radius-server host 10.0.0.5" in t and "inline power priority 2" in t
+
+
+def test_ospf_names_with_spaces():
+    res = build(base(vlans=[{"name": "USERS", "id": "20", "irb": "10.0.20.1/24"}],
+                     routing={"loopback": "10.255.255.2",
+                              "ospf": {"enabled": True, "areas": [{"area": "0", "interfaces": "ve 20, loopback 1"}]}}))
+    assert not res.errors, msgs(res.errors)
+    assert "ip ospf area 0" in block(res.set_text, "interface ve 20")

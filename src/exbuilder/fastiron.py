@@ -829,8 +829,8 @@ def _ospf(ctx: FiCtx) -> None:
         body.append(f"area {area}" + (f" {kind} 1" if kind == "stub" else " nssa 1" if kind == "nssa" else ""))
         key = _s(a.get("md5_key"))
         p2p = {_fi_iface(x) for x in _list(re.sub(r"\bethe?\s+", "", _s(a.get("p2p"))))}
-        passive = _list(a.get("passive"))
-        for raw in _list(a.get("interfaces")) + passive:
+        passive = P.iface_list(a.get("passive"))
+        for raw in P.iface_list(a.get("interfaces")) + passive:
             name = _fi_iface(raw)
             if not name:
                 ctx.error("OSPF", f"Area {area}: '{raw}' is not a FastIron interface (1/2/1, ve 20, loopback 1).", "interfaces")
