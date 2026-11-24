@@ -13,7 +13,11 @@ format, ready to copy or download.
    needs: system, users, SNMP and logs, VLANs, ports, LAGs, static routes and
    services. Advanced adds OSPF, BGP, policies, EVPN-VXLAN and the less common
    fields (speed, MTU, MAC limit, VC pre-provisioning and so on). Settings you
-   already made stay in the config when you switch to Basic.
+   already made stay in the config when you switch to Basic. The menu is split
+   into **Essentials**, **Advanced** and **Tools**. In Advanced mode the extra
+   fields of each card or port group sit together in a purple dashed
+   **Advanced options** box, and advanced-only tabs and cards have a purple edge,
+   so you can always tell the basics from the extras.
 2. **Start from something.** Choose a model on the Switch tab, load an example,
    import your current config, or fill in the Excel template (see below).
 3. **Work through the tabs.** Click ports on the port map to make a port group or
@@ -29,6 +33,8 @@ format, ready to copy or download.
    on the switch as described in [Applying the config](#applying-the-config-on-a-switch).
 
 ![Port groups and the port map](docs/screenshots/02-ports.png)
+
+![Advanced mode: the extra fields in a purple Advanced options box](docs/screenshots/07-advanced-options.png)
 
 The port map colours each port by what it does: access, trunk, routed, LAG
 member, phones (or a voice VLAN), Wi-Fi access points and cameras ("Connected
