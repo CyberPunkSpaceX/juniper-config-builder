@@ -68,3 +68,24 @@ def sha512_crypt(password: str, salt: str | None = None, rounds: int = 5000) -> 
     out = "".join(_b64(c[x], c[y], c[z], 4) for x, y, z in _ORDER) + _b64(0, 0, c[63], 2)
     prefix = "$6$" if rounds == 5000 else f"$6$rounds={rounds}$"
     return f"{prefix}{s.decode()}${out}"
+
+
+# ---------------------------------------------------------------- Cisco type 8
+# IOS / IOS-XE "secret 8": PBKDF2-HMAC-SHA256, 20000 rounds, a 14-character
+# salt, the 32-byte result in base64 with Cisco's ./0-9A-Za-z alphabet.
+_STD64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+TYPE8 = re.compile(r"^\$8\$[./0-9A-Za-z]{14}\$[./0-9A-Za-z]{43}$")
+
+
+def cisco_type8(password: str, salt: str | None = None) -> str:
+    import base64
+    import hashlib
+    if salt is None:
+        salt = "".join(secrets.choice(_ITOA) for _ in range(14))
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("ascii"), 20000)
+    enc = base64.b64encode(dk).decode().rstrip("=").translate(str.maketrans(_STD64, _ITOA))
+    return f"$8${salt}${enc}"
+
+
+def is_type8(value: str) -> bool:
+    return bool(TYPE8.match(value or ""))

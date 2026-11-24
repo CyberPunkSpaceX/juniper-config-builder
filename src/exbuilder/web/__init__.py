@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, eos_models, fabric, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, eos_models, fabric, ios_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -47,12 +47,16 @@ def _project_from_request() -> dict:
     return data
 
 
+_VENDOR_MODELS = {"arista": eos_models, "cisco": ios_models}
+
+
 def _catalog(vendor: str) -> list[dict]:
-    return eos_models.catalog() if vendor == "arista" else models.catalog()
+    return (_VENDOR_MODELS.get(vendor) or models).catalog()
 
 
 def _aliases(vendor: str) -> dict:
-    return eos_models.ALIASES if vendor == "arista" else {}
+    mod = _VENDOR_MODELS.get(vendor)
+    return mod.ALIASES if mod else {}
 
 
 def _defaults(vendor: str) -> dict:
@@ -62,6 +66,8 @@ def _defaults(vendor: str) -> dict:
     if vendor == "arista":
         d["switch"]["members"] = [{"fpc": 0, "model": "720XP-48Y6", "serial": "", "role": "routing-engine"}]
         d["system"]["mgmt_interface"] = ""
+    elif vendor == "cisco":
+        d["switch"]["members"] = [{"fpc": 1, "model": "C9300-48P", "serial": "", "role": "routing-engine"}]
     return d
 
 

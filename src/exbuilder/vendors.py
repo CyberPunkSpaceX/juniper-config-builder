@@ -51,8 +51,11 @@ VENDORS: dict[str, Vendor] = {
                    "vlan_translation"}),
         ready=True),
     "cisco": Vendor(
-        "cisco", "Cisco", "IOS-XE", "Catalyst 9200, 9300, 9400, 9500",
-        _ALL),
+        "cisco", "Cisco", "IOS-XE", "Catalyst 9200, 9300, 9500 and Cat9kv lab",
+        # What the Cisco builder writes today; EVPN, policies, QoS and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
+                   "vlan_translation", "virtual_chassis"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron (ICX)", "ICX 7150, 7250, 7450, 7550, 7650, 7850",
         # No EVPN-VXLAN on ICX, no ICX image for EVE-NG, and no per-port VLAN translation.

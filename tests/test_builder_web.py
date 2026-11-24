@@ -131,7 +131,7 @@ def test_builder_per_vendor(admin):
     page = admin.get("/build/juniper").get_data(as_text=True)
     assert "Juniper builder" in page and '"vlan_translation"' in page
     assert "Last used" in admin.get("/").get_data(as_text=True)
-    resp = admin.get("/build/cisco")
+    resp = admin.get("/build/ruckus")
     assert resp.status_code == 302 and resp.location.endswith("/")
     assert "not ready yet" in admin.get("/").get_data(as_text=True)
     assert admin.get("/build/nokia").status_code == 404
