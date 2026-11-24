@@ -95,3 +95,25 @@ def test_import_and_excel_endpoints(admin):
     bad = admin.post("/import/excel", data={"file": (io.BytesIO(b"nope"), "x.xlsx")}, headers=hdr,
                      content_type="multipart/form-data")
     assert bad.status_code == 400
+
+
+def test_network_map_endpoints(admin):
+    import io
+    import zipfile
+    hdr = {"X-CSRF-Token": token(admin)}
+    ex = admin.get("/map/example").json["files"]
+    assert [f["name"] for f in ex][0] == "core-sw1" and len(ex) == 3
+    resp = admin.post("/map", json={"switches": ex}, headers=hdr)
+    assert resp.status_code == 200 and len(resp.json["switches"]) == 3 and len(resp.json["links"]) == 3
+    assert admin.post("/map", json={"switches": []}, headers=hdr).status_code == 400
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for f in ex:
+            z.writestr(f"configs/{f['name']}.conf", f["text"])
+        z.writestr("readme.md", "not a config")
+    up = admin.post("/map/unzip", data={"file": (io.BytesIO(buf.getvalue()), "c.zip")}, headers=hdr,
+                    content_type="multipart/form-data")
+    assert up.status_code == 200 and sorted(f["name"] for f in up.json["files"]) == ["acc-sw1", "acc-sw2", "core-sw1"]
+    bad = admin.post("/map/unzip", data={"file": (io.BytesIO(b"nope"), "c.zip")}, headers=hdr,
+                     content_type="multipart/form-data")
+    assert bad.status_code == 400

@@ -74,6 +74,28 @@ the curly-brace config), or drop a `.conf`/`.txt` file, then **Check config**.
 
 ![Import and check with recommendations](docs/screenshots/05-import-check.png)
 
+### Network map (several switches)
+
+The **Network map** tab (under Tools) reads the configs of many switches at once:
+drop several files or a .zip, or paste them one by one. It draws each switch and
+the links between them, and checks that both ends of every link agree.
+
+- **Links** come from `show lldp neighbors` output (paste it under a config or in
+  its LLDP box; most accurate), from routed ports in the same /30 or /31, and from
+  port descriptions that name another switch (`uplink to core-sw1 xe-0/1/0`). LAG
+  members on both ends fold into one thick LAG line.
+- **Checks on each link:** trunk VLANs allowed on one end only, VLANs that are not
+  defined on the switch, native VLAN, access VLAN, port mode, MTU, a LAG on one
+  end only, and disabled ports.
+- **Checks across switches:** duplicate host names and IP addresses, one VLAN ID
+  with different names, and which switch is the spanning-tree root (marked ★).
+- Drag switches to arrange them (the layout is remembered in your browser), click
+  a link or switch for details, **Save SVG/PNG** for documentation, and
+  **Open in builder** to edit one switch. **Load the example** shows three
+  switches with a few deliberate mistakes.
+
+![Network map with three switches](docs/screenshots/08-network-map.png)
+
 ### Excel workbook
 
 **Import… → Download the Excel template** gives a workbook with a Settings sheet
