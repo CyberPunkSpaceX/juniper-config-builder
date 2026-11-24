@@ -25,7 +25,7 @@ from flask import Flask, Response, abort, render_template, request
 
 from .. import __version__, fabric, importer, models, sshfetch, topology, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, clients
+from . import auth, clients, eve
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -56,6 +56,7 @@ def create_app() -> Flask:
             request.max_content_length = 25 * 1024 * 1024
     auth.init_app(app)
     clients.init_app(app)
+    eve.init_app(app)
     zones = _timezones()
 
     @app.after_request
@@ -70,7 +71,8 @@ def create_app() -> Flask:
         return render_template("builder.html", version=__version__, catalog=models.catalog(),
                                defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
                                fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
-                               ssh=clients.ssh_settings(), client=clients.current())
+                               ssh=clients.ssh_settings(), client=clients.current(),
+                               eve=eve.page_settings())
 
     @app.get("/healthz")
     def healthz():

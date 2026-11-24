@@ -112,6 +112,38 @@ set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro a
   </table></div>
 </section>
 
+<section class="panel" id="eve">
+  <h2>EVE-NG lab server</h2>
+  <p class="hint">With an EVE-NG server, the Network map tab can turn this client's switches into a lab of
+    vJunos-switch nodes, load the configs, and read them back after you test. Use an EVE-NG account made for the
+    builder, not your own. The password is stored encrypted.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="eve">
+    <div class="row" style="grid-template-columns: 2fr 1fr 1fr">
+      <div><label for="eu">Address</label><input id="eu" type="text" name="eve_url" value="{{ eve.url }}" placeholder="https://eve.example.lan" autocomplete="off"></div>
+      <div><label for="eus">Username</label><input id="eus" type="text" name="eve_user" value="{{ eve.user }}" autocomplete="off"></div>
+      <div><label for="ep">Password {% if eve.configured %}<span class="hint">(saved; leave empty to keep)</span>{% endif %}</label>
+        <input id="ep" type="password" name="eve_password" autocomplete="new-password"></div>
+    </div>
+    <div class="row" style="grid-template-columns: 1fr 2fr; margin-top: 10px">
+      <div><label for="ef">Lab folder in EVE-NG</label><input id="ef" type="text" name="eve_folder" value="{{ eve.folder }}"></div>
+      <div style="align-self: end"><label style="font-weight:400"><input type="checkbox" name="eve_insecure" value="1"{% if not eve.verify %} checked{% endif %}>
+        The server uses a self-signed certificate (don't check it)</label></div>
+    </div>
+    <p class="hint">The address must be inside the networks this server may reach ({{ ceiling|join(", ") }}).
+      Leave the address empty to turn EVE-NG off for this client.</p>
+    <button type="submit">Save EVE-NG settings</button>
+  </form>
+  {% if eve.configured %}
+  <form method="post" style="margin-top: 10px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="eve_test">
+    <button class="secondary" type="submit">Test the connection and list Juniper images</button>
+  </form>
+  {% endif %}
+</section>
+
 {% if server_admin %}
 <section class="panel">
   <h2>Rename or delete</h2>

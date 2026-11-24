@@ -140,6 +140,46 @@ set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519
 A server-wide key (`EXB_SSH_KEY_FILE` plus `EXB_SSH_KEY_USER`, from a Docker
 secret) still works for clients that have no key of their own.
 
+### Test in an EVE-NG lab (push and pull)
+
+With an [EVE-NG](https://www.eve-ng.net/) server you can try the configs on
+virtual switches before they go near production.
+
+**Set it up once per client** (client admin): **Clients → (client) → EVE-NG lab
+server**. Enter the EVE-NG address, an EVE-NG account made for the builder, and
+the folder for its labs (default `/exbuilder`), then **Test the connection**.
+It lists the Juniper images installed on EVE-NG. Labs use **vJunos-switch** (or
+vJunos-router) nodes. The address must be inside the networks the server may
+reach (`EXB_SSH_ALLOW`, or the private ranges), and the password is stored
+encrypted with the master key.
+
+**Push** (Network map tab → **Test in an EVE-NG lab**):
+
+1. Put the switches on the map and draw it, so the links between them are known
+   (LLDP output, /30-/31 addresses or port descriptions).
+2. Name the lab, pick the image and click **Build lab in EVE-NG** (client admins).
+3. Each switch becomes a node and each link between two switches a cable. The
+   real ports are mapped onto the lab node's ports, `ge-0/0/0` to `ge-0/0/9`, in
+   port order (the mapping is listed under the lab), and the configs are
+   rewritten to match: lines for ports not linked to another switch on the map,
+   `chassis` (except LAG device counts), Virtual Chassis, PoE, `version` and the
+   management port are left out. A lab login, `exb-lab`, with a random password
+   is added so the builder can read the config back.
+4. With **Start the lab and load the configs** ticked, the lab starts and each
+   config is typed into its node's console (`load set terminal`, then
+   `commit and-quit`). vJunos takes 5 to 10 minutes to boot; progress shows on
+   the page and you can leave it.
+
+**Pull**: **Pull configs** reads every node's config over its console, maps the
+ports back to the real names, leaves out the lab login, and offers **Put them
+on the map** or **Download**. From the map, **Open in builder** loads one into
+the tabs.
+
+Labs can be started, stopped and deleted from the same list. Every build and
+change is in the audit log (`audit: … EVE-NG lab …`).
+
+![Building a lab in EVE-NG from the network map](docs/screenshots/10-eve-ng-lab.png)
+
 ### Clients (several networks or customers)
 
 Every saved project and network map belongs to a **client**. Pick the client at
