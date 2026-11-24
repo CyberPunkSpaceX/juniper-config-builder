@@ -96,6 +96,32 @@ the links between them, and checks that both ends of every link agree.
 
 ![Network map with three switches](docs/screenshots/08-network-map.png)
 
+**Fetch from switches over SSH** (admins only, on the Network map tab): enter the
+switch addresses and a Junos account, and the builder runs
+`show configuration | display set` and `show lldp neighbors` on each one and adds
+them to the map. It is off until `EXB_SSH_ALLOW` lists the networks the switches
+are in. Safety rules, all on by default:
+
+- only admins can use it, and only addresses inside `EXB_SSH_ALLOW` are reached
+  (every address a name resolves to is checked);
+- only those two read-only commands run; nothing you type is sent as a command;
+- the password is used for that fetch and dropped, never saved or logged;
+  `EXB_SSH_KEY_FILE` (a Docker secret) plus `EXB_SSH_KEY_USER` let it sign in with
+  a key for a read-only account instead;
+- each switch's SSH host key is remembered on first contact
+  (`<data>/ssh_known_hosts`); a changed key stops the fetch until an admin clears
+  it under **Known switches**;
+- every attempt is logged (`audit: ssh fetch by …`, without secrets), and each
+  user gets at most `EXB_SSH_RATE` fetches a minute (default 10).
+
+A read-only Junos account for it:
+
+```
+set system login class exbuilder-ro permissions view-configuration
+set system login class exbuilder-ro permissions view
+set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
+```
+
 ### Excel workbook
 
 **Import… → Download the Excel template** gives a workbook with a Settings sheet

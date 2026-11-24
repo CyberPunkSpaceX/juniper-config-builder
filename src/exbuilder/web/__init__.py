@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, render_template, request
 
-from .. import __version__, fabric, importer, models, topology, xlsx
+from .. import __version__, fabric, importer, models, sshfetch, topology, xlsx
 from ..generator import DEFAULTS, build
 from . import auth
 
@@ -68,7 +68,8 @@ def create_app() -> Flask:
     def index():
         return render_template("builder.html", version=__version__, catalog=models.catalog(),
                                defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
-                               fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS)
+                               fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
+                               ssh=sshfetch.settings(), is_admin=auth.current_user()["role"] == "admin")
 
     @app.get("/healthz")
     def healthz():
@@ -133,6 +134,55 @@ def create_app() -> Flask:
         files = sorted((f for f in folder.iterdir() if f.name.endswith(".conf")), key=lambda f: f.name)
         files.sort(key=lambda f: not f.name.startswith("core"))
         return {"files": [{"name": f.name[:-5], "text": f.read_text()} for f in files]}
+
+    # -------------------------------------------- fetch configs over SSH
+    @app.post("/ssh/fetch")
+    @auth.admin_required
+    def ssh_fetch():
+        body = _project_from_request()
+        if not sshfetch.enabled():
+            return {"error": "SSH fetch is turned off. Set EXB_SSH_ALLOW to the networks your switches are in."}, 403
+        hosts = body.get("hosts") or []
+        if isinstance(hosts, str):
+            hosts = hosts.replace(",", "\n").split("\n")
+        hosts = [str(h).strip() for h in hosts if str(h).strip()]
+        if not hosts:
+            return {"error": "Enter at least one switch address."}, 400
+        if len(hosts) > sshfetch.MAX_HOSTS:
+            return {"error": f"At most {sshfetch.MAX_HOSTS} switches at a time."}, 400
+        use_key = bool(body.get("use_key"))
+        username = str(body.get("username") or "").strip()
+        password = str(body.get("password") or "")
+        if not use_key and not (username and password):
+            return {"error": "Enter the switch username and password, or use the stored key."}, 400
+        try:
+            port = int(body.get("port") or 22)
+            if not 1 <= port <= 65535:
+                raise ValueError
+        except (TypeError, ValueError):
+            return {"error": "SSH port must be 1-65535."}, 400
+        me = auth.current_user()["username"]
+        try:
+            sshfetch.check_rate(me)
+        except sshfetch.FetchError as exc:
+            return {"error": str(exc)}, 429
+        results = sshfetch.fetch(hosts, username, password, auth.data_dir(), me, port, use_key)
+        del password
+        return {"results": results}
+
+    @app.get("/ssh/known")
+    @auth.admin_required
+    def ssh_known():
+        return {"hosts": sshfetch.known_hosts(auth.data_dir())}
+
+    @app.post("/ssh/forget")
+    @auth.admin_required
+    def ssh_forget():
+        host = str(_project_from_request().get("host") or "")
+        if not sshfetch.forget_host(auth.data_dir(), host):
+            return {"error": "Not a known switch."}, 404
+        sshfetch.log.warning("audit: %r cleared the SSH host key of %s", auth.current_user()["username"], host)
+        return {"ok": True}
 
     @app.post("/map/unzip")
     def network_map_unzip():
