@@ -105,16 +105,29 @@ are in. Safety rules, all on by default:
 - only admins can use it, and only addresses inside `EXB_SSH_ALLOW` are reached
   (every address a name resolves to is checked);
 - only those two read-only commands run; nothing you type is sent as a command;
-- the password is used for that fetch and dropped, never saved or logged;
-  `EXB_SSH_KEY_FILE` (a Docker secret) plus `EXB_SSH_KEY_USER` let it sign in with
-  a key for a read-only account instead;
+- you choose how to sign in: **SSH key** (recommended) or **Password**. A
+  password is used for that fetch and dropped, never saved or logged, but it
+  still passes through the server, so the page warns about it and suggests a
+  read-only account with its own password;
 - each switch's SSH host key is remembered on first contact
   (`<data>/ssh_known_hosts`); a changed key stops the fetch until an admin clears
   it under **Known switches**;
 - every attempt is logged (`audit: ssh fetch by …`, without secrets), and each
   user gets at most `EXB_SSH_RATE` fetches a minute (default 10).
 
-A read-only Junos account for it:
+**SSH key sign-in** (the safer option): make a key pair, store the private key
+as a Docker secret and point the app at it. The **SSH key** choice is then
+available on the page, and nobody types a password.
+
+```
+ssh-keygen -t ed25519 -N "" -C exbuilder-ro -f exbuilder_ssh_key
+docker secret create exbuilder_ssh_key exbuilder_ssh_key && rm exbuilder_ssh_key
+# in the stack file: secrets: [exbuilder_ssh_key], plus
+#   EXB_SSH_KEY_FILE: /run/secrets/exbuilder_ssh_key
+#   EXB_SSH_KEY_USER: exbuilder-ro
+```
+
+A read-only Junos account for it (paste the `.pub` file's text as the key):
 
 ```
 set system login class exbuilder-ro permissions view-configuration
