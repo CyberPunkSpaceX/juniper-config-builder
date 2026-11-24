@@ -72,8 +72,19 @@ def _hier_to_set(text: str) -> list[str]:
     return [re.sub(r"\s+", " ", line).strip() for line in out]
 
 
+SHOW_NOISE = re.compile(
+    r"^\s*(?:(?:fpc|member)\d+:|-{3,}|\d+\s+\(FPC\s+\d+\).*|Member ID.*|(?:Preprovisioned |Auto-provisioned )?"
+    r"Virtual Chassis.*|Mstr.*|JUNOS .*|[A-Z][A-Za-z0-9 ()/_.-]*:\s.*[^;{]|\{(?:master|backup|linecard)(?::\d+)?\})\s*$")
+
+
+def _drop_show_output(text: str) -> str:
+    """Remove 'show version' / 'show virtual-chassis' output pasted around a config
+    (detect_models() reads it first)."""
+    return "\n".join(ln for ln in text.split("\n") if not SHOW_NOISE.match(ln))
+
+
 def to_set_lines(text: str) -> list[str]:
-    text = (text or "").replace("\r\n", "\n")
+    text = _drop_show_output((text or "").replace("\r\n", "\n"))
     # Drop comments (# lines) and the CLI prompt or banner noise.
     lines = [ln for ln in text.split("\n") if not ln.strip().startswith("#")]
     body = "\n".join(lines)
@@ -102,8 +113,12 @@ class _Iface(dict):
     pass
 
 
-def parse(text: str, model: str = "") -> dict:
-    """Return {project, unparsed, notes, stats}."""
+def parse(text: str, model: str = "", detected: dict | None = None) -> dict:
+    """Return {project, unparsed, notes, stats}.
+
+    ``model`` is the model the user picked for member 0; ``detected`` is what
+    detect_models() found ({fpc: {model, serial, role}}) for every member.
+    """
     lines = to_set_lines(text)
     p = copy.deepcopy(DEFAULTS)
     p["services"]["delete_first"] = False
@@ -676,6 +691,18 @@ def parse(text: str, model: str = "") -> dict:
     if members:
         p["switch"]["members"] = [dict(m, model=model or DEFAULTS["switch"]["members"][0]["model"])
                                   for _, m in sorted(members.items())]
+    for fpc, d in sorted((detected or {}).items()):
+        have = next((m for m in p["switch"]["members"] if m["fpc"] == fpc), None)
+        if have is None:
+            have = {"fpc": fpc, "model": "", "serial": "", "role": "line-card"}
+            p["switch"]["members"].append(have)
+        if d.get("model") and not (fpc == 0 and model):
+            have["model"] = d["model"]
+        if d.get("serial") and not have.get("serial"):
+            have["serial"] = d["serial"]
+        if d.get("role") and len(detected) > 1:
+            have["role"] = d["role"]
+    p["switch"]["members"].sort(key=lambda m: m["fpc"])
     if not p["system"]["timezone"]:
         p["system"]["timezone"] = "UTC"
     if not a["ssh_root_login"]:
@@ -977,9 +1004,9 @@ def harden(project: dict) -> tuple[dict, list[str]]:
     return p, done
 
 
-def check(text: str, model: str = "") -> dict:
+def check(text: str, model: str = "", detected: dict | None = None) -> dict:
     """Import, validate and recommend. JSON-friendly."""
-    res = parse(text, model)
+    res = parse(text, model, detected)
     project = res["project"]
     facts = project.pop("_facts", [])
     if not res["stats"]["lines"]:
@@ -996,14 +1023,95 @@ def check(text: str, model: str = "") -> dict:
             "score": max(0, score)}
 
 
-def guess_model(text: str) -> str:
-    """A best guess at the model from the port names, for the import form."""
+# ------------------------------------------------------- model detection
+SHOW_MODEL = re.compile(r"^\s*Model:\s*(\S+)", re.I | re.M)
+SHOW_BLOCK = re.compile(r"^\s*(?:fpc|member)(\d+):\s*$", re.I | re.M)
+VC_ROW = re.compile(r"^\s*(\d+)\s+\(FPC\s+\d+\)\s+(\w+)\s+(\S+)\s+(ex[\w-]+)\s+(\d+)\s+(\w+)", re.I | re.M)
+PORT_RE = re.compile(r"\b(ge|xe|mge|et)-(\d{1,2})/(\d)/(\d{1,2})\b")
+
+
+def model_name(raw: str) -> str:
+    """'ex4300-48p' -> 'EX4300-48P' when the builder knows that model, else ''."""
+    name = (raw or "").strip().upper()
+    return name if models.get(name) else ""
+
+
+def detect_models(text: str) -> dict:
+    """Models per Virtual Chassis member, best source first.
+
+    1. 'show virtual-chassis' output (model, serial and role of every member);
+    2. 'show version' output ('Model: ex4300-48p', one block per member);
+    3. a guess from the port names, PoE settings and management port.
+
+    Returns {"members": {fpc: {model, serial, role, how}}, "unknown": [models
+    the builder doesn't know]}. ``how`` says where the model came from.
+    """
+    text = text or ""
+    out: dict[int, dict] = {}
+    unknown: list[str] = []
+    for m in VC_ROW.finditer(text):
+        fpc, status, serial, raw, _prio, role = m.groups()
+        name = model_name(raw)
+        if not name:
+            unknown.append(raw)
+            continue
+        out[int(fpc)] = {"model": name, "serial": serial if serial != "-" else "",
+                         "role": "routing-engine" if role.lower().startswith(("master", "backup", "primary"))
+                         else "line-card", "how": "show virtual-chassis"}
+    if not out:
+        heads = list(SHOW_BLOCK.finditer(text))
+        blocks = ([(int(h.group(1)), text[h.end():heads[i + 1].start() if i + 1 < len(heads) else len(text)])
+                   for i, h in enumerate(heads)] if heads else [(0, text)])
+        for fpc, block in blocks:
+            found = SHOW_MODEL.search(block)
+            if not found:
+                continue
+            name = model_name(found.group(1))
+            if name:
+                out[fpc] = {"model": name, "serial": "", "role": "", "how": "show version"}
+            else:
+                unknown.append(found.group(1))
+    if not out:
+        for fpc, name in guess_members(text).items():
+            out[fpc] = {"model": name, "serial": "", "role": "", "how": "port names"}
+    return {"members": out, "unknown": sorted(set(unknown))}
+
+
+def guess_members(text: str) -> dict[int, str]:
+    """A guess per member from the port names it uses (the smallest model that has them all),
+    preferring PoE models when the config sets PoE, multigigabit models for mge ports, and
+    EX4100/EX4400 when the management port is em0."""
     lines = to_set_lines(text)
-    names = set(re.findall(r"\b((?:ge|xe|mge|et)-0/\d/\d{1,2})\b", " ".join(lines)))
-    if not names:
-        return ""
-    for m in models.MODELS.values():
-        own = {x["name"] for x in m.ports(0)}
-        if names <= own:
-            return m.name
-    return ""
+    joined = " ".join(lines)
+    per: dict[int, set] = {}
+    for kind, fpc, pic, port in PORT_RE.findall(joined):
+        per.setdefault(int(fpc), set()).add(f"{kind}-0/{pic}/{port}")
+    if not per:
+        return {}
+    poe = any(ln.startswith("poe interface") for ln in lines)
+    em0 = re.search(r"\binterfaces em0\b", joined) is not None
+    me0 = re.search(r"\binterfaces me0\b", joined) is not None
+    out = {}
+    for fpc, names in per.items():
+        best = None
+        for m in models.MODELS.values():
+            family = m.name.split("-")[0]
+            if em0 and family not in ("EX4100", "EX4400"):
+                continue
+            if me0 and family in ("EX4100", "EX4400"):
+                continue
+            own = {x["name"] for x in m.ports(0)}
+            if not names <= own:
+                continue
+            rank = (bool(m.poe) != poe, len(own), m.name)
+            if best is None or rank < best[0]:
+                best = (rank, m.name)
+        if best:
+            out[fpc] = best[1]
+    return out
+
+
+def guess_model(text: str) -> str:
+    """The model of member 0 from detect_models(), or ''."""
+    d = detect_models(text)["members"].get(0)
+    return d["model"] if d else ""

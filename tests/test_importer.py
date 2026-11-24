@@ -101,3 +101,59 @@ def test_voice_vlan_flag_applies_to_access_ports():
     proj["vlans"][2]["voice"] = True
     out = build(proj).set_text
     assert "set switch-options voip interface ge-0/0/0.0 vlan VOICE" in out
+
+
+# ------------------------------------------------------- model detection
+VC_OUTPUT = """
+Preprovisioned Virtual Chassis
+Virtual Chassis ID: 1234.abcd.0000
+                                                Mstr           Mixed Route Neighbor List
+Member ID  Status   Serial No    Model          prio  Role      Mode  Mode ID  Interface
+0 (FPC 0)  Prsnt    NW0217AF0001 ex4300-48p     129   Master*      N  VC   1  vcp-255/1/0
+1 (FPC 1)  Prsnt    NW0217AF0002 ex4300-48t     129   Backup       N  VC   0  vcp-255/1/0
+2 (FPC 2)  Prsnt    NW0217AF0003 ex4300-24p       0   Linecard     N  VC
+"""
+
+
+def test_detect_models_from_show_output():
+    from exbuilder.importer import detect_models
+    d = detect_models(VC_OUTPUT)["members"]
+    assert [(f, m["model"], m["role"], m["how"]) for f, m in sorted(d.items())] == [
+        (0, "EX4300-48P", "routing-engine", "show virtual-chassis"),
+        (1, "EX4300-48T", "routing-engine", "show virtual-chassis"),
+        (2, "EX4300-24P", "line-card", "show virtual-chassis")]
+    assert d[0]["serial"] == "NW0217AF0001"
+    v = detect_models("fpc0:\n-----\nHostname: sw1\nModel: ex2300-48mp\n\nfpc1:\n-----\nModel: ex2300-24p\n")
+    assert {f: m["model"] for f, m in v["members"].items()} == {0: "EX2300-48MP", 1: "EX2300-24P"}
+    assert detect_models("Model: ex4400-24t")["members"][0]["how"] == "show version"
+    assert detect_models("Model: ex9999-1")["unknown"] == ["ex9999-1"]
+
+
+def test_guess_models_from_ports():
+    from exbuilder.importer import detect_models
+    poe = detect_models("set interfaces ge-0/0/30 unit 0\nset poe interface all\nset interfaces me0 unit 0")
+    assert poe["members"][0] == {"model": "EX2300-48P", "serial": "", "role": "", "how": "port names"}
+    em0 = detect_models("set interfaces ge-0/0/30 unit 0\nset interfaces em0 unit 0")["members"][0]["model"]
+    assert em0.startswith(("EX4100", "EX4400"))
+    mge = detect_models("set interfaces mge-0/0/3 unit 0")["members"][0]["model"]
+    assert "MP" in mge
+
+
+def test_import_applies_detected_models():
+    from exbuilder.importer import check, detect_models
+    text = VC_OUTPUT + "\n{master:0}\nset system host-name vc1\nset interfaces ge-1/0/5 unit 0 family ethernet-switching\n"
+    res = check(text, "", detect_models(text)["members"])
+    members = res["project"]["switch"]["members"]
+    assert [(m["fpc"], m["model"], m["role"]) for m in members] == [
+        (0, "EX4300-48P", "routing-engine"), (1, "EX4300-48T", "routing-engine"), (2, "EX4300-24P", "line-card")]
+    assert res["stats"]["not_imported"] == 0  # the show output is not counted as config
+    # A model the user picks wins for member 0.
+    res = check(text, "EX4300-24T", detect_models(text)["members"])
+    assert res["project"]["switch"]["members"][0]["model"] == "EX4300-24T"
+
+
+def test_show_output_around_a_curly_config():
+    from exbuilder.importer import to_set_lines
+    text = ("Hostname: sw1\nModel: ex4300-48p\nJunos: 23.4R2\nJUNOS Base OS boot [23.4R2]\n{master:0}\n"
+            "system {\n    host-name sw1;\n    login {\n        message \"Note: authorized only\";\n    }\n}\n")
+    assert to_set_lines(text) == ["system host-name sw1", 'system login message "Note: authorized only"']

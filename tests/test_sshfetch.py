@@ -34,7 +34,9 @@ class FakeJunos(paramiko.ServerInterface):
     def check_channel_exec_request(self, channel, command):
         command = command.decode()
         self.log.append(command)
-        out = CONFIG if command.startswith("show configuration") else LLDP if "lldp" in command else "error: unknown\n"
+        out = (CONFIG if command.startswith("show configuration") else LLDP if "lldp" in command
+               else "Hostname: lab-sw1\nModel: ex4300-48p\nJunos: 23.4R2\n" if "version" in command
+               else "error: virtual-chassis is not available\n")
 
         def answer():  # after the exec request has been acknowledged
             channel.sendall(out.encode())
@@ -131,6 +133,9 @@ def test_key_login(switch, tmp_path):
 def test_fetch_remembers_and_checks_the_host_key(switch, tmp_path):
     r = sshfetch.fetch_one("127.0.0.1", "netops", "Secret-123", tmp_path, port=switch["port"], nets=NETS)
     assert r["ok"] and r["new_key"] and "host-name lab-sw1" in r["text"] and "core-sw1" in r["text"]
+    assert "Model: ex4300-48p" in r["text"] and "error:" not in r["text"]
+    from exbuilder import importer
+    assert importer.detect_models(r["text"])["members"][0]["model"] == "EX4300-48P"
     assert switch["commands"] == list(sshfetch.COMMANDS)
     (known,) = sshfetch.known_hosts(tmp_path)
     assert known["host"] == f"[127.0.0.1]:{switch['port']}" and known["fingerprint"] == r["fingerprint"]

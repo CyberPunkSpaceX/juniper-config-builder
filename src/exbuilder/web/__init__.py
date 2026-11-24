@@ -108,13 +108,18 @@ def create_app() -> Flask:
         text = str(body.get("text") or "")
         if len(text) > 1_500_000:
             return {"error": "That config is too large."}, 400
-        model = str(body.get("model") or "") or importer.guess_model(text)
-        if model and not models.get(model):
-            model = ""
-        result = importer.check(text, model)
+        chosen = str(body.get("model") or "")
+        if chosen and not models.get(chosen):
+            chosen = ""
+        detected = importer.detect_models(text)
+        result = importer.check(text, chosen, detected["members"])
         if "error" in result:
             return result, 400
-        result["model"] = model
+        first = detected["members"].get(0, {})
+        result["model"] = chosen or first.get("model", "")
+        result["model_how"] = "chosen" if chosen else first.get("how", "")
+        result["detected"] = [{"fpc": f, **d} for f, d in sorted(detected["members"].items())]
+        result["unknown_models"] = detected["unknown"]
         return result
 
     # ------------------------------------------------------ network map
