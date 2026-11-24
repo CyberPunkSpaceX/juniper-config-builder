@@ -1348,7 +1348,15 @@ function updateTabs() {
   }).join("");
   document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
 }
-function showTab(t) {
+// Each tab gets its own browser history entry (#Ports, #Network%20map, ...),
+// so Back and Forward move between tabs instead of leaving the page.
+function tabFromHash() {
+  let t = ""; try { t = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
+  return TAB_SECTION[t] && (isAdvanced() || !ADVANCED_TABS.includes(t)) ? t : null;
+}
+function tabUrl(t) { return location.pathname + location.search + "#" + encodeURIComponent(t); }
+function showTab(t, fromHistory) {
+  if (!fromHistory && t !== activeTab) history.pushState({tab: t}, "", tabUrl(t));
   activeTab = t; updateTabs(); renderFabric();
   if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
@@ -2571,6 +2579,10 @@ if (document.getElementById("bk-list")) {
     };
   }
 }
+window.addEventListener("popstate", () => {
+  const t = tabFromHash() || "Switch";
+  if (t !== activeTab) showTab(t, true);
+});
 (function start() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
@@ -2578,7 +2590,9 @@ if (document.getElementById("bk-list")) {
   boxAdvanced();
   setLevel(LEVEL, true);
   load(draft || {});
+  activeTab = tabFromHash() || activeTab;
   if (!isAdvanced() && ADVANCED_TABS.includes(activeTab)) activeTab = "Switch";
+  history.replaceState({tab: activeTab}, "", tabUrl(activeTab));
   updateTabs();
   if (activeTab === "Projects") refreshProjects();
   if (activeTab === "Backups & compare") openBackups();
