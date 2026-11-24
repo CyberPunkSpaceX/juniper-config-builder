@@ -1,0 +1,22 @@
+{
+  "vendor": "arista",
+  "name": "Office access switch (Arista)",
+  "switch": {"members": [{"fpc": 0, "model": "720XP-48Y6"}]},
+  "system": {"hostname": "ar-office-01", "domain": "example.lan", "timezone": "America/Edmonton",
+             "name_servers": "10.10.0.10, 1.1.1.1", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}],
+             "banner": "Authorized access only.", "mgmt_address": "192.168.100.21/24", "mgmt_gateway": "192.168.100.1",
+             "mgmt_vrf": true},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "snmp": {"location": "Office", "communities": [{"name": "s3cret-ro", "access": "read-only", "clients": "10.10.0.50"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.2/24"},
+            {"name": "USERS", "id": "20", "irb": "10.10.20.1/24", "dhcp_relay": true},
+            {"name": "VOICE", "id": "30", "voice": true},
+            {"name": "WIFI", "id": "40"},
+            {"name": "CAMERAS", "id": "50"}],
+  "ports": [{"name": "DESKS", "ports": "Ethernet1-40", "mode": "access", "vlan": "USERS", "description": "Desk ports", "edge": true, "mac_limit": "3"},
+            {"name": "APS", "ports": "Et41-46", "mode": "trunk", "vlans": "WIFI, USERS", "native": "MGMT", "description": "Wi-Fi access points", "poe": "high", "edge": false},
+            {"name": "CARRIER", "ports": "Ethernet47", "mode": "trunk", "vlans": "MGMT, CAMERAS", "vlan_translate": "1050>50", "description": "Carrier hand-off, cameras on tag 1050", "edge": false}],
+  "lags": [{"name": "Po1", "members": "Ethernet49-50", "lacp": "active", "lacp_fast": true, "mode": "trunk", "vlans": "MGMT, USERS, VOICE, WIFI, CAMERAS", "description": "To core"}],
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1"}], "dhcp_relay_servers": "10.10.0.10"}
+}

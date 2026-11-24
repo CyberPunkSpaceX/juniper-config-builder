@@ -17,13 +17,15 @@ Settings (environment variables):
 
 from __future__ import annotations
 
+import copy
 import json
 import zoneinfo
+from pathlib import Path
 from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, fabric, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, eos_models, fabric, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -43,6 +45,38 @@ def _project_from_request() -> dict:
     if not isinstance(data, dict):
         abort(400, "Send the project as a JSON object.")
     return data
+
+
+def _catalog(vendor: str) -> list[dict]:
+    return eos_models.catalog() if vendor == "arista" else models.catalog()
+
+
+def _aliases(vendor: str) -> dict:
+    return eos_models.ALIASES if vendor == "arista" else {}
+
+
+def _defaults(vendor: str) -> dict:
+    """The blank project for a vendor's builder."""
+    d = copy.deepcopy(DEFAULTS)
+    d["vendor"] = vendor
+    if vendor == "arista":
+        d["switch"]["members"] = [{"fpc": 0, "model": "720XP-48Y6", "serial": "", "role": "routing-engine"}]
+        d["system"]["mgmt_interface"] = ""
+    return d
+
+
+_EXAMPLES = Path(__file__).resolve().parent.parent / "vendor_examples"
+
+
+def _examples(vendor: str) -> dict:
+    """Example projects for vendors other than Juniper (Juniper's are in the page)."""
+    out = {}
+    for f in sorted(_EXAMPLES.glob(f"{vendor}-*.json")):
+        try:
+            out[f.stem[len(vendor) + 1:]] = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 def create_app() -> Flask:
@@ -87,8 +121,8 @@ def create_app() -> Flask:
             flash(f"The {v.name} builder is not ready yet. It is coming in a later update.", "info")
             return redirect(url_for("index"))
         session["vendor"] = v.key
-        return render_template("builder.html", vendor=v.to_dict(), version=__version__, catalog=models.catalog(),
-                               defaults=DEFAULTS, timezones=zones, fabric_templates=fabric.TEMPLATES,
+        return render_template("builder.html", vendor=v.to_dict(), version=__version__, catalog=_catalog(v.key),
+                               defaults=_defaults(v.key), port_aliases=_aliases(v.key), examples=_examples(v.key), timezones=zones, fabric_templates=fabric.TEMPLATES,
                                fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
                                ssh=clients.ssh_settings(), client=clients.current(),
                                eve=eve.page_settings())

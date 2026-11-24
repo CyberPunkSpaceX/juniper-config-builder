@@ -131,7 +131,7 @@ def test_builder_per_vendor(admin):
     page = admin.get("/build/juniper").get_data(as_text=True)
     assert "Juniper builder" in page and '"vlan_translation"' in page
     assert "Last used" in admin.get("/").get_data(as_text=True)
-    resp = admin.get("/build/arista")
+    resp = admin.get("/build/cisco")
     assert resp.status_code == 302 and resp.location.endswith("/")
     assert "not ready yet" in admin.get("/").get_data(as_text=True)
     assert admin.get("/build/nokia").status_code == 404
@@ -141,3 +141,12 @@ def test_builder_per_vendor(admin):
 def test_vendor_pages_need_login(app):
     c = app.test_client()
     assert "/login" in c.get("/build/juniper").location
+
+
+def test_arista_builder_page_and_generate(admin):
+    page = admin.get("/build/arista").get_data(as_text=True)
+    assert "Arista builder" in page and "720XP-48Y6" in page and '"name": "EX2300-24T"' not in page
+    assert '"office"' in page  # the Arista example is offered
+    resp = admin.post("/generate", json={"vendor": "arista", "system": {"hostname": "ar9"}},
+                      headers={"X-CSRF-Token": token(admin)})
+    assert resp.status_code == 200 and "hostname ar9" in resp.json["set"]

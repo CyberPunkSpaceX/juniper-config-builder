@@ -44,8 +44,12 @@ VENDORS: dict[str, Vendor] = {
         "juniper", "Juniper", "Junos (ELS)", "EX2300, EX3400, EX4100, EX4300, EX4400",
         _ALL, ready=True),
     "arista": Vendor(
-        "arista", "Arista", "EOS", "7010, 720, 722, 7050 and other EOS switches",
-        _ALL),  # PoE only on models that have it (720XP); the model catalog says which ports
+        "arista", "Arista", "EOS", "720XP, 722XPM, 7010, 7050X3, vEOS and cEOS lab",
+        # What the Arista builder writes today. EVPN-VXLAN, policies, QoS, SSH fetch, import,
+        # the network map and EVE-NG labs come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
+                   "vlan_translation"}),
+        ready=True),
     "cisco": Vendor(
         "cisco", "Cisco", "IOS-XE", "Catalyst 9200, 9300, 9400, 9500",
         _ALL),

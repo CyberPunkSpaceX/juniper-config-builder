@@ -11,6 +11,7 @@ main { max-width: 1600px; margin: 0 auto; padding: 18px 16px 48px; }
 h1 { font-size: 20px; margin: 0; }
 h1 .vendor-os { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 6px; }
 .vendor-change { font-size: 13px; color: var(--accent); text-decoration: none; }
+.vhide { display: none !important; }
 h2 { font-size: 16px; margin: 0 0 10px; }
 h3 { font-size: 14px; margin: 16px 0 8px; }
 a { color: var(--accent); }
@@ -222,13 +223,13 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <a class="vendor-change" href="{{ url_for('index') }}" title="Pick another switch vendor">Change vendor</a>
   <span class="levelbar" title="Basic shows what a normal switch needs. Advanced shows everything."><button type="button" data-level="basic">Basic</button><button type="button" data-level="advanced">Advanced</button></span>
   <span class="grow"></span>
-  <button class="secondary" id="btn-import" type="button" title="Import an existing config or an Excel workbook">Import…</button>
+  <button class="secondary" id="btn-import" data-feature="import" type="button" title="Import an existing config or an Excel workbook">Import…</button>
   <button class="secondary" id="btn-new" type="button">New</button>
   <select id="example-pick" style="width:auto"><option value="">Load an example…</option><option value="office">Office access switch</option><option value="evpn">EVPN-VXLAN leaf</option></select>
   <button class="secondary" id="btn-open" type="button">Open JSON…</button>
   <input type="file" id="file-open" accept=".json,application/json" class="hide">
   <button class="secondary" id="btn-save-file" type="button" title="Download the project as a JSON file">Save JSON</button>
-  <button class="secondary" id="btn-excel" type="button" title="Download this project as an Excel workbook you can edit and import again">Save as Excel</button>
+  <button class="secondary" id="btn-excel" data-feature="import" type="button" title="Download this project as an Excel workbook you can edit and import again">Save as Excel</button>
   <button id="btn-save-server" type="button" title="Save this project in the client picked at the top of the page">Save to {{ client.name if client else "client" }}</button>
 </div>
 
@@ -245,12 +246,13 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div class="field wide"><label>Project name</label><input type="text" data-bind="name" placeholder="e.g. Office floor 2 access switch"></div>
       </div>
       <h3>Switches</h3>
-      <p class="hint">One row for a standalone switch. Add rows to build a Virtual Chassis: each member gets its own number (FPC), so its ports are named ge-<b>1</b>/0/0 and so on.</p>
+      <p class="hint" data-only="juniper">One row for a standalone switch. Add rows to build a Virtual Chassis: each member gets its own number (FPC), so its ports are named ge-<b>1</b>/0/0 and so on.</p>
+      <p class="hint" data-only="arista">Pick the switch model. Arista switches don't stack: a pair that shares LAGs (MLAG) is two projects, one per switch. Ports are named <code>Ethernet1</code>, and QSFP ports <code>Ethernet49/1</code>.</p>
       <div class="rows compact" data-table="switch.members"></div>
-      <button class="secondary small" type="button" data-add="switch.members">Add Virtual Chassis member</button>
+      <button class="secondary small" type="button" data-add="switch.members" data-feature="virtual_chassis">Add Virtual Chassis member</button>
       <div class="grid adv" style="margin-top:12px">
-        <label class="check"><input type="checkbox" data-bind="switch.vc_preprovisioned"> Pre-provisioned Virtual Chassis (needs serial numbers)</label>
-        <label class="check"><input type="checkbox" data-bind="switch.vc_no_split_detection"> No split detection (recommended for 2 members)</label>
+        <label class="check" data-feature="virtual_chassis"><input type="checkbox" data-bind="switch.vc_preprovisioned"> Pre-provisioned Virtual Chassis (needs serial numbers)</label>
+        <label class="check" data-feature="virtual_chassis"><input type="checkbox" data-bind="switch.vc_no_split_detection"> No split detection (recommended for 2 members)</label>
         <div class="field wide"><label>Extra ports not in the model list (optional)</label><input type="text" data-bind="switch.custom_ports" placeholder="e.g. ge-0/1/0-1 for 1G optics in the uplinks"></div>
       </div>
       <p class="note" id="model-notes"></p>
@@ -299,18 +301,18 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <button class="secondary small" type="button" data-add="system.ntp_servers">Add NTP server</button>
       <div class="grid adv" style="margin-top:10px">
         <div class="field"><label>NTP source address (optional)</label><input type="text" data-bind="system.ntp_source" placeholder="10.10.10.2"></div>
-        <label class="check"><input type="checkbox" data-bind="system.auto_snapshot"> Auto-snapshot (backup boot partition)</label>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="system.auto_snapshot"> Auto-snapshot (backup boot partition)</label>
       </div>
     </div>
     <div class="panel">
       <h2>Management port</h2>
-      <p class="hint">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400). Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
       <div class="grid">
         <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
         <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>
         <div class="field"><label>Gateway</label><input type="text" data-bind="system.mgmt_gateway" placeholder="192.168.1.1"></div>
-        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (mgmt_junos)</label>
-        <label class="adv check"><input type="checkbox" data-bind="system.ignore_mgmt_alarm"> Ignore the alarm when the port is unplugged</label>
+        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (<span data-only="juniper">mgmt_junos</span><span data-only="arista">MGMT</span>)</label>
+        <label class="adv check" data-only="juniper"><input type="checkbox" data-bind="system.ignore_mgmt_alarm"> Ignore the alarm when the port is unplugged</label>
       </div>
     </div>
     <div class="panel">
@@ -323,26 +325,26 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Users">
     <div class="panel">
       <h2>Root account</h2>
-      <p class="hint">Junos won't commit without a root password. Passwords are turned into SHA-512 hashes as soon as the config is generated, so plain text is never saved in a project.</p>
+      <p class="hint"><span data-only="juniper">Junos won't commit without a root password.</span><span data-only="arista">Optional on Arista: the root account stays locked without one.</span> Passwords are turned into SHA-512 hashes as soon as the config is generated, so plain text is never saved in a project.</p>
       <div class="grid">
-        <div class="field"><label>Root password *</label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
-        <div class="adv field wide"><label>Root SSH public key (optional)</label><textarea data-bind="access.root_ssh_key" placeholder="ssh-ed25519 AAAA... you@laptop"></textarea></div>
+        <div class="field"><label>Root password<span data-only="juniper"> *</span></label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
+        <div class="adv field wide" data-only="juniper"><label>Root SSH public key (optional)</label><textarea data-bind="access.root_ssh_key" placeholder="ssh-ed25519 AAAA... you@laptop"></textarea></div>
       </div>
     </div>
     <div class="panel">
       <h2>Local users</h2>
-      <p class="hint">super-user = full access, operator = view and clear, read-only = view only.</p>
+      <p class="hint"><span data-only="juniper">super-user = full access, operator = view and clear, read-only = view only.</span><span data-only="arista">super-user = network-admin (privilege 15), operator and read-only = network-operator (view only).</span></p>
       <div class="rows" data-table="access.users"></div>
       <button class="secondary small" type="button" data-add="access.users">Add user</button>
     </div>
     <div class="panel">
       <h2>Remote access</h2>
       <div class="grid">
-        <div class="field"><label>SSH root login</label><select data-bind="access.ssh_root_login"><option value="deny">deny</option><option value="deny-password">keys only</option><option value="allow">allow</option></select></div>
+        <div class="field" data-only="juniper"><label>SSH root login</label><select data-bind="access.ssh_root_login"><option value="deny">deny</option><option value="deny-password">keys only</option><option value="allow">allow</option></select></div>
         <div class="adv field"><label>SSH connection limit</label><input type="text" data-bind="access.ssh_connection_limit"></div>
-        <div class="adv field"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
+        <div class="adv field" data-only="juniper"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
         <label class="adv check"><input type="checkbox" data-bind="access.netconf"> NETCONF over SSH (Ansible, automation)</label>
-        <label class="adv check"><input type="checkbox" data-bind="access.web"> J-Web (HTTPS)</label>
+        <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span></label>
         <label class="check"><input type="checkbox" data-bind="access.retry_options"> Slow down password guessing</label>
       </div>
     </div>
@@ -384,7 +386,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="VLANs">
     <div class="panel">
       <h2>VLANs</h2>
-      <p class="hint">Give a VLAN an IRB address to route it (layer 3). Several addresses can be comma-separated, including IPv6. Tick <b>Voice VLAN</b> on your phone VLAN to give it to every access port that has no voice VLAN of its own: phones learn it through LLDP-MED and their calls get priority. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
+      <p class="hint">Give a VLAN an <span data-only="juniper">IRB</span><span data-only="arista">SVI (interface Vlan)</span> address to route it (layer 3). Several addresses can be comma-separated, including IPv6. Tick <b>Voice VLAN</b> on your phone VLAN to give it to every access port that has no voice VLAN of its own: phones learn it through LLDP-MED and their calls get priority. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
       <div class="rows" data-table="vlans"></div>
       <button class="secondary small" type="button" data-add="vlans">Add VLAN</button>
     </div>
@@ -394,7 +396,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Ports">
     <div class="panel">
       <h2>Port groups</h2>
-      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code>ge-0/0/0-23, ge-0/0/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
+      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code data-only="juniper">ge-0/0/0-23, ge-0/0/30</code><code data-only="arista">Ethernet1-24, Ethernet30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
       <div class="rows" data-table="ports"></div>
       <button class="secondary small" type="button" data-add="ports">Add port group</button>
     </div>
@@ -403,7 +405,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <!-- ===================================================== LAGS -->
   <section class="section" data-tab="LAGs">
     <div class="panel">
-      <h2>Link aggregation (LAG / ae)</h2>
+      <h2>Link aggregation (LAG / <span data-only="juniper">ae</span><span data-only="arista">Port-Channel</span>)</h2>
       <p class="hint">Bundle ports into one logical link with LACP. The other end must be set up the same way. Usually a trunk to a core switch, firewall or server.</p>
       <div class="rows" data-table="lags"></div>
       <button class="secondary small" type="button" data-add="lags">Add LAG</button>
@@ -414,7 +416,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Routing">
     <div class="panel adv">
       <h2>Routing identity</h2>
-      <p class="hint">The loopback (lo0) is a stable address for OSPF, BGP and EVPN-VXLAN. The router ID defaults to the loopback.</p>
+      <p class="hint">The loopback (<span data-only="juniper">lo0</span><span data-only="arista">Loopback0</span>) is a stable address for OSPF, BGP and EVPN-VXLAN. The router ID defaults to the loopback.</p>
       <div class="grid">
         <div class="field"><label>Loopback address</label><input type="text" data-bind="routing.loopback" placeholder="10.255.0.11/32"></div>
         <div class="field"><label>Router ID</label><input type="text" data-bind="routing.router_id" placeholder="(loopback)"></div>
@@ -441,11 +443,11 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="OSPF & BGP">
     <div class="panel">
       <h2>OSPF</h2>
-      <p class="hint">List the interfaces that run OSPF in each area, like <code>xe-0/2/0, irb.20, lo0</code> (unit .0 is added when you leave it out). <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
+      <p class="hint">List the interfaces that run OSPF in each area, like <code data-only="juniper">xe-0/2/0, irb.20, lo0</code><code data-only="arista">Ethernet49/1, Vlan20, Loopback0</code><span data-only="juniper"> (unit .0 is added when you leave it out)</span>. <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="routing.ospf.enabled"> Turn on OSPF</label>
         <div class="field"><label>Reference bandwidth</label><input type="text" data-bind="routing.ospf.reference_bandwidth" placeholder="100g"></div>
-        <div class="field"><label>Export policies</label><input type="text" data-bind="routing.ospf.export" placeholder="e.g. STATIC-TO-OSPF"></div>
+        <div class="field" data-feature="policies"><label>Export policies</label><input type="text" data-bind="routing.ospf.export" placeholder="e.g. STATIC-TO-OSPF"></div>
       </div>
       <h3>Areas</h3>
       <div class="rows" data-table="routing.ospf.areas"></div>
@@ -615,25 +617,25 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <h2>Switching services</h2>
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="services.lldp"> LLDP (see neighbours)</label>
-        <label class="check"><input type="checkbox" data-bind="services.lldp_med"> LLDP-MED (IP phones)</label>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="services.lldp_med"> LLDP-MED (IP phones)</label>
         <div class="field"><label>Spanning tree</label><select data-bind="services.stp"><option value="rstp">RSTP</option><option value="none">Off</option></select></div>
         <div class="field"><label>Bridge priority</label><select data-bind="services.bridge_priority"><option value="">(default 32k)</option><option>0</option><option>4k</option><option>8k</option><option>12k</option><option>16k</option><option>20k</option><option>24k</option><option>28k</option><option>32k</option><option>36k</option><option>40k</option><option>48k</option><option>56k</option><option>60k</option></select></div>
         <label class="check"><input type="checkbox" data-bind="services.bpdu_block_on_edge"> Block BPDUs on edge ports</label>
         <label class="check"><input type="checkbox" data-bind="services.storm_control"> Storm control</label>
         <div class="adv field"><label>Storm control limit (% of bandwidth)</label><input type="text" data-bind="services.storm_percent"></div>
         <div class="adv field"><label>Storm control on</label><select data-bind="services.storm_scope"><option value="access">access ports</option><option value="all">access and trunk ports</option></select></div>
-        <label class="adv check"><input type="checkbox" data-bind="services.igmp_snooping"> IGMP snooping on all VLANs</label>
+        <label class="adv check" data-only="juniper"><input type="checkbox" data-bind="services.igmp_snooping"> IGMP snooping on all VLANs</label>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" data-feature="poe">
       <h2>PoE (power over Ethernet)</h2>
       <p class="hint">Per-port priority, maximum power or PoE off are on each port group (Ports tab). When the switch runs short of power, low-priority ports lose power first.</p>
       <div class="grid">
-        <label class="check"><input type="checkbox" data-bind="services.poe_all"> PoE on all ports (PoE models)</label>
-        <label class="check"><input type="checkbox" data-bind="services.poe_perpetual"> Perpetual PoE: keep power on while the switch reboots</label>
-        <label class="check"><input type="checkbox" data-bind="services.poe_fast"> Fast PoE: power up straight after power-on, before Junos boots</label>
-        <div class="field adv"><label>Power management</label><select data-bind="services.poe_management"><option value="">(default)</option><option value="class">class: reserve what the device class asks for</option><option value="static">static: reserve the configured maximum</option></select></div>
-        <div class="field adv"><label>Guard band (W kept in reserve)</label><input type="text" data-bind="services.poe_guard_band" placeholder="0-19"></div>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="services.poe_all"> PoE on all ports (PoE models)</label>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="services.poe_perpetual"> Perpetual PoE: keep power on while the switch reboots</label>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="services.poe_fast"> Fast PoE: power up straight after power-on, before Junos boots</label>
+        <div class="field adv" data-only="juniper"><label>Power management</label><select data-bind="services.poe_management"><option value="">(default)</option><option value="class">class: reserve what the device class asks for</option><option value="static">static: reserve the configured maximum</option></select></div>
+        <div class="field adv" data-only="juniper"><label>Guard band (W kept in reserve)</label><input type="text" data-bind="services.poe_guard_band" placeholder="0-19"></div>
       </div>
     </div>
     <div class="panel">
@@ -644,18 +646,18 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="rows compact" data-table="security.radius_servers"></div>
       <button class="secondary small" type="button" data-add="security.radius_servers">Add RADIUS server</button>
       <div class="grid" style="margin-top:10px">
-        <div class="field"><label>When RADIUS is down</label><select data-bind="security.server_fail"><option value="">block (default)</option><option value="permit">let everyone in</option><option value="use-cache">use the last answer</option><option value="vlan">put devices in a VLAN</option><option value="deny">deny</option></select></div>
-        <div class="field"><label>VLAN when RADIUS is down</label><input type="text" data-bind="security.server_fail_vlan" placeholder="VLAN name"></div>
-        <div class="field"><label>Guest VLAN (no 802.1X)</label><input type="text" data-bind="security.guest_vlan" placeholder="VLAN name"></div>
-        <div class="field adv"><label>Re-authenticate every (s)</label><input type="text" data-bind="security.reauth" placeholder="3600"></div>
-        <div class="field adv"><label>RADIUS source address</label><input type="text" data-bind="security.radius_source" placeholder="10.0.10.2"></div>
+        <div class="field" data-only="juniper"><label>When RADIUS is down</label><select data-bind="security.server_fail"><option value="">block (default)</option><option value="permit">let everyone in</option><option value="use-cache">use the last answer</option><option value="vlan">put devices in a VLAN</option><option value="deny">deny</option></select></div>
+        <div class="field" data-only="juniper"><label>VLAN when RADIUS is down</label><input type="text" data-bind="security.server_fail_vlan" placeholder="VLAN name"></div>
+        <div class="field" data-only="juniper"><label>Guest VLAN (no 802.1X)</label><input type="text" data-bind="security.guest_vlan" placeholder="VLAN name"></div>
+        <div class="field adv" data-only="juniper"><label>Re-authenticate every (s)</label><input type="text" data-bind="security.reauth" placeholder="3600"></div>
+        <div class="field adv" data-only="juniper"><label>RADIUS source address</label><input type="text" data-bind="security.radius_source" placeholder="10.0.10.2"></div>
       </div>
-      <h3>Auto-recovery</h3>
-      <div class="grid">
+      <h3 data-only="juniper">Auto-recovery</h3>
+      <div class="grid" data-only="juniper">
         <div class="field"><label>Bring BPDU-blocked ports back after (s)</label><input type="text" data-bind="security.recovery_timeout" placeholder="300 (empty = stay down)"></div>
       </div>
     </div>
-    <div class="panel">
+    <div class="panel" data-feature="qos">
       <h2>QoS for voice and video</h2>
       <p class="hint">When a link is busy, QoS lets calls and video go first so they don't break up. Phones mark voice as <b>EF</b> (DSCP 46) and video as <b>AF41</b> (DSCP 34). The switch puts voice in a strict-priority queue, gives video its own share, keeps some bandwidth for network control, and gives the rest to everything else. Pair it with a voice VLAN on your phone ports and LLDP-MED.</p>
       <div class="grid">
@@ -673,9 +675,9 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="services.disable_unused"> Disable unused ports</label>
         <label class="adv check"><input type="checkbox" data-bind="services.use_ranges"> Use interface ranges (shorter config)</label>
-        <label class="check"><input type="checkbox" data-bind="services.delete_first"> Start with <code>delete interfaces</code> / <code>delete vlans</code></label>
+        <label class="check" data-only="juniper"><input type="checkbox" data-bind="services.delete_first"> Start with <code>delete interfaces</code> / <code>delete vlans</code></label>
       </div>
-      <p class="hint">"Start with delete" removes the factory port settings so they can't clash with yours. Keep it on for a new switch. Paste the set commands in <code>configure</code> mode, then <code>show | compare</code>, <code>commit check</code> and <code>commit confirmed 5</code>.</p>
+      <p class="hint" data-only="juniper">"Start with delete" removes the factory port settings so they can't clash with yours. Keep it on for a new switch. Paste the set commands in <code>configure</code> mode, then <code>show | compare</code>, <code>commit check</code> and <code>commit confirmed 5</code>.</p>
     </div>
   </section>
 
@@ -910,8 +912,8 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <aside class="out">
     <div class="panel">
       <div class="outtabs">
-        <button class="secondary small sel" type="button" data-fmt="set">set commands</button>
-        <button class="secondary small" type="button" data-fmt="hierarchy">hierarchical</button>
+        <button class="secondary small sel" type="button" data-fmt="set"><span data-only="juniper">set commands</span><span data-not="juniper">config</span></button>
+        <button class="secondary small" type="button" data-fmt="hierarchy" data-only="juniper">hierarchical</button>
         <span class="grow" style="flex:1"></span>
         <button class="small" type="button" id="btn-copy">Copy</button>
         <button class="secondary small" type="button" id="btn-download">Download</button>
@@ -938,10 +940,31 @@ const _fetch = window.fetch.bind(window);
 window.fetch = (u, o) => _fetch(rootUrl(u), o);
 const DEFAULTS = {{ defaults|tojson }};
 const VENDOR = {{ vendor|tojson }};  // the vendor this builder page writes configs for
+const PORT_ALIASES = {{ port_aliases|tojson }};  // short port words -> canonical (non-Juniper vendors)
+const VENDOR_EXAMPLES = {{ examples|tojson }};
+const JUNOS = VENDOR.key === "juniper";
+const hasFeature = f => VENDOR.features.includes(f);
+// Placeholders and names that depend on the vendor's port naming.
+const PH = JUNOS ? {ports: "ge-0/0/0-23", members: "xe-0/1/0-1", lag: "ae0", ospf: "xe-0/2/0, irb.20, lo0", passive: "irb.20, lo0",
+                    p2p: "xe-0/2/0", custom: "e.g. ge-0/1/0-1 for 1G optics in the uplinks", mgmt: "(model default)", host: "ex-floor2-01"}
+                 : {ports: "Ethernet1-24", members: "Ethernet49-50", lag: "Port-Channel1", ospf: "Ethernet49, Vlan20, Loopback0",
+                    passive: "Vlan20, Loopback0", p2p: "Ethernet49", custom: "e.g. Ethernet49/2-4 for breakout lanes", mgmt: "Management1", host: "sw-floor2-01"};
+function lagName(n) { return JUNOS ? "ae" + n : "Port-Channel" + (n + 1); }
+// Hide what this vendor's builder can't write: data-feature="x" needs feature x,
+// data-only="juniper arista" shows for those vendors, data-not="juniper" hides for them.
+function applyVendor() {
+  document.querySelectorAll("[data-feature]").forEach(el => { if (!hasFeature(el.dataset.feature)) el.classList.add("vhide"); });
+  document.querySelectorAll("[data-only]").forEach(el => { if (!el.dataset.only.split(" ").includes(VENDOR.key)) el.classList.add("vhide"); });
+  document.querySelectorAll("[data-not]").forEach(el => { if (el.dataset.not.split(" ").includes(VENDOR.key)) el.classList.add("vhide"); });
+  const ph = (sel, v) => { const el = document.querySelector(sel); if (el) el.placeholder = v; };
+  ph('[data-bind="switch.custom_ports"]', PH.custom); ph('[data-bind="system.mgmt_interface"]', PH.mgmt); ph('[data-bind="system.hostname"]', PH.host);
+  const pick = document.getElementById("example-pick");
+  if (!JUNOS) pick.innerHTML = `<option value="">Load an example…</option>` + Object.keys(VENDOR_EXAMPLES).map(k => `<option value="${esc(k)}">${esc(VENDOR_EXAMPLES[k].name || k)}</option>`).join("");
+}
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
 const CSRF = document.getElementById("csrf").value;
-const DRAFT_KEY = "exbuilder-draft";
+const DRAFT_KEY = "exbuilder-draft" + (JUNOS ? "" : "-" + VENDOR.key);
 const MODEL_NAMES = CATALOG.map(m => m.name).concat(["Custom"]);
 
 const EXAMPLE = {
@@ -975,7 +998,7 @@ const EVPN_EXAMPLE = {"version": 1, "name": "EVPN-VXLAN leaf 1", "switch": {"mem
 const VLAN_SEL = "vlan";   // a select filled with the current VLAN names
 const PORT_FIELDS = [
   {key: "name", label: "Name", ph: "DESKS"},
-  {key: "ports", label: "Ports", ph: "ge-0/0/0-23", cls: "span2"},
+  {key: "ports", label: "Ports", ph: PH.ports, cls: "span2"},
   {key: "mode", label: "Mode", type: "select", options: ["access", "trunk", "routed", "disabled"]},
   {key: "description", label: "Description", cls: "span2"},
   {key: "role", label: "Connected devices", type: "select", options: [["", "(not set)"], ["pc", "computers"], ["phone", "IP phones"], ["ap", "Wi-Fi access points"], ["camera", "cameras"], ["printer", "printers"], ["server", "servers"], ["uplink", "uplink / other switch"]], show: r => r.mode !== "disabled"},
@@ -992,16 +1015,16 @@ const PORT_FIELDS = [
   {key: "mtu", label: "MTU", adv: true, ph: "9216", show: r => r.mode !== "disabled"},
   {key: "mac_limit", adv: true, label: "MAC limit", ph: "e.g. 3", show: r => r.mode === "access"},
   {key: "mac_action", label: "At the MAC limit", type: "select", adv: true, options: [["drop", "drop new MACs"], ["drop-and-log", "drop and log"], ["log", "log only"], ["shutdown", "shut the port down"]], show: r => r.mode === "access" && !!r.mac_limit},
-  {key: "sticky", label: "Sticky MAC (remember learned MACs)", type: "checkbox", adv: true, show: r => r.mode === "access"},
-  {key: "dot1x", label: "802.1X / MAB", type: "select", options: [["", "off"], ["dot1x", "802.1X"], ["dot1x-mab", "802.1X, else MAC (MAB)"], ["mab", "MAC only (MAB)"]], show: r => r.mode === "access"},
+  {key: "sticky", label: "Sticky MAC (remember learned MACs)", type: "checkbox", adv: true, only: "juniper", show: r => r.mode === "access"},
+  {key: "dot1x", label: "802.1X / MAB", type: "select", feat: "dot1x", options: [["", "off"], ["dot1x", "802.1X"], ["dot1x-mab", "802.1X, else MAC (MAB)"], ["mab", "MAC only (MAB)"]], show: r => r.mode === "access"},
   {key: "root_guard", label: "Root guard", type: "checkbox", adv: true, show: r => r.mode === "trunk"},
   {key: "loop_protect", label: "Loop protection", type: "checkbox", adv: true, show: r => r.mode === "trunk"},
   {key: "edge", label: "Edge port (RSTP)", type: "checkbox", show: r => r.mode === "access"},
   {key: "dhcp_trusted", adv: true, label: "DHCP trusted", type: "checkbox", show: r => r.mode === "access"},
 ];
 const LAG_FIELDS = [
-  {key: "name", label: "LAG", ph: "ae0"},
-  {key: "members", label: "Member ports", ph: "xe-0/1/0-1", cls: "span2"},
+  {key: "name", label: "LAG", ph: PH.lag},
+  {key: "members", label: "Member ports", ph: PH.members, cls: "span2"},
   {key: "lacp", label: "LACP", type: "select", options: ["active", "passive", ["static", "off (static)"]]},
   {key: "lacp_fast", label: "Fast LACP (1s)", type: "checkbox"},
   {key: "min_links", adv: true, label: "Minimum links", ph: "1"},
@@ -1013,11 +1036,11 @@ const LAG_FIELDS = [
 ];
 const TABLES = {
   "switch.members": {fields: [
-      {key: "fpc", label: "Member (FPC)", ph: "0"},
+      {key: "fpc", label: "Member (FPC)", ph: "0", feat: "virtual_chassis"},
       {key: "model", label: "Model", type: "select", options: MODEL_NAMES, cls: "span2"},
-      {key: "serial", adv: true, label: "Serial number", ph: "for pre-provisioning"},
-      {key: "role", label: "Role", adv: true, type: "select", options: ["routing-engine", "line-card"]}],
-    blank: rows => ({fpc: rows.length, model: (rows[0] || {}).model || "EX2300-48P", serial: "", role: rows.length < 2 ? "routing-engine" : "line-card"})},
+      {key: "serial", adv: true, label: "Serial number", ph: "for pre-provisioning", feat: "virtual_chassis"},
+      {key: "role", label: "Role", adv: true, type: "select", options: ["routing-engine", "line-card"], feat: "virtual_chassis"}],
+    blank: rows => ({fpc: rows.length, model: (rows[0] || {}).model || DEFAULTS.switch.members[0].model, serial: "", role: rows.length < 2 ? "routing-engine" : "line-card"})},
   "system.ntp_servers": {fields: [{key: "address", label: "Server", ph: "10.0.0.1 or pool.ntp.org", cls: "span2"}, {key: "prefer", label: "Preferred", type: "checkbox"}],
     blank: () => ({address: "", prefer: false})},
   "access.users": {fields: [
@@ -1049,12 +1072,12 @@ const TABLES = {
       {key: "name", label: "Name", ph: "USERS"},
       {key: "id", label: "VLAN ID", ph: "20"},
       {key: "description", label: "Description", cls: "span2"},
-      {key: "irb", label: "IRB address(es) (layer 3)", ph: "10.0.20.1/24", cls: "span2"},
+      {key: "irb", label: JUNOS ? "IRB address(es) (layer 3)" : "SVI address(es) (layer 3)", ph: "10.0.20.1/24", cls: "span2"},
       {key: "voice", label: "Voice VLAN for all access ports", type: "checkbox", cls: "span2"},
       {key: "dhcp_relay", label: "DHCP relay", type: "checkbox"},
       {key: "snooping", label: "DHCP snooping", type: "checkbox"},
       {key: "dai", adv: true, label: "ARP inspection", type: "checkbox"},
-      {key: "ipsg", adv: true, label: "IP source guard", type: "checkbox"},
+      {key: "ipsg", adv: true, label: "IP source guard", type: "checkbox", only: "juniper"},
       {key: "vni", label: "VXLAN VNI", ph: "10020", show: () => state.evpn.enabled},
       {key: "vga", label: "Anycast gateway", ph: "10.0.20.1", show: () => state.evpn.enabled},
       {key: "vrf", label: "Tenant VRF", type: "vrf", show: () => state.evpn.enabled}],
@@ -1063,7 +1086,7 @@ const TABLES = {
   "ports": {fields: PORT_FIELDS, title: r => `${r.name || "Port group"} · ${r.mode}${r.ports ? " · " + r.ports : ""}`,
     blank: () => ({name: "", ports: "", mode: "access", vlan: "", vlans: "", native: "", voice: "", description: "", poe: "", edge: true, mac_limit: "", dhcp_trusted: false, address: "", mtu: "", speed: ""})},
   "lags": {fields: LAG_FIELDS, title: r => `${r.name || "LAG"} · ${r.mode}${r.members ? " · " + r.members : ""}`,
-    blank: rows => ({name: "ae" + rows.length, members: "", lacp: "active", lacp_fast: true, min_links: "", mode: "trunk", vlan: "", vlans: "", native: "", voice: "", description: "", address: "", mtu: ""})},
+    blank: rows => ({name: lagName(rows.length), members: "", lacp: "active", lacp_fast: true, min_links: "", mode: "trunk", vlan: "", vlans: "", native: "", voice: "", description: "", address: "", mtu: ""})},
   "security.radius_servers": {fields: [
       {key: "address", label: "RADIUS server", ph: "10.0.0.30"},
       {key: "secret", label: "Shared secret", type: "password"},
@@ -1077,9 +1100,9 @@ const TABLES = {
   "routing.ospf.areas": {fields: [
       {key: "area", label: "Area", ph: "0.0.0.0"},
       {key: "type", label: "Type", type: "select", options: ["normal", "stub", "nssa"]},
-      {key: "interfaces", label: "Interfaces", ph: "xe-0/2/0, irb.20, lo0", cls: "span2"},
-      {key: "passive", label: "Passive interfaces", ph: "irb.20, lo0", cls: "span2"},
-      {key: "p2p", label: "Point-to-point interfaces", ph: "xe-0/2/0", cls: "span2"},
+      {key: "interfaces", label: "Interfaces", ph: PH.ospf, cls: "span2"},
+      {key: "passive", label: "Passive interfaces", ph: PH.passive, cls: "span2"},
+      {key: "p2p", label: "Point-to-point interfaces", ph: PH.p2p, cls: "span2"},
       {key: "md5_key", label: "MD5 key (optional)", type: "password"}],
     title: r => `Area ${r.area || "?"}`, blank: rows => ({area: rows.length ? "0.0.0." + rows.length : "0.0.0.0", type: "normal", interfaces: "", passive: "", p2p: "", md5_key: ""})},
   "routing.bgp_groups": {fields: [
@@ -1089,8 +1112,8 @@ const TABLES = {
       {key: "local_address", label: "Local address", ph: "10.255.0.11"},
       {key: "description", label: "Description", cls: "span2"},
       {key: "neighbors", label: "Neighbors (IP [AS] [description], one per line)", type: "textarea", cls: "full"},
-      {key: "import", label: "Import policies", ph: "FROM-ISP", type: "policy"},
-      {key: "export", label: "Export policies", ph: "TO-ISP", type: "policy"},
+      {key: "import", label: "Import policies", ph: "FROM-ISP", type: "policy", feat: "policies"},
+      {key: "export", label: "Export policies", ph: "TO-ISP", type: "policy", feat: "policies"},
       {key: "bfd", label: "BFD interval (ms)", ph: "300"},
       {key: "auth_key", label: "MD5 password", type: "password"},
       {key: "multipath", label: "Multipath (ECMP)", type: "checkbox"}],
@@ -1124,6 +1147,9 @@ const TABLES = {
       {key: "l3vni", label: "L3 VNI", ph: "9100"}],
     blank: rows => ({name: "", id: String(100 * (rows.length + 1)), l3vni: String(9100 + rows.length)})},
 };
+// Drop table fields this vendor's builder doesn't write (field.only = vendor keys, field.feat = a feature).
+for (const spec of Object.values(TABLES))
+  spec.fields = spec.fields.filter(f => (!f.only || f.only.split(" ").includes(VENDOR.key)) && (!f.feat || hasFeature(f.feat)));
 
 // ------------------------------------------------------------------ state
 let state = null;
@@ -1255,7 +1281,7 @@ function memberModels() {
 }
 function renderNotes() {
   document.getElementById("model-notes").textContent = memberModels().filter(m => m.model)
-    .map(m => `Member ${m.fpc}: ${m.model.name}. ${m.model.notes}`).join("  ");
+    .map(m => `${JUNOS ? `Member ${m.fpc}: ` : ""}${m.model.name}. ${m.model.notes}`).join("  ");
 }
 function renderPortmap() {
   const el = document.getElementById("portmap");
@@ -1268,13 +1294,13 @@ function renderPortmap() {
       const key = p.kind + " " + p.speed;
       (groups[key] = groups[key] || []).push({...p, name});
     }
-    return `<div class="member"><h4>Member ${fpc}: ${esc(model.name)}</h4>` + Object.entries(groups).map(([key, ports]) => {
+    return `<div class="member"><h4>${JUNOS ? `Member ${fpc}: ` : ""}${esc(model.name)}</h4>` + Object.entries(groups).map(([key, ports]) => {
       const kind = key.split(" ")[0];
       const label = {access: "Front ports", uplink: "Uplinks", module: "Uplink module (optional)", vcp: "Virtual Chassis ports"}[kind] || kind;
       const single = ports.length <= 8 ? " single" : "";
       // Junos numbers top row even, bottom row odd, like the front panel.
       const cells = ports.map(p => {
-        const u = used[p.name]; const n = p.name.split("/").pop();
+        const u = used[p.name]; const n = JUNOS ? p.name.split("/").pop() : p.name.replace(/^[A-Za-z-]+/, "");
         let look = u ? u.use : "free";
         if (u && u.use !== "disabled" && u.use !== "lag") {
           if (u.role === "ap") look = "ap"; else if (u.role === "camera") look = "camera";
@@ -1312,7 +1338,38 @@ function renderPortmap() {
 }
 
 function portKey(n) { const m = n.match(/^(\w+)-(\d+)\/(\d+)\/(\d+)$/); return m ? [+m[2], +m[3], m[1], +m[4]] : [99, 0, n, 0]; }
+// Arista/Cisco/Ruckus names: a word and numbers split by "/", only the last number changes in a range.
+const NAMED = /^([A-Za-z][A-Za-z-]*?)?(\d+(?:\/\d+)*)$/;
+const NAMED_RANGE = /^([A-Za-z][A-Za-z-]*?)?((?:\d+\/)*)(\d+)\s*(?:-|to)\s*(?:[A-Za-z][A-Za-z-]*?)?(?:(?:\d+\/)*)?(\d+)$/;
+function namedSplit(n) { const m = String(n).match(NAMED); return m ? [m[1] || "", m[2].split("/").map(Number)] : ["~", []]; }
+function namedCmp(a, b) {
+  const [wa, na] = namedSplit(a), [wb, nb] = namedSplit(b);
+  if (wa !== wb) return wa < wb ? -1 : 1;
+  for (let i = 0; i < Math.max(na.length, nb.length); i++) { const x = na[i] ?? -1, y = nb[i] ?? -1; if (x !== y) return x - y; }
+  return 0;
+}
+function compactNamed(list) {
+  const out = [];
+  for (const name of [...new Set(list)].sort(namedCmp)) {
+    const [w, n] = namedSplit(name); const last = out[out.length - 1];
+    if (last && last.w === w && last.n.length === n.length && last.n.slice(0, -1).join("/") === n.slice(0, -1).join("/") && last.end + 1 === n[n.length - 1]) { last.end++; continue; }
+    out.push({name, w, n, end: n[n.length - 1]});
+  }
+  return out.map(r => r.end === r.n[r.n.length - 1] ? r.name : `${r.name}-${r.end}`).join(", ");
+}
+function expandNamed(spec) {
+  const out = []; const canon = w => w ? (PORT_ALIASES[w.toLowerCase()] ?? w) : (PORT_ALIASES[""] ?? "");
+  for (let part of String(spec || "").replace(/\s+to\s+/g, "-").split(/[,;\s]+/)) {
+    if (!part) continue;
+    let m = part.match(NAMED);
+    if (m) { out.push(canon(m[1]) + m[2]); continue; }
+    m = part.match(NAMED_RANGE);
+    if (m) for (let n = +m[3]; n <= +m[4] && n - +m[3] <= 1024; n++) out.push(`${canon(m[1])}${m[2]}${n}`);
+  }
+  return out;
+}
 function compact(list) {
+  if (!JUNOS) return compactNamed(list);
   const sorted = list.slice().sort((a, b) => { const x = portKey(a), y = portKey(b); for (let i = 0; i < 4; i++) { if (x[i] < y[i]) return -1; if (x[i] > y[i]) return 1; } return 0; });
   const out = [];
   for (const name of sorted) {
@@ -1328,8 +1385,13 @@ const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], 
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
                      "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "Backups & compare": [], "Projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
+// Tabs that need a builder feature; the vendor's feature list decides whether they show.
+const TAB_FEATURE = {"OSPF & BGP": ["ospf", "bgp"], Policies: ["policies"], "EVPN-VXLAN": ["evpn_vxlan"],
+                     "Import & check": ["import"], "Network map": ["network_map"], "Backups & compare": ["backups"]};
+const tabOk = t => !TAB_FEATURE[t] || TAB_FEATURE[t].some(hasFeature);
 const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
-                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Backups & compare", "Projects"]]];
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Backups & compare", "Projects"]]]
+                   .map(([h, tabs]) => [h, tabs === ADVANCED_TABS ? tabs : tabs.filter(tabOk)]);
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
 function isAdvanced() { return LEVEL === "advanced"; }
@@ -1357,8 +1419,8 @@ function updateTabs() {
   nav.innerHTML = TAB_GROUPS.map(([head, tabs]) => {
     const adv = tabs === ADVANCED_TABS;
     if (adv && !isAdvanced())
-      return `<div class="navhead adv-h">${head}</div><p class="navnote">Routing protocols, policies and EVPN-VXLAN. <a data-level-link="advanced">Turn on Advanced</a> to see them.</p>`;
-    return `<div class="navhead${adv ? " adv-h" : ""}">${head}</div>` + tabs.map(button).join("");
+      return `<div class="navhead adv-h">${head}</div><p class="navnote">${JUNOS ? "Routing protocols, policies and EVPN-VXLAN" : "OSPF and BGP"}. <a data-level-link="advanced">Turn on Advanced</a> to see them.</p>`;
+    return `<div class="navhead${adv ? " adv-h" : ""}">${head}</div>` + tabs.filter(tabOk).map(button).join("");
   }).join("");
   document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
 }
@@ -1366,7 +1428,7 @@ function updateTabs() {
 // so Back and Forward move between tabs instead of leaving the page.
 function tabFromHash() {
   let t = ""; try { t = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
-  return TAB_SECTION[t] && (isAdvanced() || !ADVANCED_TABS.includes(t)) ? t : null;
+  return TAB_SECTION[t] && tabOk(t) && (isAdvanced() || !ADVANCED_TABS.includes(t)) ? t : null;
 }
 function tabUrl(t) { return location.pathname + location.search + "#" + encodeURIComponent(t); }
 function showTab(t, fromHistory) {
@@ -1413,7 +1475,9 @@ function showOutput() {
   document.getElementById("msgs").innerHTML =
     result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
     result.warnings.map(m => `<li class="warn" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
-  document.getElementById("load-hint").innerHTML = fmt === "set"
+  document.getElementById("load-hint").innerHTML = VENDOR.key === "arista"
+    ? "On the switch: <code>configure session new</code>, paste, <code>show session-config diffs</code>, then <code>commit timer 00:05:00</code> and <code>commit</code> again once you're still connected. On a new switch you can also save it as startup-config."
+    : fmt === "set"
     ? "On the switch: <code>configure</code>, paste, <code>show | compare</code>, <code>commit check</code>, then <code>commit confirmed 5</code> and <code>commit</code> once you're still connected."
     : "On the switch: <code>configure</code>, <code>load merge terminal</code>, paste, Ctrl+D, then <code>show | compare</code> and <code>commit confirmed 5</code>. On a factory-new switch you can use <code>load override terminal</code>.";
   renderPortmap(); updateTabs(); markProblems();
@@ -1454,6 +1518,7 @@ document.addEventListener("click", ev => {
 });
 // ------------------------------------------------- port map group editing
 function expandPorts(spec) {
+  if (!JUNOS) return expandNamed(spec);
   const out = [];
   for (let part of String(spec || "").replace(/\s+to\s+/g, "~").split(/[,;\s]+/)) {
     part = part.replace("~", " to ");
@@ -1540,8 +1605,9 @@ document.getElementById("pick-ports").onclick = () => {
 };
 document.getElementById("pick-lag").onclick = () => {
   if (!picked.size) return;
-  const used = new Set(state.lags.map(l => l.name)); let n = 0; while (used.has("ae" + n)) n++;
-  const row = TABLES.lags.blank(state.lags); row.name = "ae" + n;
+  const lagKey = name => JUNOS ? name : ((String(name).match(/(\d+)\s*$/) || [])[1] || name);  // Po1 = Port-Channel1
+  const used = new Set(state.lags.map(l => lagKey(l.name))); let n = 0; while (used.has(lagKey(lagName(n)))) n++;
+  const row = TABLES.lags.blank(state.lags); row.name = lagName(n);
   state.lags.push(row); assignPorts({table: "lags", index: state.lags.length - 1}, [...picked]); picked.clear(); renderTable("lags"); renderPortmap(); showTab("LAGs"); schedule();
 };
 
@@ -1566,7 +1632,7 @@ document.getElementById("file-open").onchange = async ev => {
 document.getElementById("btn-new").onclick = () => { if (confirmReplace()) load({}); };
 document.getElementById("example-pick").onchange = ev => {
   const pick = ev.target.value; ev.target.value = "";
-  if (pick && confirmReplace()) load(pick === "evpn" ? EVPN_EXAMPLE : EXAMPLE);
+  if (pick && confirmReplace()) load(!JUNOS ? VENDOR_EXAMPLES[pick] : pick === "evpn" ? EVPN_EXAMPLE : EXAMPLE);
 };
 function confirmReplace() {
   const strip = o => { const c = clone(o); delete c.fabric; return JSON.stringify(c); };
@@ -2600,7 +2666,8 @@ window.addEventListener("popstate", () => {
 (function start() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
-  if (!TAB_SECTION[activeTab]) activeTab = "Switch";
+  if (!TAB_SECTION[activeTab] || !tabOk(activeTab)) activeTab = "Switch";
+  applyVendor();
   boxAdvanced();
   setLevel(LEVEL, true);
   load(draft || {});
