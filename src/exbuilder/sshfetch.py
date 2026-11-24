@@ -1,21 +1,31 @@
 """Fetch the running config (and LLDP neighbours) from switches over SSH.
 
-Off unless ``EXB_SSH_ALLOW`` lists the networks the app may connect to, for
-example ``10.40.0.0/16, 192.168.1.0/24``. Every safety rule is on by default:
+Each client (see ``web/clients.py``) has its own settings, kept in the
+database and set by that client's admins on the client page:
 
-* Only admins can use it (checked by the web route).
-* A host must resolve to addresses inside ``EXB_SSH_ALLOW``; every address it
-  resolves to is checked, so a DNS name cannot point the app somewhere else.
+* the networks its switches are in. A host must resolve to addresses inside
+  them, and every address it resolves to is checked, so a DNS name cannot point
+  the app somewhere else;
+* an optional SSH key the server made for it (encrypted at rest), so nobody
+  types a password;
+* its own list of known switch host keys.
+
+Server-wide rules, all on by default:
+
+* Client networks must lie inside ``EXB_SSH_ALLOW`` when it is set, otherwise
+  inside the private ranges (10/8, 172.16/12, 192.168/16, 100.64/10, fc00::/7).
+  ``EXB_SSH_DISABLE=true`` turns SSH fetch off for everyone.
+* Only client admins can use it (checked by the web route).
 * Only fixed, read-only commands run (``COMMANDS``); nothing typed by a user is
   sent to the switch.
-* The password is used for that one connection and then dropped. It is never
-  written to disk or a log, and the switch's host key is never trusted blindly:
-  the first key seen is remembered in ``<data dir>/ssh_known_hosts`` and a
-  changed key stops the fetch until an admin clears it.
-* ``EXB_SSH_KEY_FILE`` (for example a Docker secret) lets the app sign in with a
-  key for a read-only account, so nobody types a password at all.
-* Each attempt is logged (who, which switch, the result), and each user gets at
-  most ``EXB_SSH_RATE`` fetches a minute (default 10).
+* A typed password is used for that one connection and then dropped. It is
+  never written to disk or a log. The switch's host key is never trusted
+  blindly: the first key seen is remembered and a changed key stops the fetch
+  until an admin clears it.
+* ``EXB_SSH_KEY_FILE`` (for example a Docker secret) is a server-wide key that
+  clients without their own key can use.
+* Each attempt is logged (who, which client and switch, the result), and each
+  user gets at most ``EXB_SSH_RATE`` fetches a minute (default 10).
 """
 
 from __future__ import annotations
@@ -45,20 +55,45 @@ class FetchError(Exception):
 
 
 # ------------------------------------------------------------- settings
-def allowed_networks() -> list:
-    out = []
-    for part in os.environ.get("EXB_SSH_ALLOW", "").replace(";", ",").split(","):
+PRIVATE = tuple(ipaddress.ip_network(n) for n in
+                ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "100.64.0.0/10", "fc00::/7"))
+
+
+def _parse(text: str) -> tuple[list, list[str]]:
+    nets, bad = [], []
+    for part in (text or "").replace(";", ",").replace("\n", ",").split(","):
         part = part.strip()
         if part:
             try:
-                out.append(ipaddress.ip_network(part, strict=False))
+                nets.append(ipaddress.ip_network(part, strict=False))
             except ValueError:
-                log.warning("EXB_SSH_ALLOW: ignored %r (not a network)", part)
-    return out
+                bad.append(part)
+    return nets, bad
 
 
-def enabled() -> bool:
-    return bool(allowed_networks())
+def disabled() -> bool:
+    return os.environ.get("EXB_SSH_DISABLE", "").lower() in ("1", "true", "yes")
+
+
+def ceiling() -> list:
+    """The networks any client may use: EXB_SSH_ALLOW, or the private ranges."""
+    nets, bad = _parse(os.environ.get("EXB_SSH_ALLOW", ""))
+    for b in bad:
+        log.warning("EXB_SSH_ALLOW: ignored %r (not a network)", b)
+    return nets or list(PRIVATE)
+
+
+def check_networks(text: str) -> tuple[list, list[str]]:
+    """A client's network list -> (networks, problems)."""
+    nets, bad = _parse(text)
+    problems = [f"'{b}' is not a network (use for example 10.40.10.0/24)." for b in bad]
+    top = ceiling()
+    for n in nets:
+        if n.prefixlen < (8 if n.version == 4 else 32):
+            problems.append(f"{n} is too large.")
+        elif not any(n.version == c.version and n.subnet_of(c) for c in top):
+            problems.append(f"{n} is outside what this server allows ({', '.join(map(str, top))}).")
+    return nets, problems
 
 
 def key_file() -> Path | None:
@@ -70,17 +105,36 @@ def key_user() -> str:
     return os.environ.get("EXB_SSH_KEY_USER", "").strip()
 
 
+def server_key():
+    """The server-wide key from EXB_SSH_KEY_FILE as a paramiko key, or None."""
+    kf = key_file()
+    if not kf:
+        return None
+    import paramiko
+    return paramiko.PKey.from_path(str(kf))
+
+
+def generate_key(comment: str = "exbuilder") -> tuple[str, str]:
+    """A new ed25519 key pair -> (private key in OpenSSH format, public key line)."""
+    from cryptography.hazmat.primitives import serialization as ser
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    k = Ed25519PrivateKey.generate()
+    private = k.private_bytes(ser.Encoding.PEM, ser.PrivateFormat.OpenSSH, ser.NoEncryption()).decode()
+    public = k.public_key().public_bytes(ser.Encoding.OpenSSH, ser.PublicFormat.OpenSSH).decode()
+    return private, f"{public} {comment}"
+
+
+def load_key(private: str):
+    import io
+    import paramiko
+    return paramiko.Ed25519Key.from_private_key(io.StringIO(private))
+
+
 def timeout() -> float:
     try:
         return max(3.0, float(os.environ.get("EXB_SSH_TIMEOUT", "20")))
     except ValueError:
         return 20.0
-
-
-def settings() -> dict:
-    """What the page needs to know (never secrets)."""
-    return {"enabled": enabled(), "allow": [str(n) for n in allowed_networks()],
-            "key": bool(key_file()), "key_user": key_user()}
 
 
 # --------------------------------------------------------- rate limiting
@@ -104,12 +158,12 @@ def check_rate(user: str) -> None:
 
 
 # ------------------------------------------------------------ addresses
-def resolve(host: str, port: int = 22) -> str:
+def resolve(host: str, nets: list, port: int = 22) -> str:
     """Host -> one allowed IP address, or FetchError. Every resolved address must be allowed."""
     host = host.strip()
-    nets = allowed_networks()
-    if not nets:
-        raise FetchError("SSH fetch is turned off (EXB_SSH_ALLOW is not set).")
+    top = ceiling()
+    if disabled() or not nets:
+        raise FetchError("SSH fetch is turned off for this client (no switch networks are set).")
     if not host or len(host) > 253 or any(c.isspace() for c in host) or host.startswith("-"):
         raise FetchError(f"'{host}' is not a host name or address.")
     try:
@@ -117,7 +171,7 @@ def resolve(host: str, port: int = 22) -> str:
     except socket.gaierror:
         raise FetchError(f"{host}: name not found.") from None
     addrs = sorted({ipaddress.ip_address(i[4][0].split("%")[0]) for i in infos}, key=str)
-    bad = [a for a in addrs if not any(a in n for n in nets)]
+    bad = [a for a in addrs if not (any(a in n for n in nets) and any(a in n for n in top))]
     if not addrs or bad:
         raise FetchError(f"{host} ({', '.join(map(str, bad or addrs))}) is outside the allowed networks "
                          f"({', '.join(map(str, nets))}).")
@@ -128,8 +182,9 @@ def resolve(host: str, port: int = 22) -> str:
 _kh_lock = threading.Lock()
 
 
-def _known_hosts(data_dir: Path) -> Path:
-    return data_dir / "ssh_known_hosts"
+def _known_hosts(folder: Path) -> Path:
+    """Each client keeps its own list in its own folder."""
+    return folder / "ssh_known_hosts"
 
 
 def _load_known(data_dir: Path) -> dict[str, tuple[str, str]]:
@@ -145,6 +200,7 @@ def _load_known(data_dir: Path) -> dict[str, tuple[str, str]]:
 
 def _save_known(data_dir: Path, known: dict[str, tuple[str, str]]) -> None:
     path = _known_hosts(data_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text("".join(f"{h} {t} {k}\n" for h, (t, k) in sorted(known.items())))
     os.chmod(tmp, 0o600)
@@ -178,13 +234,14 @@ def _fingerprint(key) -> str:
 
 
 # ----------------------------------------------------------------- fetch
-def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int = 22, use_key: bool = False) -> dict:
+def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int = 22, nets: list | None = None,
+              pkey=None) -> dict:
     """Connect, run COMMANDS, return {host, ok, text | error, fingerprint, new_key}."""
     import paramiko
 
     out = {"host": host, "ok": False}
     try:
-        ip = resolve(host, port)
+        ip = resolve(host, nets or [], port)
         transport = None
         sock = socket.create_connection((ip, port), timeout=timeout())
         try:
@@ -206,12 +263,8 @@ def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int
                     known[entry] = (key.get_name(), key.get_base64())
                     _save_known(data_dir, known)
                     out["new_key"] = True
-            if use_key:
-                kf = key_file()
-                if not kf:
-                    raise FetchError("No SSH key is configured (EXB_SSH_KEY_FILE).")
-                pkey = paramiko.PKey.from_path(str(kf))
-                transport.auth_publickey(username or key_user(), pkey)
+            if pkey is not None:
+                transport.auth_publickey(username, pkey)
             else:
                 try:
                     transport.auth_password(username, password)
@@ -252,13 +305,13 @@ def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int
 
 
 def fetch(hosts: list[str], username: str, password: str, data_dir: Path, who: str, port: int = 22,
-          use_key: bool = False) -> list[dict]:
+          nets: list | None = None, pkey=None, client: str = "") -> list[dict]:
     hosts = [h.strip() for h in hosts if h and h.strip()]
     hosts = list(dict.fromkeys(hosts))[:MAX_HOSTS]
     with ThreadPoolExecutor(max_workers=min(8, len(hosts) or 1)) as pool:
-        results = list(pool.map(lambda h: fetch_one(h, username, password, data_dir, port, use_key), hosts))
+        results = list(pool.map(lambda h: fetch_one(h, username, password, data_dir, port, nets, pkey), hosts))
     for r in results:
         # Audit log: who, where, result. Never the password.
-        log.warning("audit: ssh fetch by %r: %s as %r -> %s", who, r["host"], username or key_user(),
-                 "ok" if r["ok"] else r.get("error", "failed"))
+        log.warning("audit: ssh fetch by %r for client %r: %s as %r (%s) -> %s", who, client, r["host"], username,
+                    "key" if pkey is not None else "password", "ok" if r["ok"] else r.get("error", "failed"))
     return results

@@ -96,44 +96,63 @@ the links between them, and checks that both ends of every link agree.
 
 ![Network map with three switches](docs/screenshots/08-network-map.png)
 
-**Fetch from switches over SSH** (admins only, on the Network map tab): enter the
-switch addresses and a Junos account, and the builder runs
-`show configuration | display set` and `show lldp neighbors` on each one and adds
-them to the map. It is off until `EXB_SSH_ALLOW` lists the networks the switches
-are in. Safety rules, all on by default:
+**Fetch from switches over SSH** (client admins, on the Network map tab): enter
+the switch addresses, and the builder runs `show configuration | display set`
+and `show lldp neighbors` on each one and adds them to the map. Each client sets
+its own switch networks and SSH key under **Clients → (client) → Fetching
+configs over SSH**; it is off for a client until its networks are set. Safety
+rules, all on by default:
 
-- only admins can use it, and only addresses inside `EXB_SSH_ALLOW` are reached
-  (every address a name resolves to is checked);
+- only that client's admins can use it, and only addresses inside its networks
+  are reached (every address a name resolves to is checked). The server limits
+  what a client may enter: `EXB_SSH_ALLOW` if set, otherwise the private ranges.
+  `EXB_SSH_DISABLE=true` turns it off for everyone;
 - only those two read-only commands run; nothing you type is sent as a command;
 - you choose how to sign in: **SSH key** (recommended) or **Password**. A
   password is used for that fetch and dropped, never saved or logged, but it
   still passes through the server, so the page warns about it and suggests a
   read-only account with its own password;
+- each client's SSH key is made by the server (**Make an SSH key**); only the
+  public half is shown, and the private half is stored encrypted with a master
+  key (`EXB_MASTER_KEY_FILE`, best as a Docker secret; otherwise
+  `<data>/master_key` is made on first use);
 - each switch's SSH host key is remembered on first contact
-  (`<data>/ssh_known_hosts`); a changed key stops the fetch until an admin clears
-  it under **Known switches**;
-- every attempt is logged (`audit: ssh fetch by …`, without secrets), and each
-  user gets at most `EXB_SSH_RATE` fetches a minute (default 10).
+  (`<data>/clients/<id>/ssh_known_hosts`); a changed key stops the fetch until a
+  client admin clears it under **Known switches**;
+- every attempt is logged (`audit: ssh fetch by … for client …`, without
+  secrets), and each user gets at most `EXB_SSH_RATE` fetches a minute (default 10).
 
-**SSH key sign-in** (the safer option): make a key pair, store the private key
-as a Docker secret and point the app at it. The **SSH key** choice is then
-available on the page, and nobody types a password.
-
-```
-ssh-keygen -t ed25519 -N "" -C exbuilder-ro -f exbuilder_ssh_key
-docker secret create exbuilder_ssh_key exbuilder_ssh_key && rm exbuilder_ssh_key
-# in the stack file: secrets: [exbuilder_ssh_key], plus
-#   EXB_SSH_KEY_FILE: /run/secrets/exbuilder_ssh_key
-#   EXB_SSH_KEY_USER: exbuilder-ro
-```
-
-A read-only Junos account for it (paste the `.pub` file's text as the key):
+The client page shows the commands for a read-only Junos account with the
+client's public key, like this:
 
 ```
 set system login class exbuilder-ro permissions view-configuration
 set system login class exbuilder-ro permissions view
 set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
 ```
+
+A server-wide key (`EXB_SSH_KEY_FILE` plus `EXB_SSH_KEY_USER`, from a Docker
+secret) still works for clients that have no key of their own.
+
+### Clients (several networks or customers)
+
+Every saved project and network map belongs to a **client**. Pick the client at
+the top of the page; **Save to (client)** and the **Projects** tab use it.
+People only see the clients they are added to:
+
+| Role | Can |
+| --- | --- |
+| viewer | open the client's projects and maps |
+| editor | also save and delete them |
+| admin | also add people, set the SSH networks and key, and fetch configs over SSH |
+
+Server admins (the `admin` role on the Users page) see every client and create,
+rename and delete clients under **Clients**. Deleting a client asks you to type
+its name, and removes its projects, maps and settings. On the first start after
+upgrading, everything saved before moves into a client called **Default**
+(rename it to suit), and people who had saved projects become its editors.
+
+![A client's settings page](docs/screenshots/09-client.png)
 
 ### Excel workbook
 
@@ -188,8 +207,8 @@ doesn't have, Virtual Chassis ports used as network ports, PoE on a non-PoE
 model and more. Errors are things Junos would refuse; warnings are things to
 double check.
 
-Projects can be downloaded and opened as JSON files, or saved on the server
-under "My projects" (each user sees only their own).
+Projects can be downloaded and opened as JSON files, or saved on the server in
+the client picked at the top of the page (see **Clients**).
 
 ## Applying the config on a switch
 

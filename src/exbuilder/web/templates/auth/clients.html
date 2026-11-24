@@ -1,0 +1,35 @@
+{% extends "auth/base.html" %}
+{% block title %}Clients · EX Config Builder{% endblock %}
+{% block content %}
+<h1>Clients</h1>
+<p class="hint">Each client has its own saved projects, network maps, people and SSH settings. People only see the
+  clients they are added to, and pick one at the top of the page.</p>
+
+{% if server_admin %}
+<form class="panel" method="post" action="{{ url_for('clients.clients_create') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Add a client</h2>
+  <div class="row" style="grid-template-columns: 1fr auto">
+    <div><label for="cn">Name</label><input id="cn" type="text" name="name" required maxlength="80" placeholder="Acme Corp"></div>
+    <div><button type="submit">Add client</button></div>
+  </div>
+</form>
+{% endif %}
+
+<section class="panel scroll">
+  <table>
+    <tr><th>Client</th><th>Your role</th><th>Projects</th><th>Maps</th><th>People</th><th></th></tr>
+    {% for c in clients %}
+    {% set n = counts.get(c.id, {}) %}
+    <tr>
+      <td><b>{{ c.name }}</b>{% if current_client and c.id == current_client.id %} <span class="badge on">current</span>{% endif %}</td>
+      <td>{{ c.role }}{% if server_admin %} <span class="muted">(server admin)</span>{% endif %}</td>
+      <td>{{ n.get('projects', 0) }}</td><td>{{ n.get('maps', 0) }}</td><td>{{ n.get('client_members', 0) }}</td>
+      <td>{% if c.role == 'admin' %}<a href="{{ url_for('clients.client_page', cid=c.id) }}">Settings</a>{% endif %}</td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">You are not in any client yet. Ask an admin to add you to one.</td></tr>
+    {% endfor %}
+  </table>
+</section>
+{% endblock %}
