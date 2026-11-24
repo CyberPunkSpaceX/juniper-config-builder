@@ -68,6 +68,12 @@ the curly-brace config), or drop a `.conf`/`.txt` file, then **Check config**.
   important ones first. Examples: Telnet or HTTP turned on, SNMP `public`,
   root SSH login, no NTP or syslog server, no BPDU protection, storm control or
   DHCP snooping, LAGs without LACP.
+- The switch model is picked for you. Paste the output of `show version` or
+  `show virtual-chassis` with the config and the exact model of every Virtual
+  Chassis member is used (with serial numbers and roles from
+  `show virtual-chassis`). Without it, the model is guessed from the ports in
+  use, PoE settings and the management port (`em0` means EX4100/EX4400), and the
+  page says it is a guess. SSH fetch runs both commands by itself.
 - **Load as it is** puts the config in the tabs. **Load with recommended fixes**
   also applies the safe fixes (deny root SSH, login retry limits, SSH limits,
   banner, RSTP edge ports, BPDU block, storm control, LLDP).
@@ -97,8 +103,8 @@ the links between them, and checks that both ends of every link agree.
 ![Network map with three switches](docs/screenshots/08-network-map.png)
 
 **Fetch from switches over SSH** (client admins, on the Network map tab): enter
-the switch addresses, and the builder runs `show configuration | display set`
-and `show lldp neighbors` on each one and adds them to the map. Each client sets
+the switch addresses, and the builder runs `show configuration | display set`,
+`show lldp neighbors`, `show version` and `show virtual-chassis` on each one and adds them to the map. Each client sets
 its own switch networks and SSH key under **Clients → (client) → Fetching
 configs over SSH**; it is off for a client until its networks are set. Safety
 rules, all on by default:
@@ -107,7 +113,7 @@ rules, all on by default:
   are reached (every address a name resolves to is checked). The server limits
   what a client may enter: `EXB_SSH_ALLOW` if set, otherwise the private ranges.
   `EXB_SSH_DISABLE=true` turns it off for everyone;
-- only those two read-only commands run; nothing you type is sent as a command;
+- only those four read-only commands run; nothing you type is sent as a command;
 - you choose how to sign in: **SSH key** (recommended) or **Password**. A
   password is used for that fetch and dropped, never saved or logged, but it
   still passes through the server, so the page warns about it and suggests a

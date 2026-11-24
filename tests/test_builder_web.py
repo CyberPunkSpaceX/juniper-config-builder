@@ -77,6 +77,12 @@ def test_import_and_excel_endpoints(admin):
     text = (Path(__file__).parent / "data" / "legacy-ex2300.conf").read_text()
     resp = admin.post("/import/config", json={"text": text}, headers=hdr)
     assert resp.status_code == 200 and resp.json["model"].startswith("EX2300")
+    assert resp.json["model_how"] == "port names"
+    resp = admin.post("/import/config", json={"text": "Model: ex4400-48p\n" + text}, headers=hdr)
+    assert resp.json["model"] == "EX4400-48P" and resp.json["model_how"] == "show version"
+    assert resp.json["detected"][0]["fpc"] == 0
+    resp = admin.post("/import/config", json={"text": text, "model": "EX2300-24T"}, headers=hdr)
+    assert resp.json["model"] == "EX2300-24T" and resp.json["model_how"] == "chosen"
     assert resp.json["recommendations"] and resp.json["project"]["system"]["hostname"] == "sw-legacy-01"
     assert admin.post("/import/config", json={"text": "nothing"}, headers=hdr).status_code == 400
     tpl = admin.get("/excel/template")

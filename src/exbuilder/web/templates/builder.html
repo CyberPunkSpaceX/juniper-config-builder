@@ -39,6 +39,8 @@ a { color: var(--accent); }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
 .check input { width: auto; }
 [hidden] { display: none !important; }
+.modelnote { margin: 4px 0 10px; padding: 8px 10px; border-radius: 6px; border-left: 3px solid var(--ok, #16a34a); background: rgba(22, 163, 74, .08); font-size: 14px; }
+.modelnote.guess { border-left-color: var(--warn, #d97706); background: rgba(217, 119, 6, .08); }
 .savedmaps { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin: 10px 0; background: var(--bg); }
 .authpick { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 8px 0 10px; }
 .authpick > .hint, .authpick > .authwarn { flex-basis: 100%; margin: 0; }
@@ -742,7 +744,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Import & check">
     <div class="panel">
       <h2>Import an existing config</h2>
-      <p class="hint">Paste the output of <code>show configuration | display set</code> (or the normal curly-brace config), or drop a .conf/.txt file. The builder reads it into its tabs, checks it, scores it and suggests improvements. Lines it does not manage are listed so nothing is lost.</p>
+      <p class="hint">Paste the output of <code>show configuration | display set</code> (or the normal curly-brace config), or drop a .conf/.txt file. The builder reads it into its tabs, checks it, scores it and suggests improvements. Lines it does not manage are listed so nothing is lost. Paste the output of <code>show version</code> or <code>show virtual-chassis</code> with it and the exact switch model is picked for you (SSH fetch does this by itself); otherwise the model is guessed from the ports.</p>
       <div class="drop" id="imp-drop">Drop a config file or an Excel workbook here, or <button class="secondary small" type="button" id="imp-file-btn">choose a file</button><input type="file" id="imp-file" class="hide" accept=".conf,.txt,.set,.cfg,.xlsx"></div>
       <textarea id="imp-text" style="min-height:200px;margin-top:10px" placeholder="set system host-name sw-office-01&#10;set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access&#10;..."></textarea>
       <div class="toolbar" style="margin-top:10px">
@@ -761,6 +763,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <button class="secondary small" type="button" id="imp-load">Load as it is</button>
         <button class="small" type="button" id="imp-load-fixed">Load with recommended fixes</button></div>
       <p><span class="score" id="imp-score"></span> <span class="status" id="imp-summary"></span></p>
+      <p class="modelnote hide" id="imp-model-note"></p>
       <p class="hint" id="imp-fixes"></p>
       <h3>Problems that stop a commit</h3>
       <ul class="msgs" id="imp-errors"></ul>
@@ -1731,7 +1734,7 @@ document.getElementById("fab-open").onclick = () => {
 let impResult = null;
 function impStatus(text, cls) { const s = document.getElementById("imp-summary"); s.textContent = text; s.className = "status " + (cls || ""); }
 function fillModelSelect(sel, value) {
-  sel.innerHTML = optionHtml([["", "(guess from the port names)"], ...CATALOG.map(m => [m.name, m.name])], value || "");
+  sel.innerHTML = optionHtml([["", "(detect automatically)"], ...CATALOG.map(m => [m.name, m.name])], value || "");
 }
 function msgItems(list, cls) {
   return list.map(m => `<li class="${cls}" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") || `<li class="note" style="border:0">None.</li>`;
@@ -1747,6 +1750,9 @@ function showImport(data, source) {
   impStatus(source === "excel" ? `Read the Excel workbook: ${data.project.vlans.length} VLANs, ${data.project.ports.length} port groups, ${data.project.lags.length} LAGs.`
     : `Read ${st.lines} lines: ${st.imported} imported, ${st.not_imported} not imported. ${st.vlans} VLANs, ${st.port_groups} port groups, ${st.lags} LAGs` +
       (data.model ? `, model ${data.model}.` : "."), data.errors.length ? "bad" : "ok");
+  const mn = document.getElementById("imp-model-note"); const mtext = modelNote(data);
+  mn.classList.toggle("hide", !mtext); mn.className = "modelnote" + (mtext ? "" : " hide") + (data.model_how === "port names" ? " guess" : "");
+  mn.innerHTML = mtext;
   document.getElementById("imp-errors").innerHTML = msgItems(data.errors, "err");
   document.getElementById("imp-warns").innerHTML = msgItems([...data.warnings, ...(data.notes || []).map(n => ({section: "Import", message: n}))], "warn");
   document.getElementById("imp-recs").innerHTML = data.recommendations.map(r =>
@@ -1760,6 +1766,16 @@ function showImport(data, source) {
   document.getElementById("imp-unparsed-sum").textContent = `${un.length} line${un.length === 1 ? "" : "s"} not imported`;
   document.getElementById("imp-unparsed").textContent = un.join("\n");
   document.getElementById("imp-result").scrollIntoView({behavior: "smooth", block: "start"});
+}
+// Where the switch model came from, in words.
+function modelNote(data) {
+  const det = data.detected || []; const how = data.model_how;
+  if (!data.model && !det.length) return data.unknown_models && data.unknown_models.length
+    ? `The config names model <b>${esc(data.unknown_models.join(", "))}</b>, which the builder doesn't know yet. Pick the closest one on the Switch tab.` : "";
+  const list = det.length > 1 ? det.map(d => `member ${d.fpc}: <b>${esc(d.model)}</b>`).join(", ") : `<b>${esc(data.model)}</b>`;
+  if (how === "chosen") return `Model: <b>${esc(data.model)}</b> (picked by you).`;
+  if (how === "port names") return `Model guessed from the port names: ${list}. Check it on the Switch tab, or paste <code>show version</code> output with the config for the exact model.`;
+  return `Model detected from <code>${esc(how)}</code>: ${list}.`;
 }
 async function importText() {
   const text = document.getElementById("imp-text").value;
@@ -2004,7 +2020,8 @@ async function mapOpen(i) {
   const data = await resp.json().catch(() => ({}));
   if (!resp.ok) { mapStatus(data.error || resp.statusText, "bad"); return; }
   const p = clone(data.project); p.fabric = state.fabric; load(p); showTab("Switch");
-  setStatus("Loaded " + (hostOf(it.text) || it.name) + " from the network map. Review each tab.", "ok");
+  const how = data.model_how === "port names" ? " (model guessed from the ports, check it)" : data.model ? ` (${data.model} from ${data.model_how})` : "";
+  setStatus("Loaded " + (hostOf(it.text) || it.name) + " from the network map" + how + ". Review each tab.", "ok");
 }
 function mapSvgText() {
   const svg = document.querySelector("#map-canvas svg").cloneNode(true);

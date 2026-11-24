@@ -45,6 +45,8 @@ log = logging.getLogger("exbuilder.ssh")
 COMMANDS = (
     "show configuration | display set | no-more",
     "show lldp neighbors | no-more",
+    "show version | no-more",            # the model of each member
+    "show virtual-chassis | no-more",    # members, serial numbers and roles
 )
 MAX_HOSTS = 30
 MAX_OUTPUT = 5_000_000
@@ -290,7 +292,8 @@ def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int
             if "set " not in config and "{" not in config:
                 raise FetchError(f"{host}: the switch did not return a config. Is the account allowed to "
                                  "'show configuration'? (root lands in a Unix shell: use a normal Junos user.)")
-            out.update(ok=True, text=config.rstrip() + "\n\n" + texts[1].strip() + "\n")
+            extra = [t.strip() for t in texts[1:] if t.strip() and not t.lstrip().startswith("error:")]
+            out.update(ok=True, text=config.rstrip() + "\n\n" + "\n\n".join(extra) + "\n")
         finally:
             if transport is not None:
                 transport.close()

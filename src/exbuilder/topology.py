@@ -21,7 +21,7 @@ import re
 from collections import defaultdict
 
 from . import ports as P
-from .importer import _words, guess_model, to_set_lines
+from .importer import _words, detect_models, to_set_lines
 
 IFACE = re.compile(r"^(?:ge|xe|mge|et|ae)-?\d")
 PHYS = re.compile(r"^(?:ge|xe|mge|et)-\d{1,2}/\d{1,2}/\d{1,3}$")
@@ -159,10 +159,17 @@ def read_switch(text: str, label: str = "", lldp: str = "") -> dict:
             d["mode"] = "access"
         if d["addrs"]:
             d["mode"] = "routed"
-    # Guess the model only when enough ports are configured to tell models apart.
+    # The model from 'show version' / 'show virtual-chassis' output when it is there.
+    # A guess from the port names only when enough ports are configured to tell models apart.
     seen = {n for n in ifs if PHYS.match(n)}
-    sw.update({"ifs": ifs, "vlans": vlans, "irb": dict(irb), "lldp": rows,
-               "model": guess_model(text) if len(seen) >= 10 else "", "lines": len(lines)})
+    det = detect_models(text)["members"]
+    first = det.get(min(det)) if det else None
+    model = ""
+    if first and (first["how"] != "port names" or len(seen) >= 10):
+        model = first["model"] + ("?" if first["how"] == "port names" else "")
+        if len(det) > 1:
+            model += f" +{len(det) - 1}"
+    sw.update({"ifs": ifs, "vlans": vlans, "irb": dict(irb), "lldp": rows, "model": model, "lines": len(lines)})
     return sw
 
 
