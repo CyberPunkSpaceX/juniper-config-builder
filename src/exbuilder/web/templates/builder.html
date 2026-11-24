@@ -134,6 +134,29 @@ body.basic .adv { display: none !important; }
 .score { font-size: 28px; font-weight: 700; }
 .drop { border: 2px dashed var(--border); border-radius: 8px; padding: 14px; text-align: center; color: var(--muted); }
 .drop.over { border-color: var(--accent); color: var(--accent); }
+/* Network map */
+.maplist { list-style: none; padding: 0; margin: 10px 0 0; display: grid; gap: 6px; }
+.maplist li { border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; background: var(--bg); }
+.maplist li .nm { font-weight: 600; }
+.maplist li .meta { color: var(--muted); font-size: 12px; flex: 1; }
+.maplist li textarea { flex-basis: 100%; min-height: 70px; font-size: 12px; }
+.mapcanvas { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); overflow: auto; touch-action: none; }
+.mapcanvas svg { display: block; user-select: none; }
+.mapcanvas .node { cursor: grab; }
+.mapcanvas .node rect { fill: var(--panel); stroke: var(--border); stroke-width: 1.5; }
+.mapcanvas .node.sel rect { stroke: var(--accent); stroke-width: 2.5; }
+.mapcanvas .node.bad rect { stroke: var(--bad); }
+.mapcanvas .node .h { font: 600 13px system-ui, sans-serif; fill: var(--text); }
+.mapcanvas .node .s { font: 11px system-ui, sans-serif; fill: var(--muted); }
+.mapcanvas .edge { cursor: pointer; }
+.mapcanvas .edge .hit { stroke: transparent; stroke-width: 14; }
+.mapcanvas .edge.sel .ln { filter: drop-shadow(0 0 3px var(--accent)); }
+.mapcanvas .pl { font: 10.5px ui-monospace, monospace; fill: var(--text); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+.maplegend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--muted); align-items: center; }
+.maplegend i { display: inline-block; width: 22px; height: 0; border-top: 3px solid; vertical-align: middle; margin-right: 4px; }
+.mapdetail { margin-top: 10px; font-size: 13px; }
+.mapdetail table { border-collapse: collapse; }
+.mapdetail td { padding: 2px 12px 2px 0; vertical-align: top; }
 .modebar { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .modebar button { background: transparent; color: var(--accent); }
 .modebar button.sel { background: var(--accent); color: var(--accent-text); }
@@ -625,6 +648,42 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   </section>
 
   <!-- ===================================================== PROJECTS -->
+  <!-- ===================================================== NETWORK MAP -->
+  <section class="section" data-tab="Network map">
+    <div class="panel">
+      <h2>Network map</h2>
+      <p class="hint">Load the configs of several switches (<code>show configuration | display set</code> or the curly-brace config, one per file, or a .zip of them). The map finds the links between them and checks that both ends agree: VLANs, native VLAN, mode, MTU and LAGs. For exact links, paste <code>show lldp neighbors</code> under a config or in its LLDP box. Without it, links come from matching /30-/31 addresses and from port descriptions that name another switch.</p>
+      <div class="drop" id="map-drop">Drop config files or a .zip here, or <button class="secondary small" type="button" id="map-file-btn">choose files</button><input type="file" id="map-file" class="hide" multiple accept=".conf,.txt,.set,.cfg,.zip"></div>
+      <details class="explain" style="margin-top:10px"><summary>Paste a config</summary>
+        <div class="grid" style="margin-top:8px"><div class="field"><label>Name (optional, the host name is used)</label><input type="text" id="map-paste-name"></div></div>
+        <textarea id="map-paste" style="min-height:140px;margin-top:8px" placeholder="set system host-name sw-office-01&#10;...&#10;&#10;(optional) show lldp neighbors output"></textarea>
+        <button class="secondary small" type="button" id="map-paste-add" style="margin-top:6px">Add this switch</button>
+      </details>
+      <ul class="maplist" id="map-list"></ul>
+      <div class="toolbar" style="margin-top:10px">
+        <button class="secondary small" type="button" id="map-example">Load the example (3 switches)</button>
+        <button class="secondary small" type="button" id="map-clear">Clear</button>
+        <span class="grow"></span>
+        <span class="status" id="map-status"></span>
+        <button type="button" id="map-draw">Draw map</button>
+      </div>
+    </div>
+    <div class="panel hide" id="map-result">
+      <div class="toolbar" style="margin-bottom:8px">
+        <div class="maplegend"><span><i style="border-color:#7c3aed;border-top-width:5px"></i>LAG</span><span><i style="border-color:#2563eb"></i>trunk</span><span><i style="border-color:#64748b"></i>access</span><span><i style="border-color:#16a34a"></i>routed</span><span><i style="border-color:#94a3b8;border-top-style:dashed"></i>far end unknown</span><span><b style="color:var(--bad)">!</b> problem</span></div>
+        <span class="grow"></span>
+        <button class="secondary small" type="button" id="map-relayout">Tidy layout</button>
+        <button class="secondary small" type="button" id="map-svg">Save SVG</button>
+        <button class="secondary small" type="button" id="map-png">Save PNG</button>
+      </div>
+      <p class="hint" style="margin:0 0 6px">Drag switches to arrange them. Click a switch or a link for details.</p>
+      <div class="mapcanvas" id="map-canvas"></div>
+      <div class="mapdetail" id="map-detail"></div>
+      <h3>Checks</h3>
+      <ul class="msgs recs" id="map-checks"></ul>
+    </div>
+  </section>
+
   <!-- ===================================================== IMPORT -->
   <section class="section" data-tab="Import & check">
     <div class="panel">
@@ -1080,10 +1139,10 @@ function compact(list) {
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
-                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "My projects": []};
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "My projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
 const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
-                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "My projects"]]];
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "My projects"]]];
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
 function isAdvanced() { return LEVEL === "advanced"; }
@@ -1483,7 +1542,7 @@ function renderFabric() {
   document.querySelectorAll("[data-evmode]").forEach(b => b.classList.toggle("sel", (b.dataset.evmode === "wizard") === wizard));
   document.getElementById("evpn-wizard").classList.toggle("hide", !wizard);
   document.getElementById("evpn-manual").classList.toggle("hide", wizard);
-  document.querySelector(".layout").classList.toggle("wide", (wizard && activeTab === "EVPN-VXLAN") || activeTab === "Import & check");
+  document.querySelector(".layout").classList.toggle("wide", (wizard && activeTab === "EVPN-VXLAN") || activeTab === "Import & check" || activeTab === "Network map");
   document.querySelectorAll("#evpn-wizard select[data-models]").forEach(el => { el.innerHTML = optionHtml(FAB_MODELS, fget(el.dataset.fbind)); });
   document.querySelectorAll("#evpn-wizard [data-fbind]").forEach(el => {
     if (el.closest("#fab-vlans, #fab-vrfs") || el.dataset.models) return;
@@ -1725,6 +1784,249 @@ fillModelSelect(document.getElementById("imp-model"), "");
 
 // ---------------------------------------------------------------- drafts
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) {} }
+// ------------------------------------------------------------- network map
+const MAP_KEY = "exbuilder-map";
+let mapItems = [];      // [{name, text, lldp}]
+let mapData = null;     // result of POST /map
+let mapPos = {};        // hostname -> {x, y}
+let mapSel = null;      // {type: "node"|"edge", id}
+const NODE_W = 172, NODE_H = 54;
+const KIND_COLOR = {lag: "#7c3aed", trunk: "#2563eb", access: "#64748b", routed: "#16a34a"};
+try { const saved = JSON.parse(localStorage.getItem(MAP_KEY) || "null"); if (saved) { mapItems = saved.items || []; mapPos = saved.pos || {}; } } catch (e) {}
+function saveMap() { try { localStorage.setItem(MAP_KEY, JSON.stringify({items: mapItems, pos: mapPos})); } catch (e) { /* too big for storage: keep in memory */ } }
+function mapStatus(text, cls) { const el = document.getElementById("map-status"); el.textContent = text || ""; el.className = "status " + (cls || ""); }
+function hostOf(text) { const m = /host-name\s+"?([\w.-]+)/.exec(text || ""); return m ? m[1] : ""; }
+function renderMapList() {
+  document.getElementById("map-list").innerHTML = mapItems.map((it, i) => {
+    const host = hostOf(it.text); const lines = (it.text.match(/\n/g) || []).length + 1;
+    return `<li><span class="nm">${esc(host || it.name || "switch " + (i + 1))}</span><span class="meta">${esc(it.name && it.name !== host ? it.name + " · " : "")}${lines} lines${it.lldp ? " · LLDP added" : ""}</span>
+      <button class="secondary small" type="button" data-map-lldp="${i}">${it.showLldp ? "Hide LLDP" : "LLDP…"}</button>
+      <button class="secondary small" type="button" data-map-open="${i}">Open in builder</button>
+      <button class="danger small" type="button" data-map-rm="${i}" title="Remove">✕</button>
+      ${it.showLldp ? `<textarea data-map-lldp-text="${i}" placeholder="Paste 'show lldp neighbors' from this switch">${esc(it.lldp || "")}</textarea>` : ""}</li>`;
+  }).join("");
+  mapStatus(mapItems.length ? `${mapItems.length} switch${mapItems.length > 1 ? "es" : ""} loaded.` : "");
+}
+async function mapAddFiles(files) {
+  for (const f of files) {
+    if (/\.zip$/i.test(f.name)) {
+      const fd = new FormData(); fd.append("file", f);
+      const resp = await fetch("map/unzip", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) { mapStatus(data.error || resp.statusText, "bad"); continue; }
+      data.files.forEach(x => mapItems.push({name: x.name, text: x.text, lldp: ""}));
+    } else {
+      mapItems.push({name: f.name.replace(/\.[^.]+$/, ""), text: await f.text(), lldp: ""});
+    }
+  }
+  saveMap(); renderMapList();
+}
+async function drawMap() {
+  if (!mapItems.length) { mapStatus("Add at least one switch config.", "bad"); return; }
+  mapStatus("Reading the configs…");
+  try {
+    const resp = await fetch("map", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+      body: JSON.stringify({switches: mapItems.map(({name, text, lldp}) => ({name, text, lldp}))})});
+    if (resp.redirected || resp.status === 401) { location.reload(); return; }
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.error || resp.statusText);
+    mapData = data; mapSel = null;
+    const e = data.checks.filter(c => c.level === "error").length, w = data.checks.filter(c => c.level === "warn").length;
+    mapStatus(`${data.switches.length} switches, ${data.links.length} links` + (e || w ? `, ${e} problem${e === 1 ? "" : "s"} and ${w} warning${w === 1 ? "" : "s"}.` : ". No problems found."), e ? "bad" : "ok");
+    if (data.switches.some(s => !mapPos[s.hostname])) layoutMap(false);
+    document.getElementById("map-result").classList.remove("hide");
+    renderMap(); renderMapChecks(); renderMapDetail();
+  } catch (err) { mapStatus(err.message, "bad"); }
+}
+// Layers from the spanning-tree root (or the best-connected switch) downwards.
+function layoutMap(all) {
+  const sw = mapData.switches, links = mapData.links;
+  const adj = Object.fromEntries(sw.map(s => [s.id, new Set()]));
+  links.forEach(l => { adj[l.a].add(l.b); adj[l.b].add(l.a); });
+  const prio = s => s.priority == null ? 32768 : s.priority;
+  const order = [...sw].sort((x, y) => prio(x) - prio(y) || adj[y.id].size - adj[x.id].size);
+  const layer = {}; const rows = [];
+  for (const start of order) {
+    if (start.id in layer || !adj[start.id].size) continue;
+    layer[start.id] = 0; const q = [start.id];
+    while (q.length) { const n = q.shift(); for (const m of adj[n]) if (!(m in layer)) { layer[m] = layer[n] + 1; q.push(m); } }
+  }
+  const lone = sw.filter(s => !(s.id in layer));
+  const depth = Math.max(-1, ...Object.values(layer)) + 1;
+  lone.forEach(s => layer[s.id] = depth);
+  sw.forEach(s => (rows[layer[s.id]] = rows[layer[s.id]] || []).push(s));
+  const width = Math.max(760, Math.max(...rows.map(r => r.length)) * (NODE_W + 50));
+  rows.forEach((r, y) => r.forEach((s, x) => {
+    if (!all && mapPos[s.hostname]) return;
+    mapPos[s.hostname] = {x: Math.round((x + 0.5) * width / r.length - NODE_W / 2), y: 30 + y * 190};
+  }));
+  saveMap();
+}
+function svgEsc(t) { return esc(String(t ?? "")); }
+function renderMap() {
+  if (!mapData) return;
+  const sw = mapData.switches, pos = id => mapPos[sw[id].hostname];
+  const W = Math.max(800, ...sw.map(s => mapPos[s.hostname].x + NODE_W + 30));
+  const H = Math.max(300, ...sw.map(s => mapPos[s.hostname].y + NODE_H + 40));
+  const pairCount = {}, pairSeen = {};
+  mapData.links.forEach(l => { const k = [l.a, l.b].sort().join("-"); pairCount[k] = (pairCount[k] || 0) + 1; });
+  // Red outline for switch-wide problems; link problems show on the link.
+  const badNodes = new Set(mapData.checks.filter(c => c.level === "error" && c.link == null).flatMap(c => c.switches || []));
+  const labels = [];   // drawn last, over the boxes and lines
+  const lab = (name, members) => name ? svgEsc(name) + (members.length > 1 ? ` ×${members.length}` : "") : "?";
+  const edges = mapData.links.map((l, i) => {
+    const pa = pos(l.a), pb = pos(l.b);
+    const ax = pa.x + NODE_W / 2, ay = pa.y + NODE_H / 2, bx = pb.x + NODE_W / 2, by = pb.y + NODE_H / 2;
+    const k = [l.a, l.b].sort().join("-"); const n = pairCount[k]; const j = pairSeen[k] = (pairSeen[k] ?? -1) + 1;
+    const len = Math.hypot(bx - ax, by - ay) || 1; const nx = -(by - ay) / len, ny = (bx - ax) / len;
+    const off = (j - (n - 1) / 2) * 16;
+    const x1 = ax + nx * off, y1 = ay + ny * off, x2 = bx + nx * off, y2 = by + ny * off;
+    const known = l.a_if && l.b_if;
+    const kind = l.kind === "lag" ? "lag" : l.kind;
+    const color = known ? (KIND_COLOR[kind] || "#64748b") : "#94a3b8";
+    const worst = l.issues.some(x => x.level === "error") ? "error" : l.issues.some(x => x.level === "warn") ? "warn" : "";
+    // Port labels sit just outside each box, along the line.
+    const at = (t) => [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+    // Where the line leaves the box, plus a little room for the text.
+    const ux = Math.abs(bx - ax) / len, uy = Math.abs(by - ay) / len;
+    const edge = Math.min(ux ? (NODE_W / 2) / ux : Infinity, uy ? (NODE_H / 2) / uy : Infinity);
+    const ta = Math.min(0.4, (edge + 30) / len), [lx1, ly1] = at(ta), [lx2, ly2] = at(1 - ta);
+    const mid = at(0.5);
+    labels.push(`<text class="pl" x="${lx1}" y="${ly1}" text-anchor="middle" dy="4">${lab(l.a_if, l.members || [])}</text>`,
+                `<text class="pl" x="${lx2}" y="${ly2}" text-anchor="middle" dy="4">${lab(l.b_if, l.members || [])}</text>`);
+    return `<g class="edge${mapSel && mapSel.type === "edge" && mapSel.id === i ? " sel" : ""}" data-edge="${i}">
+      <line class="hit" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"/>
+      <line class="ln" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${kind === "lag" ? 5 : 2.5}"${known ? "" : ' stroke-dasharray="6 5"'}/>
+      ${worst ? `<g transform="translate(${mid[0]},${mid[1]})"><circle r="9" fill="${worst === "error" ? "#dc2626" : "#d97706"}"/><text y="4" text-anchor="middle" fill="#fff" style="font:700 12px system-ui">!</text></g>` : ""}
+    </g>`;
+  }).join("");
+  const nodes = sw.map(s => {
+    const p = mapPos[s.hostname];
+    const sub = [s.model, s.mgmt ? s.mgmt.split("/")[0] : (s.loopback[0] || "").split("/")[0]].filter(Boolean).join(" · ") || `${s.ports} ports configured`;
+    const root = s.priority != null && mapData.checks.some(c => c.message.startsWith("Spanning-tree root: " + s.hostname + " "));
+    return `<g class="node${mapSel && mapSel.type === "node" && mapSel.id === s.id ? " sel" : ""}${badNodes.has(s.id) ? " bad" : ""}" data-node="${s.id}" transform="translate(${p.x},${p.y})">
+      <rect width="${NODE_W}" height="${NODE_H}" rx="9"/>
+      <text class="h" x="12" y="22">${svgEsc(s.hostname)}${root ? " ★" : ""}</text>
+      <text class="s" x="12" y="40">${svgEsc(sub)}</text></g>`;
+  }).join("");
+  document.getElementById("map-canvas").innerHTML =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${edges}${nodes}<g pointer-events="none">${labels.join("")}</g></svg>`;
+}
+function renderMapChecks() {
+  const order = {error: 0, warn: 1, info: 2};
+  const list = [...mapData.checks].sort((a, b) => order[a.level] - order[b.level]);
+  document.getElementById("map-checks").innerHTML = list.map(c =>
+    `<li class="${c.level === "error" ? "err high" : c.level === "warn" ? "warn medium" : "low"}"${c.link != null ? ` data-map-edge="${c.link}"` : ""}>${esc(c.message)}</li>`).join("")
+    || `<li class="note" style="border:0">Nothing to report.</li>`;
+}
+function renderMapDetail() {
+  const el = document.getElementById("map-detail");
+  if (!mapData || !mapSel) { el.innerHTML = ""; return; }
+  const sw = mapData.switches;
+  if (mapSel.type === "node") {
+    const s = sw[mapSel.id]; const idx = mapItems.findIndex(it => hostOf(it.text) === s.hostname || it.name === s.label);
+    const links = mapData.links.filter(l => l.a === s.id || l.b === s.id);
+    el.innerHTML = `<h3 style="margin:0 0 6px">${esc(s.hostname)}</h3><table>
+      <tr><td>Model</td><td>${esc(s.model || "unknown")}</td></tr><tr><td>Junos</td><td>${esc(s.version || "unknown")}</td></tr>
+      <tr><td>Management</td><td>${esc(s.mgmt || "none")}</td></tr><tr><td>Loopback</td><td>${esc(s.loopback[0] || "none")}</td></tr>
+      <tr><td>VLANs</td><td>${s.vlans}</td></tr><tr><td>STP priority</td><td>${s.priority ?? "default (32768)"}</td></tr>
+      <tr><td>LLDP neighbours</td><td>${s.lldp || "none pasted"}</td></tr>
+      <tr><td>Links</td><td>${links.map(l => { const me = l.a === s.id; return `${esc((me ? l.a_if : l.b_if) || "?")} → ${esc(sw[me ? l.b : l.a].hostname)} ${esc((me ? l.b_if : l.a_if) || "?")}`; }).join("<br>") || "none found"}</td></tr></table>
+      ${idx >= 0 ? `<button class="small" type="button" data-map-open="${idx}" style="margin-top:8px">Open in builder</button>` : ""}`;
+  } else {
+    const l = mapData.links[mapSel.id];
+    el.innerHTML = `<h3 style="margin:0 0 6px">${esc(sw[l.a].hostname)} ${esc(l.a_if || "?")} ↔ ${esc(sw[l.b].hostname)} ${esc(l.b_if || "?")}</h3><table>
+      <tr><td>Type</td><td>${esc(l.kind === "lag" ? "LAG" + (l.mode ? " (" + l.mode + ")" : "") : l.kind)}</td></tr>
+      ${(l.members || []).length ? `<tr><td>Members</td><td>${l.members.map(m => esc(m[0] + " ↔ " + m[1])).join("<br>")}</td></tr>` : ""}
+      <tr><td>Found from</td><td>${esc(l.found.join(", "))}</td></tr></table>
+      <ul class="msgs recs" style="margin-top:8px">${l.issues.map(x => `<li class="${x.level === "error" ? "err high" : x.level === "warn" ? "warn medium" : "low"}">${esc(x.message)}</li>`).join("") || `<li class="note" style="border:0">Both ends agree.</li>`}</ul>`;
+  }
+}
+async function mapOpen(i) {
+  const it = mapItems[i]; if (!it || !confirmReplace()) return;
+  mapStatus("Opening " + (hostOf(it.text) || it.name) + "…");
+  const resp = await fetch("import/config", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify({text: it.text})});
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) { mapStatus(data.error || resp.statusText, "bad"); return; }
+  const p = clone(data.project); p.fabric = state.fabric; load(p); showTab("Switch");
+  setStatus("Loaded " + (hostOf(it.text) || it.name) + " from the network map. Review each tab.", "ok");
+}
+function mapSvgText() {
+  const svg = document.querySelector("#map-canvas svg").cloneNode(true);
+  const css = getComputedStyle(document.body);
+  const v = n => css.getPropertyValue(n).trim();
+  svg.insertAdjacentHTML("afterbegin", `<style>.node rect{fill:${v("--panel")};stroke:${v("--border")};stroke-width:1.5}.node.bad rect{stroke:${v("--bad")}}.h{font:600 13px system-ui,sans-serif;fill:${v("--text")}}.s{font:11px system-ui,sans-serif;fill:${v("--muted")}}.hit{stroke:transparent}.pl{font:10.5px ui-monospace,monospace;fill:${v("--text")};paint-order:stroke;stroke:${v("--bg")};stroke-width:3px}</style><rect width="100%" height="100%" fill="${v("--bg")}"/>`);
+  return new XMLSerializer().serializeToString(svg);
+}
+function mapDownload(blob, name) { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000); }
+// Dragging switches
+let mapDrag = null;
+document.getElementById("map-canvas").addEventListener("pointerdown", ev => {
+  const node = ev.target.closest("[data-node]"); const edge = ev.target.closest("[data-edge]");
+  if (node) {
+    const s = mapData.switches[+node.dataset.node]; const p = mapPos[s.hostname];
+    mapDrag = {s, sx: ev.clientX, sy: ev.clientY, x: p.x, y: p.y, moved: false};
+    ev.currentTarget.setPointerCapture(ev.pointerId);
+  } else if (edge) { mapSel = {type: "edge", id: +edge.dataset.edge}; renderMap(); renderMapDetail(); }
+});
+document.getElementById("map-canvas").addEventListener("pointermove", ev => {
+  if (!mapDrag) return;
+  const dx = ev.clientX - mapDrag.sx, dy = ev.clientY - mapDrag.sy;
+  if (Math.abs(dx) + Math.abs(dy) > 3) mapDrag.moved = true;
+  mapPos[mapDrag.s.hostname] = {x: Math.max(0, mapDrag.x + dx), y: Math.max(0, mapDrag.y + dy)};
+  renderMap();
+});
+document.getElementById("map-canvas").addEventListener("pointerup", () => {
+  if (!mapDrag) return;
+  if (!mapDrag.moved) { mapSel = {type: "node", id: mapDrag.s.id}; renderMap(); renderMapDetail(); }
+  mapDrag = null; saveMap();
+});
+document.getElementById("map-list").addEventListener("input", ev => {
+  const i = ev.target.dataset.mapLldpText; if (i == null) return;
+  mapItems[+i].lldp = ev.target.value; saveMap();
+});
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("[data-map-rm], [data-map-lldp], [data-map-open], [data-map-edge]"); if (!t) return;
+  if (t.dataset.mapRm != null) { mapItems.splice(+t.dataset.mapRm, 1); saveMap(); renderMapList(); }
+  else if (t.dataset.mapLldp != null) { const it = mapItems[+t.dataset.mapLldp]; it.showLldp = !it.showLldp; renderMapList(); }
+  else if (t.dataset.mapOpen != null) mapOpen(+t.dataset.mapOpen);
+  else if (t.dataset.mapEdge != null) { mapSel = {type: "edge", id: +t.dataset.mapEdge}; renderMap(); renderMapDetail(); document.getElementById("map-canvas").scrollIntoView({block: "nearest", behavior: "smooth"}); }
+});
+document.getElementById("map-file-btn").onclick = () => document.getElementById("map-file").click();
+document.getElementById("map-file").onchange = ev => { mapAddFiles([...ev.target.files]); ev.target.value = ""; };
+(dz => {
+  dz.addEventListener("dragover", ev => { ev.preventDefault(); dz.classList.add("over"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+  dz.addEventListener("drop", ev => { ev.preventDefault(); dz.classList.remove("over"); mapAddFiles([...ev.dataTransfer.files]); });
+})(document.getElementById("map-drop"));
+document.getElementById("map-paste-add").onclick = () => {
+  const text = document.getElementById("map-paste").value; if (!text.trim()) return;
+  mapItems.push({name: document.getElementById("map-paste-name").value.trim(), text, lldp: ""});
+  document.getElementById("map-paste").value = ""; document.getElementById("map-paste-name").value = "";
+  saveMap(); renderMapList();
+};
+document.getElementById("map-example").onclick = async () => {
+  const resp = await fetch("map/example"); const data = await resp.json();
+  mapItems = data.files.map(f => ({name: f.name, text: f.text, lldp: ""})); mapPos = {}; saveMap(); renderMapList(); drawMap();
+};
+document.getElementById("map-clear").onclick = () => {
+  if (mapItems.length && !window.confirm("Remove all switches from the map?")) return;
+  mapItems = []; mapPos = {}; mapData = null; saveMap(); renderMapList();
+  document.getElementById("map-result").classList.add("hide");
+};
+document.getElementById("map-draw").onclick = drawMap;
+document.getElementById("map-relayout").onclick = () => { if (mapData) { layoutMap(true); renderMap(); } };
+document.getElementById("map-svg").onclick = () => mapDownload(new Blob([mapSvgText()], {type: "image/svg+xml"}), "network-map.svg");
+document.getElementById("map-png").onclick = () => {
+  const svg = document.querySelector("#map-canvas svg"); const img = new Image();
+  img.onload = () => {
+    const c = document.createElement("canvas"); c.width = svg.width.baseVal.value * 2; c.height = svg.height.baseVal.value * 2;
+    const g = c.getContext("2d"); g.scale(2, 2); g.drawImage(img, 0, 0); c.toBlob(b => mapDownload(b, "network-map.png"));
+  };
+  img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(mapSvgText());
+};
+renderMapList();
+
 (function start() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}

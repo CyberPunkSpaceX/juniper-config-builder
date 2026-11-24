@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, render_template, request
 
-from .. import __version__, fabric, importer, models, xlsx
+from .. import __version__, fabric, importer, models, topology, xlsx
 from ..generator import DEFAULTS, build
 from . import auth
 
@@ -48,6 +48,12 @@ def _project_from_request() -> dict:
 def create_app() -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 2 * 1024 * 1024
+
+    @app.before_request
+    def _bigger_uploads_for_the_map():
+        # Many switch configs at once: allow more than the usual 2 MB.
+        if request.path in ("/map", "/map/unzip"):
+            request.max_content_length = 25 * 1024 * 1024
     auth.init_app(app)
     zones = _timezones()
 
@@ -108,6 +114,52 @@ def create_app() -> Flask:
             return result, 400
         result["model"] = model
         return result
+
+    # ------------------------------------------------------ network map
+    @app.post("/map")
+    def network_map():
+        body = _project_from_request()
+        items = [x for x in body.get("switches") or [] if isinstance(x, dict)]
+        if not items:
+            return {"error": "Add at least one switch config."}, 400
+        if sum(len(str(x.get("text") or "")) + len(str(x.get("lldp") or "")) for x in items) > 20_000_000:
+            return {"error": "Those configs are too large together (20 MB at most)."}, 400
+        return topology.analyze(items)
+
+    @app.get("/map/example")
+    def network_map_example():
+        from importlib import resources
+        folder = resources.files("exbuilder") / "map_examples"
+        files = sorted((f for f in folder.iterdir() if f.name.endswith(".conf")), key=lambda f: f.name)
+        files.sort(key=lambda f: not f.name.startswith("core"))
+        return {"files": [{"name": f.name[:-5], "text": f.read_text()} for f in files]}
+
+    @app.post("/map/unzip")
+    def network_map_unzip():
+        """A zip of configs -> [{name, text}] so the page can list them."""
+        import io
+        import zipfile
+        f = request.files.get("file")
+        if f is None:
+            return {"error": "Choose a .zip file."}, 400
+        try:
+            zf = zipfile.ZipFile(io.BytesIO(f.read()))
+        except zipfile.BadZipFile:
+            return {"error": "That is not a zip file."}, 400
+        out, total = [], 0
+        for info in zf.infolist():
+            name = info.filename.rsplit("/", 1)[-1]
+            if info.is_dir() or not name or name.startswith(".") or info.file_size > 2_000_000:
+                continue
+            total += info.file_size
+            if total > 20_000_000 or len(out) >= topology.MAX_SWITCHES:
+                break
+            text = zf.read(info).decode("utf-8", "replace")
+            if importer.to_set_lines(text):
+                out.append({"name": name.rsplit(".", 1)[0], "text": text})
+        if not out:
+            return {"error": "No switch configs found in that zip."}, 400
+        return {"files": out}
 
     def _xlsx_response(data: bytes, name: str) -> Response:
         return Response(data, mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
