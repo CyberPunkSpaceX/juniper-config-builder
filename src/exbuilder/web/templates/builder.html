@@ -38,6 +38,13 @@ a { color: var(--accent); }
 .field.wide { grid-column: 1 / -1; }
 .check { display: flex; gap: 8px; align-items: center; font-weight: 500; }
 .check input { width: auto; }
+[hidden] { display: none !important; }
+.authpick { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 8px 0 10px; }
+.authpick > .hint, .authpick > .authwarn { flex-basis: 100%; margin: 0; }
+.authpick > .hint:empty { display: none; }
+.authwarn { border-left: 3px solid var(--warn, #d97706); background: rgba(217, 119, 6, .08); padding: 8px 10px; border-radius: 6px; font-size: 13px; }
+.tag { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 9px; padding: 1px 7px; margin-left: 4px; }
+.tag.ok { background: rgba(22, 163, 74, .12); color: var(--ok, #16a34a); }
 input[type=text], input[type=password], input[type=number], select, textarea {
   width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--bg); color: var(--text); font: inherit; }
@@ -665,13 +672,20 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         {% elif not ssh.enabled %}
         <p class="hint">Turned off. An admin of the server turns it on by setting <code>EXB_SSH_ALLOW</code> to the networks the switches are in (for example <code>10.40.0.0/16</code>). Optionally set <code>EXB_SSH_KEY_FILE</code> to a private key (a Docker secret) for a read-only switch account, so nobody types a password.</p>
         {% else %}
-        <p class="hint">Runs <code>show configuration | display set</code> and <code>show lldp neighbors</code> on each switch and adds the result to the list. Allowed networks: <b>{{ ssh.allow|join(", ") }}</b>. Use a read-only Junos account (not root). The password is used for this fetch only and is never saved or logged. A switch's SSH key is remembered on first contact; if it ever changes, the fetch stops.</p>
+        <p class="hint">Runs <code>show configuration | display set</code> and <code>show lldp neighbors</code> on each switch and adds the result to the list. Allowed networks: <b>{{ ssh.allow|join(", ") }}</b>. Use a read-only Junos account (not root). A switch's SSH key is remembered on first contact; if it ever changes, the fetch stops.</p>
+        <div class="authpick">
+          <b>Sign in with</b>
+          <label class="check"><input type="radio" name="ssh-auth" value="key"{% if ssh.key %} checked{% else %} disabled{% endif %}> SSH key <span class="tag ok">Recommended</span></label>
+          <label class="check"><input type="radio" name="ssh-auth" value="password"{% if not ssh.key %} checked{% endif %}> Password</label>
+          <p class="hint" id="ssh-auth-note-key"{% if not ssh.key %} hidden{% endif %}>The server signs in with its stored key{% if ssh.key_user %} as <b>{{ ssh.key_user }}</b>{% endif %}. Nobody types or sends a password.</p>
+          <p class="hint" id="ssh-auth-note-pw">{% if not ssh.key %}<b>No SSH key is set up yet</b>, so only the password option is available. A server admin can add one (see "SSH key sign-in" in the README). {% endif %}</p>
+          <div class="authwarn" id="ssh-pw-warn"{% if ssh.key %} hidden{% endif %}><b>Less safe:</b> the password travels from your browser to this server, and then to each switch. The server uses it for this one fetch and never saves or logs it. However, anyone who controls this server or your browser could still see it. Use a read-only account with its own password, never an admin or root password. The SSH key option avoids this.</div>
+        </div>
         <div class="grid">
           <div class="field wide"><label>Switches (address or name, one per line or comma separated)</label><textarea id="ssh-hosts" style="min-height:70px" placeholder="10.40.45.21&#10;10.40.45.22"></textarea></div>
           <div class="field"><label>Username</label><input type="text" id="ssh-user" autocomplete="off" spellcheck="false" value="{{ ssh.key_user }}"></div>
-          <div class="field"><label>Password</label><input type="password" id="ssh-pass" autocomplete="new-password"></div>
+          <div class="field" id="ssh-pass-field"{% if ssh.key %} hidden{% endif %}><label>Password</label><input type="password" id="ssh-pass" autocomplete="new-password"></div>
           <div class="field"><label>SSH port</label><input type="text" id="ssh-port" value="22"></div>
-          {% if ssh.key %}<label class="check"><input type="checkbox" id="ssh-usekey"> Use the stored key instead of a password</label>{% endif %}
         </div>
         <div class="toolbar" style="margin-top:8px">
           <button type="button" id="ssh-go">Fetch configs</button>
@@ -2055,9 +2069,17 @@ renderMapList();
 // --------------------------------------------------- fetch over SSH (admins)
 if (SSH.enabled && IS_ADMIN) {
   const sshStatus = (t, c) => { const el = document.getElementById("ssh-status"); el.textContent = t || ""; el.className = "status " + (c || ""); };
+  document.querySelectorAll('input[name="ssh-auth"]').forEach(r => r.addEventListener("change", () => {
+    const key = r.value === "key" && r.checked;
+    if (!r.checked) return;
+    document.getElementById("ssh-pass-field").hidden = key;
+    document.getElementById("ssh-pw-warn").hidden = key;
+    document.getElementById("ssh-auth-note-key").hidden = !key;
+    if (key) document.getElementById("ssh-pass").value = "";
+  }));
   document.getElementById("ssh-go").onclick = async () => {
     const pass = document.getElementById("ssh-pass");
-    const useKey = !!(document.getElementById("ssh-usekey") || {}).checked;
+    const useKey = (document.querySelector('input[name="ssh-auth"]:checked') || {}).value === "key";
     const body = {hosts: document.getElementById("ssh-hosts").value, username: document.getElementById("ssh-user").value,
                   password: useKey ? "" : pass.value, port: document.getElementById("ssh-port").value, use_key: useKey};
     pass.value = "";  // never kept in the page
