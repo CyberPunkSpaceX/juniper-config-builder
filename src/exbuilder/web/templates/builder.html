@@ -659,6 +659,29 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <textarea id="map-paste" style="min-height:140px;margin-top:8px" placeholder="set system host-name sw-office-01&#10;...&#10;&#10;(optional) show lldp neighbors output"></textarea>
         <button class="secondary small" type="button" id="map-paste-add" style="margin-top:6px">Add this switch</button>
       </details>
+      <details class="explain" id="ssh-box" style="margin-top:10px"><summary>Fetch from switches over SSH</summary>
+        {% if not is_admin %}
+        <p class="hint">Only admins can fetch configs from switches.</p>
+        {% elif not ssh.enabled %}
+        <p class="hint">Turned off. An admin of the server turns it on by setting <code>EXB_SSH_ALLOW</code> to the networks the switches are in (for example <code>10.40.0.0/16</code>). Optionally set <code>EXB_SSH_KEY_FILE</code> to a private key (a Docker secret) for a read-only switch account, so nobody types a password.</p>
+        {% else %}
+        <p class="hint">Runs <code>show configuration | display set</code> and <code>show lldp neighbors</code> on each switch and adds the result to the list. Allowed networks: <b>{{ ssh.allow|join(", ") }}</b>. Use a read-only Junos account (not root). The password is used for this fetch only and is never saved or logged. A switch's SSH key is remembered on first contact; if it ever changes, the fetch stops.</p>
+        <div class="grid">
+          <div class="field wide"><label>Switches (address or name, one per line or comma separated)</label><textarea id="ssh-hosts" style="min-height:70px" placeholder="10.40.45.21&#10;10.40.45.22"></textarea></div>
+          <div class="field"><label>Username</label><input type="text" id="ssh-user" autocomplete="off" spellcheck="false" value="{{ ssh.key_user }}"></div>
+          <div class="field"><label>Password</label><input type="password" id="ssh-pass" autocomplete="new-password"></div>
+          <div class="field"><label>SSH port</label><input type="text" id="ssh-port" value="22"></div>
+          {% if ssh.key %}<label class="check"><input type="checkbox" id="ssh-usekey"> Use the stored key instead of a password</label>{% endif %}
+        </div>
+        <div class="toolbar" style="margin-top:8px">
+          <button type="button" id="ssh-go">Fetch configs</button>
+          <span class="status" id="ssh-status"></span><span class="grow"></span>
+          <button class="secondary small" type="button" id="ssh-known-btn">Known switches…</button>
+        </div>
+        <ul class="msgs" id="ssh-results"></ul>
+        <div id="ssh-known" class="hide"></div>
+        {% endif %}
+      </details>
       <ul class="maplist" id="map-list"></ul>
       <div class="toolbar" style="margin-top:10px">
         <button class="secondary small" type="button" id="map-example">Load the example (3 switches)</button>
@@ -755,6 +778,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 
 <script>
 const CATALOG = {{ catalog|tojson }};
+const SSH = {{ ssh|tojson }}; const IS_ADMIN = {{ is_admin|tojson }};
 const DEFAULTS = {{ defaults|tojson }};
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
@@ -2027,6 +2051,51 @@ document.getElementById("map-png").onclick = () => {
 };
 renderMapList();
 
+
+// --------------------------------------------------- fetch over SSH (admins)
+if (SSH.enabled && IS_ADMIN) {
+  const sshStatus = (t, c) => { const el = document.getElementById("ssh-status"); el.textContent = t || ""; el.className = "status " + (c || ""); };
+  document.getElementById("ssh-go").onclick = async () => {
+    const pass = document.getElementById("ssh-pass");
+    const useKey = !!(document.getElementById("ssh-usekey") || {}).checked;
+    const body = {hosts: document.getElementById("ssh-hosts").value, username: document.getElementById("ssh-user").value,
+                  password: useKey ? "" : pass.value, port: document.getElementById("ssh-port").value, use_key: useKey};
+    pass.value = "";  // never kept in the page
+    sshStatus("Connecting…"); document.getElementById("ssh-results").innerHTML = "";
+    try {
+      const resp = await fetch("ssh/fetch", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(data.error || resp.statusText);
+      let ok = 0;
+      for (const r of data.results) if (r.ok) {
+        ok++;
+        const host = hostOf(r.text);
+        const at = mapItems.findIndex(it => it.name === r.host || (host && hostOf(it.text) === host));
+        const item = {name: r.host, text: r.text, lldp: ""};
+        if (at >= 0) mapItems[at] = item; else mapItems.push(item);
+      }
+      saveMap(); renderMapList();
+      document.getElementById("ssh-results").innerHTML = data.results.map(r => r.ok
+        ? `<li class="low" style="border-color:var(--ok)">${esc(r.host)}: fetched ${esc(hostOf(r.text) || "")}${r.new_key ? ` · new switch, key ${esc(r.fingerprint)} remembered` : ""}</li>`
+        : `<li class="err">${esc(r.error)}</li>`).join("");
+      sshStatus(`${ok} of ${data.results.length} fetched.`, ok === data.results.length ? "ok" : "bad");
+      if (ok) drawMap();
+    } catch (e) { sshStatus(e.message, "bad"); }
+  };
+  const showKnown = async () => {
+    const box = document.getElementById("ssh-known");
+    const data = await (await fetch("ssh/known")).json();
+    box.innerHTML = `<h3>Known switches</h3><p class="hint">SSH host keys remembered on first contact. Clear one only when you know why it changed (switch replaced or reset).</p>` +
+      (data.hosts.map(h => `<div class="toolbar"><code>${esc(h.host)}</code> <span class="hint" style="margin:0">${esc(h.type)} ${esc(h.fingerprint)}</span><span class="grow"></span><button class="danger small" type="button" data-ssh-forget="${esc(h.host)}">Clear</button></div>`).join("") || `<p class="hint">None yet.</p>`);
+    box.classList.remove("hide");
+  };
+  document.getElementById("ssh-known-btn").onclick = showKnown;
+  document.getElementById("ssh-known").addEventListener("click", async ev => {
+    const b = ev.target.closest("[data-ssh-forget]"); if (!b || !window.confirm("Forget the SSH key of " + b.dataset.sshForget + "?")) return;
+    await fetch("ssh/forget", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify({host: b.dataset.sshForget})});
+    showKnown();
+  });
+}
 (function start() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
