@@ -139,6 +139,7 @@ class Job:
 
     def __init__(self, cid: int, kind: str, who: str):
         self.path = auth.data_dir() / "users.db"
+        self.who = who
         self.steps: list[dict] = []
         with self._db() as conn:
             self.id = conn.execute("INSERT INTO eve_jobs (client_id, kind, created_by, updated_at) VALUES (?, ?, ?, ?)",
@@ -301,6 +302,10 @@ def _pull(job: Job, row: dict, lab_row: dict) -> dict:
             finally:
                 if con:
                     con.close()
+        if out:   # keep them as config backups too
+            from . import backups
+            with job._db() as conn:
+                backups.store(conn, lab_row["client_id"], out, "eve", job.who, note=f"lab {lab_row['name']}")
         return {"items": out}
     finally:
         eve.logout()

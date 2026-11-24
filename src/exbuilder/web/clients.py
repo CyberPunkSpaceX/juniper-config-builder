@@ -110,8 +110,9 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
                              (cid, owner))
         conn.execute("DROP TABLE projects_old")
         log.warning("Moved %d saved project(s) into the client '%s'.", len(rows), FIRST_CLIENT)
-    from . import eve
+    from . import backups, eve
     eve.migrate(conn)
+    backups.migrate(conn)
     old_known = folder / "ssh_known_hosts"
     if old_known.exists() and first:
         dest = client_folder(first[0], folder)
@@ -249,7 +250,7 @@ def clients_page():
     if mine:
         ids = [c["id"] for c in mine]
         q = ",".join("?" * len(ids))
-        for what in ("projects", "maps", "client_members"):
+        for what in ("projects", "maps", "client_members", "config_backups"):
             for cid, n in auth.db().execute(f"SELECT client_id, COUNT(*) FROM {what} WHERE client_id IN ({q}) "
                                             "GROUP BY client_id", ids):
                 counts.setdefault(cid, {})[what] = n
@@ -290,7 +291,9 @@ def client_page(cid: int):
                                 (cid,)).fetchall()
     nets, problems = sshfetch.check_networks(r["ssh_networks"])
     from . import eve
-    return render_template("auth/client.html", c=r, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
+    n_backups = auth.db().execute("SELECT COUNT(*), COUNT(DISTINCT host) FROM config_backups WHERE client_id = ?",
+                                  (cid,)).fetchone()
+    return render_template("auth/client.html", c=r, n_backups=n_backups, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
                            problems=problems, ceiling=[str(n) for n in sshfetch.ceiling()],
                            ssh_off=sshfetch.disabled(), server_key=bool(sshfetch.key_file()),
                            known=sshfetch.known_hosts(client_folder(cid)))
@@ -320,12 +323,12 @@ def client_update(cid: int):
         if request.form.get("confirm", "").strip() != r["name"]:
             flash("Type the client's name exactly to delete it.", "error")
             return redirect(url_for("clients.client_page", cid=cid))
-        for table in ("projects", "maps", "client_members"):
+        for table in ("projects", "maps", "client_members", "eve_labs", "eve_jobs", "config_backups"):
             db.execute(f"DELETE FROM {table} WHERE client_id = ?", (cid,))
         db.execute("DELETE FROM clients WHERE id = ?", (cid,))
         db.commit()
         shutil.rmtree(client_folder(cid), ignore_errors=True)
-        audit("deleted the client with its projects and maps")
+        audit("deleted the client with its projects, maps and config backups")
         flash(f"Client {r['name']} deleted.", "ok")
         return redirect(url_for("clients.clients_page"))
     elif action == "member_add":

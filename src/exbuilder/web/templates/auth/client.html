@@ -144,6 +144,36 @@ set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro a
   {% endif %}
 </section>
 
+<section class="panel" id="backup">
+  <h2>Back up and restore</h2>
+  <p class="hint">One file with everything of {{ c['name'] }}: its saved projects, network maps, switch config backups
+    ({{ n_backups[0] }} from {{ n_backups[1] }} switch{{ '' if n_backups[1] == 1 else 'es' }}), settings and people. Keep it
+    somewhere safe, or load it into another client or another EX Config Builder server.</p>
+  <form method="get" action="{{ url_for('backups.client_export', cid=c['id']) }}">
+    <label style="font-weight:400"><input type="checkbox" name="configs" value="0"> Leave out the switch config backups (smaller file)</label><br>
+    <label style="font-weight:400"><input type="checkbox" name="secrets" value="1"> Include the SSH key and the EVE-NG password</label>
+    <p class="hint" style="margin-top:2px">They stay encrypted with this server's master key, so they only work on this
+      server (for example after a mistake). Without them, a restore elsewhere needs a new SSH key and the EVE-NG password again.
+      Either way, the file holds the switch configs, which contain the switches' own secrets: store it like a password.</p>
+    <button type="submit">Download a backup</button>
+  </form>
+
+  <h2 style="margin-top: 22px">Load a backup into {{ c['name'] }}</h2>
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('backups.client_import', cid=c['id']) }}"
+        onsubmit="return confirm('Load this backup into {{ c['name'] }}?')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <div class="field"><label for="bf">Client backup file (.json)</label><input id="bf" type="file" name="file" accept=".json,application/json" required></div>
+    <div class="field">
+      <label style="font-weight:400"><input type="radio" name="existing" value="replace" checked> Replace projects and maps that have the same name</label><br>
+      <label style="font-weight:400"><input type="radio" name="existing" value="skip"> Keep the ones here and skip those from the backup</label>
+    </div>
+    <label style="font-weight:400"><input type="checkbox" name="settings" value="1"> Also restore the SSH and EVE-NG settings (replaces the current ones)</label><br>
+    <label style="font-weight:400"><input type="checkbox" name="people" value="1"> Also restore people (only users that exist on this server)</label>
+    <p class="hint">Nothing here is deleted: projects, maps and config backups from the file are added. Config backups already here are skipped.</p>
+    <button type="submit" class="secondary">Load backup</button>
+  </form>
+</section>
+
 {% if server_admin %}
 <section class="panel">
   <h2>Rename or delete</h2>
@@ -156,7 +186,7 @@ set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro a
   <form method="post" class="row" style="grid-template-columns: 1fr auto">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="delete">
-    <div><label for="dc">Delete this client with all its projects, maps and settings. Type <b>{{ c['name'] }}</b> to confirm.</label>
+    <div><label for="dc">Delete this client with all its projects, maps, config backups and settings. Download a backup first. Type <b>{{ c['name'] }}</b> to confirm.</label>
       <input id="dc" type="text" name="confirm" autocomplete="off" required></div>
     <div><button class="danger" type="submit">Delete client</button></div>
   </form>

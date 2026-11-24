@@ -25,7 +25,7 @@ from flask import Flask, Response, abort, render_template, request
 
 from .. import __version__, fabric, importer, models, sshfetch, topology, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, clients, eve
+from . import auth, backups, clients, eve
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -52,11 +52,13 @@ def create_app() -> Flask:
     @app.before_request
     def _bigger_uploads_for_the_map():
         # Many switch configs at once: allow more than the usual 2 MB.
-        if request.path in ("/map", "/map/unzip", "/maps"):
+        if request.path in ("/map", "/map/unzip", "/maps", "/backups", "/backups/upload", "/clients/restore") or (
+                request.path.startswith("/clients/") and request.path.endswith("/import")):
             request.max_content_length = 25 * 1024 * 1024
     auth.init_app(app)
     clients.init_app(app)
     eve.init_app(app)
+    backups.init_app(app)
     zones = _timezones()
 
     @app.after_request
@@ -189,6 +191,13 @@ def create_app() -> Flask:
         results = sshfetch.fetch(hosts, username, password, clients.client_folder(c["id"]), me, port,
                                  nets=nets, pkey=pkey, client=c["name"])
         del password
+        # Every config fetched is kept as a backup of the client (unchanged ones only once).
+        ok = [r for r in results if r["ok"]]
+        if ok:
+            saved = backups.store(auth.db(), c["id"], [{"name": r["host"], "address": r["host"], "text": r["text"]}
+                                                       for r in ok], "ssh", me)
+            for r, s in zip(ok, saved):
+                r["backup"] = s
         return {"results": results}
 
     @app.get("/ssh/known")

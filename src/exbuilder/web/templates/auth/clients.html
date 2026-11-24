@@ -14,21 +14,33 @@
     <div><button type="submit">Add client</button></div>
   </div>
 </form>
+<form class="panel" method="post" enctype="multipart/form-data" action="{{ url_for('backups.client_restore_new') }}">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <h2>Make a client from a backup</h2>
+  <p class="hint">Load a backup file (from a client's page, on this or another server) as a new client, with its
+    projects, maps, config backups and settings.</p>
+  <div class="row" style="grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr))">
+    <div><label for="rf">Client backup file (.json)</label><input id="rf" type="file" name="file" accept=".json,application/json" required></div>
+    <div><label for="rname">Name <span class="hint">(empty = the name in the file)</span></label><input id="rname" type="text" name="name" maxlength="80"></div>
+    <div><button type="submit" class="secondary">Load as a new client</button></div>
+  </div>
+  <label style="font-weight:400"><input type="checkbox" name="people" value="1"> Also add the people from the backup (users that exist here)</label>
+</form>
 {% endif %}
 
 <section class="panel scroll">
   <table>
-    <tr><th>Client</th><th>Your role</th><th>Projects</th><th>Maps</th><th>People</th><th></th></tr>
+    <tr><th>Client</th><th>Your role</th><th>Projects</th><th>Maps</th><th>Config backups</th><th>People</th><th></th></tr>
     {% for c in clients %}
     {% set n = counts.get(c.id, {}) %}
     <tr>
       <td><b>{{ c.name }}</b>{% if current_client and c.id == current_client.id %} <span class="badge on">current</span>{% endif %}</td>
       <td>{{ c.role }}{% if server_admin %} <span class="muted">(server admin)</span>{% endif %}</td>
-      <td>{{ n.get('projects', 0) }}</td><td>{{ n.get('maps', 0) }}</td><td>{{ n.get('client_members', 0) }}</td>
+      <td>{{ n.get('projects', 0) }}</td><td>{{ n.get('maps', 0) }}</td><td>{{ n.get('config_backups', 0) }}</td><td>{{ n.get('client_members', 0) }}</td>
       <td>{% if c.role == 'admin' %}<a href="{{ url_for('clients.client_page', cid=c.id) }}">Settings</a>{% endif %}</td>
     </tr>
     {% else %}
-    <tr><td colspan="6" class="muted">You are not in any client yet. Ask an admin to add you to one.</td></tr>
+    <tr><td colspan="7" class="muted">You are not in any client yet. Ask an admin to add you to one.</td></tr>
     {% endfor %}
   </table>
 </section>

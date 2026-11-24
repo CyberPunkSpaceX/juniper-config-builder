@@ -192,6 +192,22 @@ body.basic .adv { display: none !important; }
 .topo { overflow-x: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); margin: 8px 0 12px; }
 .topo svg { display: block; margin: 0 auto; }
 .tscroll { overflow-x: auto; margin-bottom: 10px; }
+.diff { margin: 0 0 10px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.diff h4 { margin: 0; padding: 6px 10px; font-size: 13px; background: var(--bg); border-bottom: 1px solid var(--border); display: flex; gap: 8px; }
+.diff h4 .n { margin-left: auto; font-weight: 400; color: var(--muted); }
+.diff pre { margin: 0; padding: 4px 0; overflow-x: auto; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; }
+.diff pre span { display: block; padding: 0 10px; white-space: pre; }
+.diff .d-rm { background: rgba(220, 38, 38, .12); }
+.diff .d-add { background: rgba(22, 163, 74, .14); }
+.diff .d-skip { color: var(--muted); font-style: italic; }
+.cmpsides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 760px) { .cmpsides { grid-template-columns: 1fr; } }
+.cmpsides > * { min-width: 0; }
+.cmpside { border: 1px solid var(--border); border-radius: 8px; padding: 10px; background: var(--bg); }
+.cmpside h3 { margin: 0 0 6px; font-size: 14px; }
+.cmpside textarea { min-height: 110px; }
+.bkhost > td { background: var(--bg); }
+.bkver td:first-child { padding-left: 22px; }
 pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; background: var(--bg); border: 1px solid var(--border);
   border-radius: 8px; padding: 10px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre; }
 </style>
@@ -808,6 +824,74 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
     </div>
   </section>
 
+  <!-- ===================================================== BACKUPS & COMPARE -->
+  <section class="section" data-tab="Backups & compare">
+    <div class="panel">
+      <h2>Config backups{% if client %} of {{ client.name }}{% endif %}</h2>
+      {% if not client %}<p class="hint">You are not in any client yet, so there is nowhere to keep backups. You can still compare two configs below.</p>
+      {% else %}
+      <p class="hint">Every config fetched over SSH and every config pulled from an EVE-NG lab is kept here by itself, with its date. An unchanged config is kept only once, and the newest 50 versions of each switch are kept. You can also upload config files, or keep the switches on the map or the config the builder made. Everyone in {{ client.name }} sees these backups.</p>
+      <div class="toolbar">
+        {% if client.role != 'viewer' %}
+        <button class="secondary small" type="button" id="bk-upload-btn">Upload configs…</button><input type="file" id="bk-upload" class="hide" multiple accept=".conf,.txt,.set,.cfg,.zip">
+        <button class="secondary small" type="button" id="bk-keep-map">Keep the map's switches</button>
+        <button class="secondary small" type="button" id="bk-keep-builder">Keep the builder's config</button>
+        {% endif %}
+        <span class="grow"></span>
+        <button class="secondary small" type="button" id="bk-export">Download newest of each switch (.zip)</button>
+      </div>
+      <p class="status" id="bk-status"></p>
+      <div class="tscroll"><table class="plist"><thead><tr><th>Switch</th><th>Saved</th><th>From</th><th></th></tr></thead><tbody id="bk-list"></tbody></table></div>
+      {% endif %}
+    </div>
+    <div class="panel">
+      <h2>Compare two configs</h2>
+      <p class="hint">Pick what goes on each side: the live switch (fetched now over SSH), a backup, the config the builder made, a switch on the network map (for example one pulled from an EVE-NG lab), or pasted text. Both are read as <code>set</code> lines, so the order and the format (set or curly braces) do not matter. You get the differences per interface, VLAN or protocol, and the commands that make one side match the other.</p>
+      <div class="cmpsides">
+        {% for side in ["a", "b"] %}
+        <div class="cmpside" data-side="{{ side }}">
+          <h3>{{ "A" if side == "a" else "B" }}</h3>
+          <div class="field"><label>Config</label><select data-cmp-kind>
+            <option value="live">Live switch (fetch now over SSH)</option>
+            <option value="backup">A config backup</option>
+            <option value="builder">The builder's config (current project)</option>
+            <option value="map">A switch on the network map</option>
+            <option value="paste">Paste a config</option>
+          </select></div>
+          <div data-cmp-opt="live" class="hide">
+            {% if ssh.enabled and ssh.can_fetch %}
+            <div class="field"><label>Switch address</label><input type="text" data-cmp-host placeholder="10.40.45.21"></div>
+            {% if not ssh.key %}
+            <div class="grid"><div class="field"><label>Username</label><input type="text" data-cmp-user autocomplete="off"></div>
+              <div class="field"><label>Password</label><input type="password" data-cmp-pass autocomplete="new-password"></div></div>
+            <p class="hint">No SSH key is set up for {{ client.name }}, so a password is needed (it is used for this one fetch and never kept). A key is safer: <a href="{{ url_for('clients.client_page', cid=client.id) }}#ssh">set one up</a>.</p>
+            {% else %}<p class="hint">Signs in with {{ client.name }}'s SSH key{% if ssh.key_user %} as <b>{{ ssh.key_user }}</b>{% endif %}. The fetched config is kept as a backup too.</p>{% endif %}
+            {% elif client and not ssh.can_fetch %}<p class="hint">Only admins of {{ client.name }} can fetch from switches. Compare with the newest SSH backup instead.</p>
+            {% else %}<p class="hint">SSH fetch is not set up{% if client %} for {{ client.name }}{% endif %}. Compare with a backup or pasted config instead.</p>{% endif %}
+          </div>
+          <div data-cmp-opt="backup" class="hide"><div class="field"><label>Backup</label><select data-cmp-backup><option value="">No backups yet</option></select></div></div>
+          <div data-cmp-opt="builder" class="hide"><p class="hint" data-cmp-builder-note></p></div>
+          <div data-cmp-opt="map" class="hide"><div class="field"><label>Switch</label><select data-cmp-map></select></div></div>
+          <div data-cmp-opt="paste" class="hide"><textarea data-cmp-text placeholder="show configuration | display set"></textarea></div>
+        </div>
+        {% endfor %}
+      </div>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="cmp-secrets" checked> Ignore encrypted passwords and keys (Junos re-encrypts them each time, so they always look different)</label>
+      <div class="toolbar" style="margin-top:8px"><button type="button" id="cmp-go">Compare</button><button class="secondary small" type="button" id="cmp-swap">Swap A and B</button><span class="status" id="cmp-status"></span></div>
+    </div>
+    <div class="panel hide" id="cmp-result">
+      <h2 id="cmp-title">Differences</h2>
+      <p class="status" id="cmp-summary"></p>
+      <div id="cmp-diff"></div>
+      <h3>Commands</h3>
+      <p class="hint">A starting point, not a finished change: read them first. On the switch use <code>configure</code>, paste, <code>show | compare</code>, <code>commit check</code>, then <code>commit confirmed 5</code>. Statements that are only written differently (for example an <code>interface-range</code> against single ports) show up as differences too.</p>
+      <div>
+        <div style="margin-bottom:12px"><div class="toolbar"><b id="cmp-a2b-h">Make A like B</b><span class="grow"></span><button class="secondary small" type="button" data-cmp-copy="a2b">Copy</button></div><pre class="cfg" id="cmp-a2b" style="min-height:60px"></pre></div>
+        <div><div class="toolbar"><b id="cmp-b2a-h">Make B like A</b><span class="grow"></span><button class="secondary small" type="button" data-cmp-copy="b2a">Copy</button></div><pre class="cfg" id="cmp-b2a" style="min-height:60px"></pre></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ===================================================== PROJECTS -->
   <section class="section" data-tab="Projects">
     <div class="panel">
@@ -1228,10 +1312,10 @@ function compact(list) {
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
-                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "Projects": []};
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "Backups & compare": [], "Projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
 const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
-                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Projects"]]];
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Backups & compare", "Projects"]]];
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
 function isAdvanced() { return LEVEL === "advanced"; }
@@ -1269,6 +1353,7 @@ function showTab(t) {
   if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
   if (t === "Projects") refreshProjects();
+  if (t === "Backups & compare") openBackups();
 }
 
 // ---------------------------------------------------------------- generate
@@ -2155,7 +2240,7 @@ if (EVE.configured && document.getElementById("eve-box")) {
   function showPulled(items) {
     const box = document.getElementById("eve-pulled"); box.classList.toggle("hide", !items.length);
     window._evePulled = items;
-    box.innerHTML = `<div class="toolbar"><b>${items.length} config(s) read from the lab.</b><span class="grow"></span>
+    box.innerHTML = `<div class="toolbar"><b>${items.length} config(s) read from the lab</b> <span class="note">(also kept under Backups &amp; compare)</span><span class="grow"></span>
       <button class="secondary small" type="button" id="eve-pulled-dl">Download</button>
       <button class="small" type="button" id="eve-pulled-load">Put them on the map</button></div>`;
     document.getElementById("eve-pulled-dl").onclick = () => {
@@ -2287,7 +2372,7 @@ if (SSH.enabled && SSH.can_fetch) {
       }
       saveMap(); renderMapList();
       document.getElementById("ssh-results").innerHTML = data.results.map(r => r.ok
-        ? `<li class="low" style="border-color:var(--ok)">${esc(r.host)}: fetched ${esc(hostOf(r.text) || "")}${r.new_key ? ` · new switch, key ${esc(r.fingerprint)} remembered` : ""}</li>`
+        ? `<li class="low" style="border-color:var(--ok)">${esc(r.host)}: fetched ${esc(hostOf(r.text) || "")}${r.new_key ? ` · new switch, key ${esc(r.fingerprint)} remembered` : ""}${r.backup ? (r.backup.unchanged ? " · same as the last backup" : " · kept as a backup") : ""}</li>`
         : `<li class="err">${esc(r.error)}</li>`).join("");
       sshStatus(`${ok} of ${data.results.length} fetched.`, ok === data.results.length ? "ok" : "bad");
       if (ok) drawMap();
@@ -2307,6 +2392,185 @@ if (SSH.enabled && SSH.can_fetch) {
     showKnown();
   });
 }
+
+// ------------------------------------------------- config backups and compare
+let bkRows = [];
+const bkStatus = (t, c) => { const el = document.getElementById("bk-status"); if (el) { el.textContent = t || ""; el.className = "status " + (c || ""); } };
+const cmpStatus = (t, c) => { const el = document.getElementById("cmp-status"); el.textContent = t || ""; el.className = "status " + (c || ""); };
+function bkSaved(saved, what) {
+  const kept = saved.filter(s => s.id && !s.unchanged).length, same = saved.filter(s => s.unchanged).length, bad = saved.filter(s => s.error).length;
+  bkStatus(`${what}: ${kept} kept${same ? `, ${same} unchanged since the last backup` : ""}${bad ? `, ${bad} not a switch config` : ""}.`, bad ? "bad" : "ok");
+}
+async function refreshBackups() {
+  const tb = document.getElementById("bk-list");
+  if (!CLIENT) { bkRows = []; fillCmpBackups(); return; }
+  let data; try { data = await api("backups"); } catch (e) { bkStatus("Could not load backups: " + e.message, "bad"); return; }
+  bkRows = data.backups;
+  const hosts = {};
+  bkRows.forEach(b => (hosts[b.host] = hosts[b.host] || []).push(b));
+  const ver = b => `<td class="note">${esc(b.created_at)}${b.created_by ? " by " + esc(b.created_by) : ""}</td>
+      <td class="note">${esc(b.source_name)}${b.address ? " · " + esc(b.address) : ""}${b.note ? " · " + esc(b.note) : ""} · ${b.lines} lines</td>
+      <td style="text-align:right;white-space:nowrap"><button class="secondary small" type="button" data-bk-cmp="${b.id}" title="Compare this backup">Compare</button>
+      <button class="secondary small" type="button" data-bk-dl="${b.id}">Download</button>
+      ${data.can_delete ? `<button class="danger small" type="button" data-bk-del="${b.id}" data-name="${esc(b.host + " " + b.created_at)}">✕</button>` : ""}</td>`;
+  tb.innerHTML = Object.entries(hosts).map(([host, list]) => `<tr class="bkhost"><td><b>${esc(host)}</b>${list.length > 1 ? ` <button class="secondary small" type="button" data-bk-more="${esc(host)}">${list.length} versions</button>` : ""}</td>${ver(list[0])}</tr>`
+    + list.slice(1).map(b => `<tr class="bkver hide" data-bk-host="${esc(host)}"><td class="note">older</td>${ver(b)}</tr>`).join("")).join("")
+    || `<tr><td colspan="4" class="note">No config backups yet. Fetch switches over SSH on the Network map tab, or upload configs.</td></tr>`;
+  fillCmpBackups();
+}
+function fillCmpBackups() {
+  document.querySelectorAll("[data-cmp-backup]").forEach(sel => {
+    const was = sel.value;
+    sel.innerHTML = bkRows.length ? bkRows.map(b => `<option value="${b.id}">${esc(b.host)} · ${esc(b.created_at)} · ${esc(b.source_name)}</option>`).join("")
+      : `<option value="">No backups yet</option>`;
+    if (bkRows.some(b => String(b.id) === was)) sel.value = was;
+  });
+}
+function fillCmpMap() {
+  document.querySelectorAll("[data-cmp-map]").forEach(sel => {
+    const was = sel.value;
+    sel.innerHTML = mapItems.length ? mapItems.map((it, i) => `<option value="${i}">${esc(hostOf(it.text) || it.name || "switch " + (i + 1))}${it.name && it.name !== hostOf(it.text) ? " (" + esc(it.name) + ")" : ""}</option>`).join("")
+      : `<option value="">No switches on the map</option>`;
+    if (was && +was < mapItems.length) sel.value = was;
+  });
+  document.querySelectorAll("[data-cmp-builder-note]").forEach(p => {
+    p.textContent = `The set commands the builder makes now for ${state.name || state.system.hostname || "the current project"}${result && result.errors.length ? " (it still has errors to fix)" : ""}.`;
+  });
+}
+function cmpShowKind(side) {
+  const kind = side.querySelector("[data-cmp-kind]").value;
+  side.querySelectorAll("[data-cmp-opt]").forEach(el => el.classList.toggle("hide", el.dataset.cmpOpt !== kind));
+}
+function openBackups() { refreshBackups(); fillCmpMap(); }
+(() => {
+  const sides = document.querySelectorAll(".cmpside");
+  const canLive = SSH.enabled && SSH.can_fetch;
+  sides[0].querySelector("[data-cmp-kind]").value = canLive ? "live" : "backup";
+  sides[1].querySelector("[data-cmp-kind]").value = "builder";
+  sides.forEach(s => { cmpShowKind(s); s.querySelector("[data-cmp-kind]").addEventListener("change", () => cmpShowKind(s)); });
+})();
+async function cmpSideText(side) {
+  const kind = side.querySelector("[data-cmp-kind]").value;
+  if (kind === "builder") {
+    await generate();
+    if (!result || !result.set) throw new Error("The builder has no config yet.");
+    return {text: result.set, label: "builder: " + (state.system.hostname || state.name || "current project")};
+  }
+  if (kind === "map") {
+    const it = mapItems[+side.querySelector("[data-cmp-map]").value];
+    if (!it) throw new Error("Put switches on the network map first.");
+    return {text: it.text, label: "map: " + (hostOf(it.text) || it.name)};
+  }
+  if (kind === "paste") {
+    const text = side.querySelector("[data-cmp-text]").value;
+    if (!text.trim()) throw new Error("Paste a config first.");
+    return {text, label: "pasted config"};
+  }
+  if (kind === "backup") {
+    const id = side.querySelector("[data-cmp-backup]").value;
+    if (!id) throw new Error("There are no backups yet.");
+    const b = await api("backups/" + id);
+    return {text: b.text, label: `backup: ${b.host}, ${b.created_at}`};
+  }
+  // live
+  if (!(SSH.enabled && SSH.can_fetch)) throw new Error("Fetching from switches is not available to you here.");
+  const host = side.querySelector("[data-cmp-host]").value.trim();
+  if (!host) throw new Error("Enter the switch address.");
+  const pass = side.querySelector("[data-cmp-pass]");
+  const body = {hosts: host, port: 22, use_key: !!SSH.key, username: SSH.key ? SSH.key_user : (side.querySelector("[data-cmp-user]") || {}).value,
+                password: pass ? pass.value : ""};
+  if (pass) pass.value = "";
+  cmpStatus(`Fetching ${host}…`);
+  const data = await api("ssh/fetch", body);
+  const r = data.results[0];
+  if (!r.ok) throw new Error(r.error);
+  refreshBackups();
+  return {text: r.text, label: `live: ${hostOf(r.text) || host}`};
+}
+function cmpRender(r, la, lb) {
+  document.getElementById("cmp-result").classList.remove("hide");
+  document.getElementById("cmp-title").textContent = `A: ${la}  ·  B: ${lb}`;
+  document.getElementById("cmp-summary").textContent = r.identical
+    ? `The same: ${r.same} lines in both${r.secrets_ignored ? " (encrypted secrets not compared)" : ""}.`
+    : `${r.only_a} line${r.only_a === 1 ? "" : "s"} only in A, ${r.only_b} only in B, ${r.same} the same, in ${r.sections.length} section${r.sections.length === 1 ? "" : "s"}.`;
+  document.getElementById("cmp-summary").className = "status " + (r.identical ? "ok" : "");
+  document.getElementById("cmp-diff").innerHTML = r.sections.map(s => `<div class="diff"><h4>${esc(s.name)}<span class="n">${s.removed ? `<span style="color:var(--bad)">−${s.removed} A</span> ` : ""}${s.added ? `<span style="color:var(--ok)">+${s.added} B</span>` : ""}</span></h4><pre>${
+    s.lines.map(x => x.op === "…" ? `<span class="d-skip">  … ${esc(x.text)}</span>` : `<span class="${x.op === "-" ? "d-rm" : x.op === "+" ? "d-add" : ""}">${x.op === "-" ? "A " : x.op === "+" ? "B " : "  "}${esc(x.text)}</span>`).join("")}</pre></div>`).join("");
+  document.getElementById("cmp-a2b").textContent = r.a_to_b.join("\n") || "(nothing to change)";
+  document.getElementById("cmp-b2a").textContent = r.b_to_a.join("\n") || "(nothing to change)";
+  document.getElementById("cmp-a2b-h").textContent = `Make A (${la}) like B`;
+  document.getElementById("cmp-b2a-h").textContent = `Make B (${lb}) like A`;
+}
+document.getElementById("cmp-go").onclick = async () => {
+  const [sa, sb] = document.querySelectorAll(".cmpside");
+  try {
+    cmpStatus("Reading the configs…");
+    const a = await cmpSideText(sa); const b = await cmpSideText(sb);
+    cmpStatus("Comparing…");
+    const r = await api("compare", {a, b, ignore_secrets: document.getElementById("cmp-secrets").checked});
+    cmpRender(r, a.label, b.label); cmpStatus("");
+    document.getElementById("cmp-result").scrollIntoView({behavior: "smooth", block: "start"});
+  } catch (e) { cmpStatus(e.message, "bad"); }
+};
+document.getElementById("cmp-swap").onclick = () => {
+  const [sa, sb] = document.querySelectorAll(".cmpside");
+  for (const sel of ["[data-cmp-kind]", "[data-cmp-backup]", "[data-cmp-map]", "[data-cmp-text]", "[data-cmp-host]"]) {
+    const x = sa.querySelector(sel), y = sb.querySelector(sel); if (!x || !y) continue;
+    const v = x.value; x.value = y.value; y.value = v;
+  }
+  cmpShowKind(sa); cmpShowKind(sb);
+};
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("[data-cmp-copy]"); if (!b) return;
+  navigator.clipboard.writeText(document.getElementById("cmp-" + b.dataset.cmpCopy).textContent);
+  b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy"; }, 1200);
+});
+if (document.getElementById("bk-list")) {
+  document.getElementById("bk-list").addEventListener("click", async ev => {
+    const b = ev.target.closest("button"); if (!b) return;
+    if (b.dataset.bkMore) document.querySelectorAll("[data-bk-host]").forEach(tr => { if (tr.dataset.bkHost === b.dataset.bkMore) tr.classList.toggle("hide"); });
+    if (b.dataset.bkDl) location.href = `backups/${b.dataset.bkDl}?download=1`;
+    if (b.dataset.bkCmp) {
+      // A: this backup. B: the live switch it came from if possible, else the newest other backup of it.
+      const row = bkRows.find(x => String(x.id) === b.dataset.bkCmp);
+      const [sa, sb] = document.querySelectorAll(".cmpside");
+      sa.querySelector("[data-cmp-kind]").value = "backup"; sa.querySelector("[data-cmp-backup]").value = b.dataset.bkCmp;
+      const other = bkRows.find(x => x.host === row.host && x.id !== row.id);
+      if (SSH.enabled && SSH.can_fetch && row.address) { sb.querySelector("[data-cmp-kind]").value = "live"; sb.querySelector("[data-cmp-host]").value = row.address; }
+      else if (other) { sb.querySelector("[data-cmp-kind]").value = "backup"; sb.querySelector("[data-cmp-backup]").value = other.id; }
+      cmpShowKind(sa); cmpShowKind(sb);
+      document.querySelector(".cmpsides").scrollIntoView({behavior: "smooth", block: "center"});
+      cmpStatus("Pick B, then Compare.");
+    }
+    if (b.dataset.bkDel && window.confirm(`Delete the backup ${b.dataset.name}?`)) {
+      try { await api(`backups/${b.dataset.bkDel}/delete`, {}); refreshBackups(); } catch (e) { bkStatus(e.message, "bad"); }
+    }
+  });
+  document.getElementById("bk-export").onclick = () => { location.href = "backups/export"; };
+  const up = document.getElementById("bk-upload");
+  if (up) {
+    document.getElementById("bk-upload-btn").onclick = () => up.click();
+    up.onchange = async () => {
+      const fd = new FormData(); [...up.files].forEach(f => fd.append("file", f)); up.value = "";
+      bkStatus("Uploading…");
+      const resp = await fetch("backups/upload", {method: "POST", headers: {"X-CSRF-Token": CSRF}, body: fd});
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) { bkStatus(data.error || resp.statusText, "bad"); return; }
+      bkSaved(data.saved, "Uploaded"); refreshBackups();
+    };
+    document.getElementById("bk-keep-map").onclick = async () => {
+      if (!mapItems.length) { bkStatus("There are no switches on the network map.", "bad"); return; }
+      try { const r = await api("backups", {items: mapItems.map(i => ({name: i.name, text: i.text})), source: "map"}); bkSaved(r.saved, "Map"); refreshBackups(); }
+      catch (e) { bkStatus(e.message, "bad"); }
+    };
+    document.getElementById("bk-keep-builder").onclick = async () => {
+      await generate();
+      if (!result || !result.set) { bkStatus("The builder has no config yet.", "bad"); return; }
+      try { const r = await api("backups", {items: [{name: state.system.hostname || state.name, text: result.set}], source: "builder", note: state.name || ""}); bkSaved(r.saved, "Builder"); refreshBackups(); }
+      catch (e) { bkStatus(e.message, "bad"); }
+    };
+  }
+}
 (function start() {
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
@@ -2317,6 +2581,7 @@ if (SSH.enabled && SSH.can_fetch) {
   if (!isAdvanced() && ADVANCED_TABS.includes(activeTab)) activeTab = "Switch";
   updateTabs();
   if (activeTab === "Projects") refreshProjects();
+  if (activeTab === "Backups & compare") openBackups();
   if (activeTab === "EVPN-VXLAN") generateFabric();
 })();
 </script>

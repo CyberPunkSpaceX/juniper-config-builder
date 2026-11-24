@@ -183,6 +183,9 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
     with caplog.at_level("WARNING", logger="exbuilder.ssh"):
         resp = client.post("/ssh/fetch", json=body, headers=hdr)
     assert resp.status_code == 200 and resp.json["results"][0]["ok"]
+    assert resp.json["results"][0]["backup"]["unchanged"] is False      # kept as a config backup
+    (bk,) = client.get("/backups").json["backups"]
+    assert bk["source"] == "ssh" and bk["address"] == "127.0.0.1"
     assert "audit: ssh fetch" in caplog.text and "'Default'" in caplog.text and "Secret-123" not in caplog.text
     assert client.post("/ssh/fetch", json={**body, "password": ""}, headers=hdr).status_code == 400
     assert client.get("/ssh/known").json["hosts"]
@@ -199,6 +202,8 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
     FakeJunos.pubkey = pub
     resp = client.post("/ssh/fetch", json={"hosts": "127.0.0.1", "use_key": True, "port": switch["port"]}, headers=hdr)
     assert resp.json["results"][0]["ok"], resp.json
+    assert resp.json["results"][0]["backup"]["unchanged"] is True       # same config: not kept twice
+    assert len(client.get("/backups").json["backups"]) == 1
     # Members: only client admins can fetch.
     add_user(client, "bob", "bob-password-1")
     client.post("/clients/1", data={"csrf_token": form["csrf_token"], "action": "member_add", "username": "bob",
