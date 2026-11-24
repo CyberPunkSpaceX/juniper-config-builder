@@ -165,7 +165,7 @@ class Eve:
 
     def create_lab(self, folder: str, name: str, description: str) -> str:
         self.call("POST", "/api/labs", {"path": folder or "/", "name": name, "version": "1",
-                                        "author": "EX Config Builder", "description": description[:500]})
+                                        "author": "Multi-Vendor Switch Config Builder", "description": description[:500]})
         return f"{folder.rstrip('/')}/{name}.unl"
 
     def delete_lab(self, lab: str) -> None:

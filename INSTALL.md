@@ -1,4 +1,4 @@
-# Installing EX Config Builder
+# Installing Multi-Vendor Switch Config Builder
 
 ## Docker Swarm (Portainer or CLI)
 
@@ -28,7 +28,7 @@ needs `--with-registry-auth`.
 | `EXB_REQUIRE_2FA` | `false` | Everyone must set up an authenticator app |
 | `EXB_SESSION_HOURS` | `12` | How long a sign-in lasts |
 | `EXB_LOCKOUT_ATTEMPTS` / `EXB_LOCKOUT_MINUTES` | `5` / `15` | Sign-in lockout per user name |
-| `EXB_2FA_ISSUER` | `EX Config Builder` | Name shown in the authenticator app |
+| `EXB_2FA_ISSUER` | `Multi-Vendor Switch Config Builder` | Name shown in the authenticator app |
 
 ## Backups
 

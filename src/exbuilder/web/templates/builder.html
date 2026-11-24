@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EX Config Builder</title>
+<title>{{ vendor.name }} builder · Multi-Vendor Switch Config Builder</title>
 <style>
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 main { max-width: 1600px; margin: 0 auto; padding: 18px 16px 48px; }
 h1 { font-size: 20px; margin: 0; }
+h1 .vendor-os { font-size: 13px; font-weight: 600; color: var(--muted); margin-left: 6px; }
+.vendor-change { font-size: 13px; color: var(--accent); text-decoration: none; }
 h2 { font-size: 16px; margin: 0 0 10px; }
 h3 { font-size: 14px; margin: 16px 0 8px; }
 a { color: var(--accent); }
@@ -216,7 +218,8 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 <main>
 {% include "auth/_nav.html" %}
 <div class="toolbar">
-  <h1>Juniper EX Config Builder</h1>
+  <h1>{{ vendor.name }} builder <span class="vendor-os">{{ vendor.os }}</span></h1>
+  <a class="vendor-change" href="{{ url_for('index') }}" title="Pick another switch vendor">Change vendor</a>
   <span class="levelbar" title="Basic shows what a normal switch needs. Advanced shows everything."><button type="button" data-level="basic">Basic</button><button type="button" data-level="advanced">Advanced</button></span>
   <span class="grow"></span>
   <button class="secondary" id="btn-import" type="button" title="Import an existing config or an Excel workbook">Import…</button>
@@ -928,7 +931,13 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 <script>
 const CATALOG = {{ catalog|tojson }};
 const SSH = {{ ssh|tojson }}; const CLIENT = {{ client|tojson }}; const EVE = {{ eve|tojson }};
+// The builder lives at /build/<vendor>, but its API calls are written relative to the site root.
+const ROOT = {{ (request.script_root + "/")|tojson }};
+const rootUrl = u => (typeof u === "string" && !/^([a-z][a-z0-9+.-]*:|\/|#)/i.test(u)) ? ROOT + u : u;
+const _fetch = window.fetch.bind(window);
+window.fetch = (u, o) => _fetch(rootUrl(u), o);
 const DEFAULTS = {{ defaults|tojson }};
+const VENDOR = {{ vendor|tojson }};  // the vendor this builder page writes configs for
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
 const CSRF = document.getElementById("csrf").value;
@@ -974,6 +983,8 @@ const PORT_FIELDS = [
   {key: "voice", label: "Voice VLAN", type: VLAN_SEL, show: r => r.mode === "access"},
   {key: "vlans", label: "Trunk VLANs (names or 'all')", ph: "USERS, VOICE", cls: "span2", show: r => r.mode === "trunk"},
   {key: "native", label: "Native (untagged) VLAN", type: VLAN_SEL, show: r => r.mode === "trunk"},
+  {key: "vlan_translate", label: "VLAN translation (wire > switch)", ph: "120>20, 130>30", cls: "span2", adv: true, show: r => r.mode === "trunk" && VENDOR.features.includes("vlan_translation"),
+   help: "Frames arriving tagged with the left VLAN join the right VLAN on this switch, and leave tagged with the left one again."},
   {key: "address", label: "IP address / prefix", ph: "10.0.0.1/30", cls: "span2", show: r => r.mode === "routed"},
   {key: "poe", label: "PoE", type: "select", options: [["", "default"], ["high", "priority high"], ["low", "priority low"], ["off", "off"]], show: r => r.mode !== "disabled"},
   {key: "poe_max", label: "Max PoE (W)", ph: "30", adv: true, show: r => r.mode !== "disabled" && r.poe !== "off"},
@@ -996,7 +1007,7 @@ const LAG_FIELDS = [
   {key: "min_links", adv: true, label: "Minimum links", ph: "1"},
   {key: "mode", label: "Mode", type: "select", options: ["trunk", "access", "routed", "disabled"]},
   {key: "description", label: "Description", cls: "span2"},
-  ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "address", "mtu", "root_guard", "loop_protect"].includes(f.key)),
+  ...PORT_FIELDS.filter(f => ["vlan", "voice", "vlans", "native", "vlan_translate", "address", "mtu", "root_guard", "loop_protect"].includes(f.key)),
   {key: "esi", label: "ESI (EVPN multihoming)", ph: "00:01:01:01:01:01:01:01:01:01", cls: "span2", show: () => state.evpn.enabled},
   {key: "lacp_system_id", label: "LACP system ID", ph: "00:00:00:01:01:01", show: () => state.evpn.enabled},
 ];
@@ -1141,7 +1152,10 @@ function setPath(path, value) {
 function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
 
 function load(project) {
+  const other = project && project.vendor && project.vendor !== VENDOR.key;
+  if (other && !confirm(`This project was made for ${project.vendor}. Open it in the ${VENDOR.name} builder anyway?`)) return;
   state = merge(DEFAULTS, project || {});
+  state.vendor = VENDOR.key;
   for (const key of ["vlans", "ports", "lags"]) state[key] = state[key] || [];
   // No fabric yet: start the wizard on the recommended campus template so there is something to look at.
   state.fabric = Object.assign(clone(FAB_DEFAULTS), state.fabric || Object.assign(clone(FAB_TEMPLATES["campus-erb"].fabric), {template: "campus-erb"}));
@@ -1178,7 +1192,7 @@ function fieldHtml(path, f, row) {
   else if (f.type === "policy") input = `<input type="text" data-bind="${p}" value="${esc(v)}" placeholder="${esc(f.ph || "")}" list="policy-list">`;
   else if (f.type === "textarea") input = `<textarea data-bind="${p}">${esc(v)}</textarea>`;
   else input = `<input type="${f.type === "password" ? "password" : "text"}" data-bind="${p}" value="${esc(v)}" placeholder="${esc(f.ph || "")}"${f.type === "password" ? ' autocomplete="new-password"' : ""}>`;
-  return `<div class="rowfield ${cls}"><label>${esc(f.label)}</label>${input}</div>`;
+  return `<div class="rowfield ${cls}"${f.help ? ` title="${esc(f.help)}"` : ""}><label>${esc(f.label)}</label>${input}</div>`;
 }
 function renderTable(path) {
   const el = document.querySelector(`[data-table="${path}"]`); const spec = TABLES[path];
@@ -1941,7 +1955,7 @@ document.getElementById("imp-file-btn").onclick = () => document.getElementById(
 document.getElementById("imp-file").onchange = ev => { importFile(ev.target.files[0]); ev.target.value = ""; };
 document.getElementById("imp-load").onclick = () => loadImported(false);
 document.getElementById("imp-load-fixed").onclick = () => loadImported(true);
-document.getElementById("imp-template").onclick = () => { location.href = "excel/template"; };
+document.getElementById("imp-template").onclick = () => { location.href = rootUrl("excel/template"); };
 const drop = document.getElementById("imp-drop");
 drop.addEventListener("dragover", ev => { ev.preventDefault(); drop.classList.add("over"); });
 drop.addEventListener("dragleave", () => drop.classList.remove("over"));
@@ -2537,7 +2551,7 @@ if (document.getElementById("bk-list")) {
   document.getElementById("bk-list").addEventListener("click", async ev => {
     const b = ev.target.closest("button"); if (!b) return;
     if (b.dataset.bkMore) document.querySelectorAll("[data-bk-host]").forEach(tr => { if (tr.dataset.bkHost === b.dataset.bkMore) tr.classList.toggle("hide"); });
-    if (b.dataset.bkDl) location.href = `backups/${b.dataset.bkDl}?download=1`;
+    if (b.dataset.bkDl) location.href = rootUrl(`backups/${b.dataset.bkDl}?download=1`);
     if (b.dataset.bkCmp) {
       // A: this backup. B: the live switch it came from if possible, else the newest other backup of it.
       const row = bkRows.find(x => String(x.id) === b.dataset.bkCmp);
@@ -2554,7 +2568,7 @@ if (document.getElementById("bk-list")) {
       try { await api(`backups/${b.dataset.bkDel}/delete`, {}); refreshBackups(); } catch (e) { bkStatus(e.message, "bad"); }
     }
   });
-  document.getElementById("bk-export").onclick = () => { location.href = "backups/export"; };
+  document.getElementById("bk-export").onclick = () => { location.href = rootUrl("backups/export"); };
   const up = document.getElementById("bk-upload");
   if (up) {
     document.getElementById("bk-upload-btn").onclick = () => up.click();

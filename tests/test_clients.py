@@ -23,7 +23,7 @@ def _bob(app, admin, role=None, client_id=1):
 
 
 def test_first_client_and_switcher(app, admin):
-    page = admin.get("/").get_data(as_text=True)
+    page = admin.get("/build/juniper").get_data(as_text=True)
     assert 'id="client-pick"' in page and ">Default</option>" in page and "Save to Default" in page
     resp = _form(admin, "/clients", name="Acme Corp")
     assert resp.status_code == 302 and resp.location.endswith("/clients/2")
@@ -59,7 +59,7 @@ def test_roles(app, admin):
     bob = _bob(app, admin)
     bh = {"X-CSRF-Token": token(bob)}
     # Not in any client: can build, can't save or see anything.
-    page = bob.get("/").get_data(as_text=True)
+    page = bob.get("/build/juniper").get_data(as_text=True)
     assert 'id="client-pick"' not in page and "not in any client" in page
     assert bob.get("/projects").status_code == 409
     assert bob.post("/projects", json={"name": "x", "data": {}}, headers=bh).status_code == 409
@@ -72,7 +72,7 @@ def test_roles(app, admin):
     assert bob.post(f"/projects/{pid}/delete", json={}, headers=bh).status_code == 403
     assert bob.post("/clients/select", data={"csrf_token": csrf(bob), "client_id": "2"}).status_code == 403
     assert bob.get("/clients/1").status_code == 403
-    assert "Acme" not in bob.get("/").get_data(as_text=True)
+    assert "Acme" not in bob.get("/build/juniper").get_data(as_text=True)
     # Editor: saves.
     _form(admin, "/clients/1", action="member_role", user_id="2", role="editor")
     assert bob.post("/projects", json={"name": "x", "data": {}}, headers=bh).status_code == 200

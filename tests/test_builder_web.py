@@ -8,13 +8,13 @@ from test_auth import ADMIN, add_user, app, admin, basic, csrf, login  # noqa: F
 
 
 def token(client):
-    page = client.get("/").get_data(as_text=True)
+    page = client.get("/build/juniper").get_data(as_text=True)
     return re.search(r'id="csrf" value="([^"]+)"', page).group(1)
 
 
 def test_page_has_models_and_timezones(admin):
-    page = admin.get("/").get_data(as_text=True)
-    assert "EX4400-48P" in page and "America/Edmonton" in page and "Juniper EX Config Builder" in page
+    page = admin.get("/build/juniper").get_data(as_text=True)
+    assert "EX4400-48P" in page and "America/Edmonton" in page and "Multi-Vendor Switch Config Builder" in page
 
 
 def test_generate_needs_csrf(admin):
@@ -117,3 +117,27 @@ def test_network_map_endpoints(admin):
     bad = admin.post("/map/unzip", data={"file": (io.BytesIO(b"nope"), "c.zip")}, headers=hdr,
                      content_type="multipart/form-data")
     assert bad.status_code == 400
+
+
+def test_vendor_screen_after_login(admin):
+    page = admin.get("/").get_data(as_text=True)
+    assert "Which switches are you configuring?" in page
+    for name in ("Juniper", "Arista", "Cisco", "Brocade / Ruckus"):
+        assert name in page
+    assert 'href="/build/juniper"' in page and "Coming soon" in page
+
+
+def test_builder_per_vendor(admin):
+    page = admin.get("/build/juniper").get_data(as_text=True)
+    assert "Juniper builder" in page and '"vlan_translation"' in page
+    assert "Last used" in admin.get("/").get_data(as_text=True)
+    resp = admin.get("/build/arista")
+    assert resp.status_code == 302 and resp.location.endswith("/")
+    assert "not ready yet" in admin.get("/").get_data(as_text=True)
+    assert admin.get("/build/nokia").status_code == 404
+    assert admin.get("/build").location.endswith("/build/juniper")
+
+
+def test_vendor_pages_need_login(app):
+    c = app.test_client()
+    assert "/login" in c.get("/build/juniper").location

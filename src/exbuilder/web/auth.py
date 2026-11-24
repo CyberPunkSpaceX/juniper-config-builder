@@ -492,7 +492,7 @@ def account():
 
 
 def _issuer() -> str:
-    return os.environ.get("EXB_2FA_ISSUER", "EX Config Builder")
+    return os.environ.get("EXB_2FA_ISSUER", "Multi-Vendor Switch Config Builder")
 
 
 @bp.route("/account/2fa", methods=["GET", "POST"])

@@ -206,7 +206,7 @@ def _build(job: Job, row: dict, name: str, template: str, image: str, items: lis
                 pass
             eve.delete_lab(lab)
             job.step("Deleted the old lab with the same name.")
-        lab = eve.create_lab(folder, name, f"Built by EX Config Builder for {row['name']} by {who}.")
+        lab = eve.create_lab(folder, name, f"Built by Multi-Vendor Switch Config Builder for {row['name']} by {who}.")
         ids = {}
         for node in p["nodes"]:
             ids[node["name"]] = eve.add_node(lab, {

@@ -1,4 +1,4 @@
-# EX Config Builder on a single Docker host:  docker compose -f deploy/docker-compose.yml up -d
+# Multi-Vendor Switch Config Builder on a single Docker host:  docker compose -f deploy/docker-compose.yml up -d
 # Then open http://<host>:8088 and sign in as admin / admin (you'll be asked
 # for a new password straight away). See INSTALL.md.
 services:

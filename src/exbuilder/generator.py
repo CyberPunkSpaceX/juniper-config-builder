@@ -13,7 +13,7 @@ import ipaddress
 import re
 from dataclasses import dataclass, field
 
-from . import __version__, models
+from . import __version__, models, vendors
 from . import qos as Q
 from . import security as SEC
 from . import routing as R
@@ -25,6 +25,7 @@ SCHEMA_VERSION = 1
 
 DEFAULTS: dict = {
     "version": SCHEMA_VERSION,
+    "vendor": vendors.DEFAULT,
     "name": "",
     "switch": {
         "members": [{"fpc": 0, "model": "EX2300-48P", "serial": "", "role": "routing-engine"}],
@@ -74,7 +75,8 @@ DEFAULTS: dict = {
 PORT_DEFAULTS = {"name": "", "ports": "", "mode": "access", "vlan": "", "vlans": "", "native": "",
                  "voice": "", "description": "", "role": "", "poe": "", "poe_max": "", "edge": True, "mac_limit": "",
                  "mac_action": "drop", "sticky": False, "dot1x": "", "root_guard": False, "loop_protect": False,
-                 "dhcp_trusted": False, "address": "", "mtu": "", "speed": ""}
+                 "dhcp_trusted": False, "address": "", "mtu": "", "speed": "",
+                 "vlan_translate": ""}
 LAG_DEFAULTS = {**PORT_DEFAULTS, "name": "ae0", "members": "", "lacp": "active", "lacp_fast": True,
                 "min_links": "", "mode": "trunk", "edge": False, "esi": "", "lacp_system_id": ""}
 VLAN_DEFAULTS = {"name": "", "id": "", "description": "", "irb": "", "dhcp_relay": False,
@@ -727,6 +729,7 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
             cfg.add_list((*sw, "vlan"), "members", members)
         if sc and sc_scope == "all":
             cfg.add(sw, "storm-control storm-default")
+        _vlan_translate(ctx, section, label, sw, row, members)
         if _s(row.get("voice")):
             ctx.warn(section, f"{label}: voice VLAN only applies to access ports; ignored on a trunk.")
     elif mode == "routed":
@@ -742,6 +745,8 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
     else:
         ctx.error(section, f"{label}: unknown mode '{mode}'.", "mode")
         return
+    if mode != "trunk" and _s(row.get("vlan_translate")):
+        ctx.error(section, f"{label}: VLAN translation only works on trunk ports.", "vlan_translate")
     if mode in ("access", "trunk"):
         SEC.port(ctx, section, label, mode, base, phys, row)
 
@@ -773,6 +778,42 @@ def _iface_settings(ctx: Ctx, section: str, label: str, base: tuple, row: dict, 
                 info = ctx.known.get(port)
                 if info is None or info.get("poe"):
                     ctx.cfg.add(("poe", f"interface {port}"), f"maximum-power {pmax}")
+
+
+# EX families that cannot rewrite VLAN tags on a port.
+NO_VLAN_REWRITE = ("EX2300", "EX3400")
+
+
+def _vlan_translate(ctx: Ctx, section: str, label: str, sw: tuple, row: dict, members: list) -> None:
+    """``vlan-rewrite translate`` on a trunk: frames tagged with the wire VLAN
+    arrive in the switch VLAN, and leave tagged with the wire VLAN again."""
+    spec = _s(row.get("vlan_translate"))
+    if not spec:
+        return
+    try:
+        pairs = P.translations(spec)
+    except ValueError as exc:
+        ctx.error(section, f"{label}: VLAN translation: {exc}", "vlan_translate")
+        return
+    bad = sorted({m.family for m in ctx.models if m.family in NO_VLAN_REWRITE})
+    if bad:
+        ctx.warn(section, f"{label}: {' and '.join(bad)} cannot translate VLANs (vlan-rewrite); "
+                          "use an EX4100, EX4300 or EX4400 for this port.")
+    for wire, local in pairs:
+        if wire in ctx.vlan_by_id:
+            ctx.error(section, f"{label}: wire VLAN {wire} is also a VLAN on this switch; "
+                               "pick a wire VLAN that is not on the VLANs tab.", "vlan_translate")
+            continue
+        vlan = ctx.vlan_by_id.get(local)
+        if vlan is None:
+            ctx.error(section, f"{label}: switch VLAN {local} is not on the VLANs tab.", "vlan_translate")
+            continue
+        if members != ["all"] and vlan["name"] not in members:
+            ctx.warn(section, f"{label}: VLAN {vlan['name']} ({local}) is translated but not in the trunk's VLAN list; "
+                              "added it.")
+            members.append(vlan["name"])
+            ctx.cfg.add_list((*sw, "vlan"), "members", [vlan["name"]])
+        ctx.cfg.add(sw, f"vlan-rewrite translate {wire} {local}")
 
 
 def _range_name(row: dict, index: int) -> str:
@@ -1020,10 +1061,15 @@ def header(project: dict) -> list[str]:
     name = _s(project.get("name")) or _s(project.get("system", {}).get("hostname")) or "switch"
     members = ", ".join(f"{m.get('model')} (member {m.get('fpc', 0)})" for m in project["switch"].get("members") or [])
     return [f"Juniper EX configuration for {name}", f"Hardware: {members}",
-            f"Made by EX Config Builder {__version__}. Review before you commit."]
+            f"Made by Multi-Vendor Switch Config Builder {__version__}. Review before you commit."]
 
 
 def build(project: dict) -> Result:
+    vendor = vendors.get((project or {}).get("vendor") if isinstance(project, dict) else None)
+    if vendor.key != "juniper":
+        res = Result()
+        res.errors.append({"section": "Switch", "message": f"{vendor.name} ({vendor.os}) configs are not ready yet."})
+        return res
     p = normalize(project)
     ctx = Ctx(p)
     for i, title in enumerate(header(p)):

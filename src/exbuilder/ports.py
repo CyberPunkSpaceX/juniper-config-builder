@@ -72,3 +72,35 @@ def compact(ports: list[str]) -> str:
 
 def is_ae(name: str) -> bool:
     return bool(_AE.match(name or ""))
+
+
+def translations(spec) -> list[tuple[int, int]]:
+    """Parse VLAN translation pairs such as ``"100>200, 101>201"``.
+
+    Each pair maps the VLAN tag seen on the wire (left) to the switch's own
+    VLAN (right). ``-``, ``:`` and ``to`` also work as the separator.
+    Raises ValueError with a readable message on bad input.
+    """
+    text = spec if isinstance(spec, str) else ",".join(str(s) for s in spec or [])
+    pairs: list[tuple[int, int]] = []
+    for item in re.split(r"[,;\n]+", text):
+        item = item.strip()
+        if not item:
+            continue
+        m = re.fullmatch(r"(\d+)\s*(?:>|->|-|:|=|\s+to\s+)\s*(\d+)", item, re.I)
+        if not m:
+            raise ValueError(f"'{item}' is not a translation; write it as 100>200 (wire VLAN > switch VLAN).")
+        a, b = int(m.group(1)), int(m.group(2))
+        for v in (a, b):
+            if not 1 <= v <= 4094:
+                raise ValueError(f"'{item}': VLAN IDs must be 1-4094.")
+        if a == b:
+            raise ValueError(f"'{item}': both sides are the same VLAN.")
+        pairs.append((a, b))
+    wire = [a for a, _ in pairs]
+    if len(set(wire)) != len(wire):
+        raise ValueError("each wire VLAN can only be translated once per port.")
+    local = [b for _, b in pairs]
+    if len(set(local)) != len(local):
+        raise ValueError("two wire VLANs translate to the same switch VLAN.")
+    return pairs
