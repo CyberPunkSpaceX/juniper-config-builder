@@ -103,6 +103,23 @@ table.plist td, table.plist th { padding: 6px; border-bottom: 1px solid var(--bo
 code { font-size: 12.5px; }
 .hide { display: none !important; }
 body.basic .adv { display: none !important; }
+/* Advanced options: purple, grouped in a box at the end of each card or table row */
+:root { --advc: #7c3aed; --advbg: rgba(124, 58, 237, .06); }
+@media (prefers-color-scheme: dark) { :root { --advc: #a78bfa; --advbg: rgba(167, 139, 250, .08); } }
+.advbox { grid-column: 1 / -1; flex-basis: 100%; border: 1px dashed var(--advc); background: var(--advbg); border-radius: 8px; padding: 10px 12px 12px; margin-top: 8px; }
+.advbox > .advtitle { grid-column: 1 / -1; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--advc); margin-bottom: 8px; }
+.advbox > .inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; align-items: end; }
+.advbox > .inner > .wide { grid-column: 1 / -1; }
+.panel.adv { border-left: 3px solid var(--advc); }
+.panel.adv > h2::after { content: "Advanced"; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #fff; background: var(--advc); border-radius: 9px; padding: 2px 7px; margin-left: 8px; vertical-align: 3px; }
+.navhead { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 14px 10px 4px; }
+.navhead:first-child { margin-top: 0; }
+.navhead.adv-h { color: var(--advc); }
+.tabs button.advtab { border-left: 3px solid var(--advc); }
+.tabs button.advtab.active { color: var(--advc); }
+.navnote { font-size: 12px; color: var(--muted); margin: 0 10px; line-height: 1.4; }
+.navnote a { color: var(--advc); cursor: pointer; }
+@media (max-width: 760px) { .navhead, .navnote { flex-basis: 100%; margin: 6px 4px 2px; } }
 .levelbar { display: inline-flex; border: 1px solid var(--accent); border-radius: 6px; overflow: hidden; }
 .levelbar button { border: 0; border-radius: 0; background: transparent; color: var(--accent); }
 .levelbar button.sel { background: var(--accent); color: var(--accent-text); }
@@ -935,7 +952,10 @@ function renderTable(path) {
   const el = document.querySelector(`[data-table="${path}"]`); const spec = TABLES[path];
   const rows = getPath(path) || [];
   el.innerHTML = rows.map((row, i) => {
-    const fields = spec.fields.filter(f => (!f.show || f.show(row)) && (!f.adv || isAdvanced())).map(f => fieldHtml(`${path}.${i}`, f, row)).join("");
+    const shown = spec.fields.filter(f => (!f.show || f.show(row)) && (!f.adv || isAdvanced()));
+    const extra = shown.filter(f => f.adv).map(f => fieldHtml(`${path}.${i}`, f, row)).join("");
+    const fields = shown.filter(f => !f.adv).map(f => fieldHtml(`${path}.${i}`, f, row)).join("") +
+      (extra ? `<div class="advbox"><div class="advtitle">Advanced options</div><div class="inner">${extra}</div></div>` : "");
     const rm = `<button class="danger small rm" type="button" data-remove="${path}" data-index="${i}" title="Remove">✕</button>`;
     const title = spec.title ? esc(spec.title(row)) : "";
     const up = i ? `<button class="secondary small" type="button" data-up="${path}" data-index="${i}" title="Move up">↑</button> ` : "";
@@ -1062,6 +1082,8 @@ const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], 
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
                      "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "My projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
+const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "My projects"]]];
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
 function isAdvanced() { return LEVEL === "advanced"; }
@@ -1079,11 +1101,18 @@ let activeTab = "Switch";
 function updateTabs() {
   const nav = document.getElementById("tabs");
   const msgs = result ? result.errors : [];
-  nav.innerHTML = Object.keys(TAB_SECTION).filter(t => isAdvanced() || !ADVANCED_TABS.includes(t)).map(t => {
+  const button = t => {
     const bad = msgs.filter(m => TAB_SECTION[t].includes(m.section)).length;
     let count = "";
     if (t === "VLANs") count = state.vlans.length; else if (t === "Ports") count = state.ports.length; else if (t === "LAGs") count = state.lags.length;
-    return `<button type="button" data-tabbtn="${t}" class="${t === activeTab ? "active" : ""}${bad ? " has-problem" : ""}" title="${bad ? bad + " to fix on this tab" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
+    const cls = [t === activeTab ? "active" : "", bad ? "has-problem" : "", ADVANCED_TABS.includes(t) ? "advtab" : ""].join(" ").trim();
+    return `<button type="button" data-tabbtn="${t}" class="${cls}" title="${bad ? bad + " to fix on this tab" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
+  };
+  nav.innerHTML = TAB_GROUPS.map(([head, tabs]) => {
+    const adv = tabs === ADVANCED_TABS;
+    if (adv && !isAdvanced())
+      return `<div class="navhead adv-h">${head}</div><p class="navnote">Routing protocols, policies and EVPN-VXLAN. <a data-level-link="advanced">Turn on Advanced</a> to see them.</p>`;
+    return `<div class="navhead${adv ? " adv-h" : ""}">${head}</div>` + tabs.map(button).join("");
   }).join("");
   document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
 }
@@ -1673,7 +1702,25 @@ document.getElementById("btn-excel").onclick = async () => {
     setStatus("Downloaded the Excel workbook.", "ok");
   } catch (e) { setStatus("Excel export failed: " + e.message, "bad"); }
 };
-document.addEventListener("click", ev => { const b = ev.target.closest("[data-level]"); if (b) setLevel(b.dataset.level); });
+document.addEventListener("click", ev => {
+  const b = ev.target.closest("[data-level], [data-level-link]"); if (b) setLevel(b.dataset.level || b.dataset.levelLink);
+});
+// Gather the advanced fields of each card into one purple "Advanced options" box at its end.
+function boxAdvanced() {
+  const title = '<div class="advtitle">Advanced options</div>';
+  document.querySelectorAll("#sections .grid.adv").forEach(g => { g.classList.add("advbox"); g.insertAdjacentHTML("afterbegin", title); });
+  const parents = new Set();
+  document.querySelectorAll("#sections .adv").forEach(el => {
+    if (el.matches(".panel, .advbox") || el.closest(".advbox")) return;
+    parents.add(el.parentElement);
+  });
+  parents.forEach(parent => {
+    const box = document.createElement("div"); box.className = "advbox adv";
+    box.innerHTML = title + '<div class="inner"></div>';
+    parent.querySelectorAll(":scope > .adv").forEach(el => box.lastChild.appendChild(el));
+    parent.appendChild(box);
+  });
+}
 fillModelSelect(document.getElementById("imp-model"), "");
 
 // ---------------------------------------------------------------- drafts
@@ -1682,6 +1729,7 @@ function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(stat
   let draft = null;
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
   if (!TAB_SECTION[activeTab]) activeTab = "Switch";
+  boxAdvanced();
   setLevel(LEVEL, true);
   load(draft || {});
   if (!isAdvanced() && ADVANCED_TABS.includes(activeTab)) activeTab = "Switch";
