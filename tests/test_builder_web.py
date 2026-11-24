@@ -180,3 +180,12 @@ def test_help_page_and_logo(app, admin):
     resp = anon.get("/static/logo.png")
     assert resp.status_code == 200 and resp.mimetype == "image/png"
     assert "/login" in anon.get("/help").location
+
+
+def test_aruba_builder_page_and_generate(admin):
+    page = admin.get("/build/aruba").get_data(as_text=True)
+    assert "HPE Aruba CX builder" in page and "6300M-48G-CL4-4SFP56" in page and '"office"' in page
+    resp = admin.post("/generate", json={"vendor": "aruba", "system": {"hostname": "cx9"}},
+                      headers={"X-CSRF-Token": token(admin)})
+    assert resp.status_code == 200 and "hostname cx9" in resp.json["set"]
+    assert "HPE Aruba CX (AOS-CX)" in admin.get("/help").get_data(as_text=True)
