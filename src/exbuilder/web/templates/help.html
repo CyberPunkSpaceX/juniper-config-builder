@@ -1,0 +1,236 @@
+{% extends "auth/base.html" %}
+{% block title %}How to use it · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+<style>
+.help { max-width: 820px; }
+.help h2 { margin-top: 28px; padding-top: 6px; border-top: 1px solid var(--border); }
+.help h3 { font-size: 15px; margin: 18px 0 6px; }
+.help li { margin: 3px 0; }
+.help code { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 13px; }
+.help pre { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; overflow-x: auto; }
+.toc { columns: 2 220px; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 14px 14px 32px; }
+.toc a, .help a { color: var(--accent); }
+.vendor-help { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px 16px 10px; margin: 12px 0; }
+.vendor-help h3 { margin-top: 12px; }
+</style>
+<div class="help">
+<h1>How to use it</h1>
+<p class="muted">A beginner's guide to Multi-Vendor Switch Config Builder {{ version }}. You fill in forms, and the
+switch configuration appears live on the right, ready to copy or download and paste onto the switch.</p>
+
+<ol class="toc">
+  <li><a href="#start">Getting started</a></li>
+  <li><a href="#tabs">The tabs, step by step</a></li>
+  <li><a href="#portmap">The port map</a></li>
+  <li><a href="#errors">Errors and warnings</a></li>
+  <li><a href="#apply">Loading the config on a switch</a></li>
+  <li><a href="#vendors">Notes per vendor</a></li>
+  <li><a href="#translation">VLAN translation</a></li>
+  <li><a href="#passwords">Passwords and secrets</a></li>
+  <li><a href="#projects">Projects and clients</a></li>
+  <li><a href="#tools">Tools (Juniper)</a></li>
+  <li><a href="#terms">Words you'll see</a></li>
+</ol>
+
+<h2 id="start">1. Getting started</h2>
+<ol>
+  <li><b>Pick a vendor</b> on the first page after you sign in (<a href="{{ url_for('index') }}">Vendors</a> in
+    the top bar takes you back). The builder only offers what that vendor's switches can do, so options
+    that would give config the switch can't load are hidden.</li>
+  <li><b>Pick Basic or Advanced</b> (top left of the builder). Basic shows what a normal access switch needs.
+    Advanced adds routing protocols and the less common fields; those sit in a purple dashed
+    <b>Advanced options</b> box so you can tell them apart. Switching back to Basic keeps what you set.</li>
+  <li><b>Start from something:</b> pick your model on the <b>Switch</b> tab, or load an example from the
+    list at the top. Each vendor has at least one example.</li>
+  <li><b>Work through the tabs</b> from top to bottom. The config on the right updates as you type.</li>
+  <li><b>Copy or Download</b> the config and load it on the switch (see <a href="#apply">Loading the config</a>).</li>
+</ol>
+
+<h2 id="tabs">2. The tabs, step by step</h2>
+<h3>Switch</h3>
+<p>Pick the model. Add a row per switch to build a stack (Juniper Virtual Chassis, Cisco StackWise,
+Ruckus/Brocade stacking). The member number becomes the first number in the port names
+(for example <code>Gi<b>2</b>/0/1</code> on Cisco, <code><b>2</b>/1/1</code> on Ruckus). Use <b>Custom</b> for a model that
+isn't listed, and add its ports under Custom ports.</p>
+<h3>System</h3>
+<p>Host name, domain, time zone, DNS and NTP servers, the login banner and the management port. The
+<b>management VRF</b> keeps management traffic (SSH, SNMP, logs) apart from user traffic.</p>
+<h3>Users</h3>
+<p>The root (or enable / admin) password and local accounts. <b>super-user</b> can change everything,
+<b>operator</b> can look and clear counters, <b>read-only</b> can only look. Add SSH public keys to log in without a
+password. SSH is always on; Telnet is always off.</p>
+<h3>SNMP &amp; logs</h3>
+<p>SNMP lets monitoring tools read the switch. Use a hard-to-guess community name and list the monitoring
+servers under <b>clients</b>, or use SNMPv3 users. Syslog servers receive the switch's log messages.</p>
+<h3>VLANs</h3>
+<p>Each VLAN needs a name and an ID (1-4094). Give a VLAN an address (the "IRB", SVI or VE interface) if the
+switch should route for it. Tick <b>DHCP relay</b> when the DHCP server is in another VLAN, and
+<b>Voice VLAN</b> to hand that VLAN to every phone port.</p>
+<h3>Ports</h3>
+<p>A <b>port group</b> gives the same settings to many ports. Modes:</p>
+<ul>
+  <li><b>access</b>: one untagged VLAN, for PCs, printers and phones (plus an optional voice VLAN).</li>
+  <li><b>trunk</b>: several tagged VLANs, for uplinks, access points and other switches. The <b>native</b> VLAN is
+    the one sent untagged.</li>
+  <li><b>routed</b>: a layer 3 port with its own IP address (one port per group).</li>
+  <li><b>disabled</b>: switched off.</li>
+</ul>
+<p>Tick <b>Edge</b> on ports where only end devices plug in: they come up fast and are protected from loops.
+<b>Connected devices</b> (phones, access points, cameras) only colours the port map.</p>
+<h3>LAGs</h3>
+<p>A LAG bundles several links into one for more speed and redundancy. Use <b>LACP active</b> on at least one end.
+Both ends must have the same VLANs. The other switch must have a LAG too.</p>
+<h3>Routing</h3>
+<p>Static routes (the <b>default route</b> is <code>0.0.0.0/0</code>), the DHCP servers for DHCP relay, and in Advanced
+mode the loopback, router ID, OSPF and BGP.</p>
+<h3>Services</h3>
+<p>LLDP (lets switches and phones discover each other), spanning tree, storm control, PoE, DHCP snooping,
+802.1X with RADIUS servers, and <b>Disable unused ports</b>.</p>
+
+<h2 id="portmap">3. The port map</h2>
+<ul>
+  <li>Click free ports to pick them (<b>Shift-click</b> picks a whole range), then <b>New port group</b> or
+    <b>New LAG</b>, or add them to an existing group.</li>
+  <li>Click a port that is already in a group to edit that group: its ports light up, click ports to add or
+    remove them, then <b>Save</b>. A port added to one group is taken out of any other.</li>
+  <li>The colour shows what each port does. Dashed ports are not provisioned (for example a missing module);
+    crossed-out ports are disabled. A dot means PoE.</li>
+</ul>
+
+<h2 id="errors">4. Errors and warnings</h2>
+<ul>
+  <li><b>Red errors</b> are things the switch would refuse. The field is outlined in red and its tab turns red
+    with a count. Click an error to jump to the field.</li>
+  <li><b>Orange warnings</b> are things to double-check, or settings this vendor's builder doesn't write. The
+    config still works.</li>
+</ul>
+
+<h2 id="apply">5. Loading the config on a switch</h2>
+<p>Always keep a way back: a console cable, a backup of the current config, and a timer that undoes the change
+if you lose the connection. The steps for each vendor are below the config in the builder, and here:</p>
+<div class="vendor-help">
+  <h3>Juniper (Junos)</h3>
+  <ol>
+    <li><code>cli</code>, then <code>configure</code>.</li>
+    <li>Paste the <b>set</b> commands. (For the curly-brace format: <code>load merge terminal</code>, paste, Ctrl+D.)</li>
+    <li><code>show | compare</code> to see the change, <code>commit check</code> to test it.</li>
+    <li><code>commit confirmed 5</code>. If you're still connected, <code>commit</code> again to keep it; otherwise the
+      switch rolls back by itself after 5 minutes.</li>
+  </ol>
+  <p class="muted">"Start with delete interfaces / delete vlans" (on by default) clears the factory port settings first.
+  Turn it off when you only want to add to an existing config.</p>
+  <h3>Arista (EOS)</h3>
+  <ol>
+    <li><code>configure session new</code>, paste, <code>show session-config diffs</code>.</li>
+    <li><code>commit timer 00:05:00</code>, then <code>commit</code> again once you're still connected.</li>
+  </ol>
+  <h3>Cisco (IOS-XE)</h3>
+  <ol>
+    <li>Back up first: <code>copy running-config flash:before.cfg</code>.</li>
+    <li>On a remote switch: <code>reload in 10</code> (undo after 10 minutes if you lose access).</li>
+    <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
+    <li><code>reload cancel</code>, then <code>write memory</code>.</li>
+  </ol>
+  <h3>Brocade / Ruckus (FastIron)</h3>
+  <ol>
+    <li>Back up first: <code>copy running-config tftp &lt;server&gt; before.cfg</code>.</li>
+    <li>On a remote switch: <code>reload after 00:00:10</code> (10 minutes).</li>
+    <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
+    <li><code>reload cancel</code>, then <code>write memory</code>.</li>
+  </ol>
+</div>
+
+<h2 id="vendors">6. Notes per vendor</h2>
+<div class="vendor-help">
+  <h3>Juniper (Junos ELS): EX2300, EX3400, EX4100, EX4300, EX4400</h3>
+  <ul>
+    <li>Ports: <code>ge-0/0/0</code> (1G), <code>mge-</code> (multi-gig), <code>xe-</code> (10G); the first number is the
+      Virtual Chassis member. LAGs are <code>ae0</code>, <code>ae1</code> and so on.</li>
+    <li>Everything in the builder is available, including policies, EVPN-VXLAN, QoS and all the Tools.</li>
+  </ul>
+  <h3>Arista (EOS): 720XP, 722XPM, 7010, 7050X3, vEOS and cEOS lab</h3>
+  <ul>
+    <li>Ports: <code>Ethernet1</code> (short: <code>Et1-24</code>); QSFP lanes are <code>Ethernet49/1</code>. LAGs are
+      <code>Port-Channel1</code>.</li>
+    <li>Not written yet: EVPN-VXLAN, policies, QoS and the Tools.</li>
+  </ul>
+  <h3>Cisco (IOS-XE): Catalyst 9200, 9300, 9500 and Cat9kv lab</h3>
+  <ul>
+    <li>Ports: <code>GigabitEthernet1/0/1</code> (short: <code>Gi1/0/1-24</code>, <code>Te1/1/1</code>). The first
+      number is the stack member (1-8); slot 1 is the uplink module. LAGs are <code>Port-channel1</code> (<code>Po1</code>).</li>
+    <li>The root password becomes the <b>enable secret</b>. Cisco needs a domain name to make the SSH key.</li>
+    <li>The 9200 can't translate VLANs; you get a warning.</li>
+  </ul>
+  <h3>Brocade / Ruckus (FastIron): ICX 7000 and 6000, FCX, FGS, FLS</h3>
+  <ul>
+    <li>Ports: <code>1/1/1</code> (unit/module/port); <code>ethe 1/1/1</code> also works. FGS and FLS don't stack and
+      number their ports <code>0/1/1</code>. LAGs are <code>lag1</code>.</li>
+    <li>FastIron lists ports inside each VLAN (tagged or untagged) instead of listing VLANs on each port; the builder
+      works this out for you. VLAN addresses become <code>ve</code> interfaces.</li>
+    <li>Older switches (ICX 6000, FCX, FGS, FLS) get the older commands they need, such as <code>dual-mode</code>
+      and <code>sntp</code>.</li>
+    <li>Not written: storm control (FastIron uses a rate, not a percentage) and VLAN translation.</li>
+  </ul>
+</div>
+
+<h2 id="translation">7. VLAN translation</h2>
+<p>On a trunk port (Advanced mode) write pairs such as <code>120&gt;20, 130&gt;30</code>: frames that arrive tagged 120 join
+VLAN 20 on this switch and leave tagged 120 again. Useful when a carrier or another site uses different VLAN
+numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
+<ul>
+  <li>Juniper: <code>vlan-rewrite</code> on EX4100, EX4300 and EX4400 (not EX2300 or EX3400).</li>
+  <li>Arista: <code>switchport vlan translation</code>.</li>
+  <li>Cisco: <code>switchport vlan mapping</code> on the 9300 and 9500 (not the 9200).</li>
+  <li>Brocade / Ruckus: not available.</li>
+</ul>
+
+<h2 id="passwords">8. Passwords and secrets</h2>
+<ul>
+  <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
+    Cisco, MD5-crypt on Ruckus), so plain text is never saved in a project.</li>
+  <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
+    type the passwords again.</li>
+  <li>SNMP communities, RADIUS secrets and BGP/OSPF keys are in the config as you typed them. Keep downloaded
+    configs and projects somewhere safe.</li>
+</ul>
+
+<h2 id="projects">9. Projects and clients</h2>
+<ul>
+  <li><b>Projects</b> (under Tools) saves your work on the server, in the client picked at the top of the page.
+    You can also download a project as a JSON file and open it later.</li>
+  <li>Your unsaved work is kept in the browser per vendor, so Arista work doesn't overwrite Juniper work.</li>
+  <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>viewer</b>
+    (look), <b>editor</b> (save and delete) or <b>admin</b> (also manage people, SSH and EVE-NG settings).</li>
+  <li>A client admin can <b>Download a backup</b> of a client (projects, maps, config backups) on the client's page.</li>
+</ul>
+
+<h2 id="tools">10. Tools (Juniper for now)</h2>
+<ul>
+  <li><b>Import…</b>: paste an existing config (or drop a file) and <b>Check config</b>. It's read into the tabs, gets
+    a score out of 100, and a list of recommendations. <b>Load with recommended fixes</b> applies the safe ones.
+    The Excel template is here too.</li>
+  <li><b>Network map</b>: drop several switch configs (or a .zip) to draw the switches and the links between them,
+    and check that both ends of each link agree. Client admins can fetch configs straight from the switches over SSH
+    (read-only commands only, inside the client's allowed networks).</li>
+  <li><b>EVE-NG lab</b>: build a virtual lab from the map, push the configs, test, and pull them back.</li>
+  <li><b>Backups &amp; compare</b>: keeps every fetched config, and compares any two configs (live, backup, builder,
+    lab or pasted), with the commands that make one like the other.</li>
+  <li><b>EVPN-VXLAN fabric wizard</b> (Advanced): pick a fabric type and the number of switches; it works out every
+    address and writes one config per switch.</li>
+</ul>
+
+<h2 id="terms">11. Words you'll see</h2>
+<ul>
+  <li><b>VLAN</b>: a separate network on the same switch. <b>Tagged</b> frames carry the VLAN number; <b>untagged</b>
+    don't.</li>
+  <li><b>Trunk</b>: a port that carries several VLANs, tagged. <b>Native VLAN</b>: the one sent untagged on a trunk.</li>
+  <li><b>LAG / LACP</b>: several cables working as one link; LACP checks both ends agree.</li>
+  <li><b>IRB / SVI / VE</b>: the switch's own address in a VLAN, so it can route for it (the names differ per vendor).</li>
+  <li><b>Spanning tree (RSTP)</b>: stops cabling loops from taking the network down.</li>
+  <li><b>PoE</b>: power over the network cable for phones, access points and cameras.</li>
+  <li><b>802.1X / MAB</b>: devices must log in (or be known by MAC address) through a RADIUS server before the
+    port lets them on.</li>
+  <li><b>DHCP snooping</b>: only trusted ports (uplinks) may answer DHCP, which stops rogue DHCP servers.</li>
+</ul>
+</div>
+{% endblock %}

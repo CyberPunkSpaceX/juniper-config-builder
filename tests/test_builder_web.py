@@ -168,3 +168,15 @@ def test_ruckus_builder_page_and_generate(admin):
     resp = admin.post("/generate", json={"vendor": "ruckus", "system": {"hostname": "icx9"}},
                       headers={"X-CSRF-Token": token(admin)})
     assert resp.status_code == 200 and "hostname icx9" in resp.json["set"]
+
+
+def test_help_page_and_logo(app, admin):
+    page = admin.get("/help").get_data(as_text=True)
+    assert "How to use it" in page and "Brocade / Ruckus (FastIron)" in page and 'href="/help"' in page
+    assert "/static/logo.png" in page and "/static/favicon.png" in page
+    assert "/help#apply" in admin.get("/build/cisco").get_data(as_text=True)
+    anon = app.test_client()
+    assert "/static/logo.png" in anon.get("/login").get_data(as_text=True)
+    resp = anon.get("/static/logo.png")
+    assert resp.status_code == 200 and resp.mimetype == "image/png"
+    assert "/login" in anon.get("/help").location

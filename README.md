@@ -6,9 +6,11 @@ pick a vendor:
 | Vendor | Writes config for | Status |
 |---|---|---|
 | Juniper | Junos ELS: EX2300, EX3400, EX4100, EX4300, EX4400 | ready |
-| Arista | EOS | coming next |
-| Cisco | IOS-XE: Catalyst 9200/9300/9400/9500 | planned |
-| Brocade / Ruckus | FastIron: ICX 7150 and up | planned |
+| Arista | EOS: 720XP, 722XPM, 7010, 7050X3, vEOS and cEOS lab | ready |
+| Cisco | IOS-XE: Catalyst 9200, 9300, 9500 and Cat9kv lab | ready |
+| Brocade / Ruckus | FastIron: ICX 7000 and 6000, FCX, FGS, FLS | ready |
+
+A beginner's guide is built in: **Help** in the top bar (`/help`), with the loading steps for every vendor.
 
 Fill in forms, and the config appears live, ready to copy or download (for Juniper
 as `set` commands and as the hierarchical, curly brace, format). Clients, saved
