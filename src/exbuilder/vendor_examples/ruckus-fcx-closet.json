@@ -1,0 +1,15 @@
+{
+  "vendor": "ruckus",
+  "name": "Older FCX closet switch",
+  "switch": {"members": [{"fpc": 1, "model": "FCX648S-HPOE"}]},
+  "system": {"hostname": "fcx-closet-01", "domain": "example.lan", "timezone": "America/Edmonton",
+             "name_servers": "10.10.0.10", "ntp_servers": [{"address": "10.10.0.1"}],
+             "mgmt_address": "192.168.100.42/24", "mgmt_gateway": "192.168.100.1"},
+  "access": {"root_password": "Super-user-2026", "users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.5/24"},
+            {"name": "USERS", "id": "20"},
+            {"name": "VOICE", "id": "30", "voice": true}],
+  "ports": [{"name": "DESKS", "ports": "1/1/1-46", "mode": "access", "vlan": "USERS", "description": "Desk ports", "edge": true}],
+  "lags": [{"name": "lag1", "members": "1/3/1-2", "lacp": "active", "mode": "trunk", "vlans": "MGMT, USERS, VOICE", "description": "To core"}],
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1"}]}
+}

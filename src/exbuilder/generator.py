@@ -1072,6 +1072,9 @@ def build(project: dict) -> Result:
     if vendor.key == "cisco":
         from . import ios
         return ios.build(project)
+    if vendor.key == "ruckus":
+        from . import fastiron
+        return fastiron.build(project)
     if vendor.key != "juniper":
         res = Result()
         res.errors.append({"section": "Switch", "message": f"{vendor.name} ({vendor.os}) configs are not ready yet."})
