@@ -22,7 +22,7 @@ exbuilder = "exbuilder.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-exbuilder = ["web/templates/*.html", "web/templates/*/*.html", "map_examples/*.conf"]
+exbuilder = ["web/templates/*.html", "web/templates/*/*.html", "map_examples/*.conf", "vendor_examples/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

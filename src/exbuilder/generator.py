@@ -1066,6 +1066,9 @@ def header(project: dict) -> list[str]:
 
 def build(project: dict) -> Result:
     vendor = vendors.get((project or {}).get("vendor") if isinstance(project, dict) else None)
+    if vendor.key == "arista":
+        from . import eos
+        return eos.build(project)
     if vendor.key != "juniper":
         res = Result()
         res.errors.append({"section": "Switch", "message": f"{vendor.name} ({vendor.os}) configs are not ready yet."})

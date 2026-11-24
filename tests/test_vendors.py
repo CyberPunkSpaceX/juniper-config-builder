@@ -16,7 +16,7 @@ def test_vendor_catalog_and_fallback():
 
 
 def test_not_ready_vendor_says_so():
-    res = build(base(vendor="arista"))
+    res = build(base(vendor="cisco"))
     assert res.errors and "not ready" in res.errors[0]["message"]
 
 

@@ -104,3 +104,73 @@ def translations(spec) -> list[tuple[int, int]]:
     if len(set(local)) != len(local):
         raise ValueError("two wire VLANs translate to the same switch VLAN.")
     return pairs
+
+
+# ------------------------------------------------- other vendors' port names
+# Arista, Cisco and Ruckus name ports as a word followed by numbers split by
+# "/" (Ethernet49/1, GigabitEthernet1/0/24, 1/1/12). In a range only the
+# last number changes: Ethernet1-24, Gi1/0/1-48, 1/1/1-24.
+_NAMED = re.compile(r"^([A-Za-z][A-Za-z-]*?)?(\d+(?:/\d+)*)$")
+_NAMED_RANGE = re.compile(r"^([A-Za-z][A-Za-z-]*?)?((?:\d+/)*)(\d+)\s*(?:-|to)\s*(?:[A-Za-z][A-Za-z-]*?)?(?:(?:\d+/)*)?(\d+)$")
+
+
+def _canon(word: str, aliases: dict) -> str:
+    if not word:
+        return aliases.get("", "")
+    return aliases.get(word.lower(), word)
+
+
+def expand_named(spec: str, aliases: dict) -> list[str]:
+    """``Et1-3, Ethernet49/1`` -> ``['Ethernet1', 'Ethernet2', 'Ethernet3', 'Ethernet49/1']``.
+
+    ``aliases`` maps lower-case short forms (``et``, ``ethernet``) to the
+    canonical word; a word not in it is an error. Raises ValueError.
+    """
+    out: list[str] = []
+    text = re.sub(r"\s+to\s+", "~", (spec or "").strip())
+    for part in re.split(r"[,;\s]+", text):
+        part = part.replace("~", "-")
+        if not part:
+            continue
+        m = _NAMED.match(part)
+        if m:
+            word = (m.group(1) or "").lower()
+            if word not in aliases:
+                raise ValueError(f"'{part}' is not a port name here")
+            out.append(_canon(word, aliases) + m.group(2))
+            continue
+        m = _NAMED_RANGE.match(part)
+        if not m or (m.group(1) or "").lower() not in aliases:
+            raise ValueError(f"'{part}' is not a port or port range")
+        word, mid, start, end = _canon((m.group(1) or "").lower(), aliases), m.group(2), int(m.group(3)), int(m.group(4))
+        if end < start:
+            raise ValueError(f"'{part}': the range runs backwards")
+        if end - start > 1024:
+            raise ValueError(f"'{part}': range is too long")
+        out.extend(f"{word}{mid}{n}" for n in range(start, end + 1))
+    return out
+
+
+def named_key(name: str):
+    m = _NAMED.match(name or "")
+    if not m:
+        return ("~", ())
+    return (m.group(1) or "", tuple(int(x) for x in m.group(2).split("/")))
+
+
+def named_runs(ports: list[str]) -> list[tuple[str, str]]:
+    """Group ports into (first, last) runs where only the last number steps by one."""
+    out: list[list] = []
+    for name in sorted(set(ports), key=named_key):
+        word, nums = named_key(name)
+        if out:
+            lw, lnums = named_key(out[-1][1])
+            if lw == word and lnums[:-1] == nums[:-1] and len(nums) == len(lnums) and nums[-1] == lnums[-1] + 1:
+                out[-1][1] = name
+                continue
+        out.append([name, name])
+    return [(a, b) for a, b in out]
+
+
+def named_compact(ports: list[str]) -> str:
+    return ", ".join(a if a == b else f"{a}-{named_key(b)[1][-1]}" for a, b in named_runs(ports))
