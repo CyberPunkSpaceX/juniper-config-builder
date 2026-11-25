@@ -1,0 +1,21 @@
+{
+  "vendor": "fortiswitch",
+  "name": "Office access switch (FortiSwitch)",
+  "switch": {"members": [{"fpc": 1, "model": "FS-448E-FPOE"}]},
+  "system": {"hostname": "fsw-office-01", "domain": "example.lan",
+             "name_servers": "10.10.0.10, 1.1.1.1", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}]},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"},
+                       {"name": "viewer", "class": "read-only", "password": "View-only-2026"}]},
+  "snmp": {"location": "Office", "communities": [{"name": "s3cret-ro", "access": "read-only", "clients": "10.10.0.50"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.6/24"},
+            {"name": "USERS", "id": "20", "snooping": true},
+            {"name": "WIFI", "id": "40"},
+            {"name": "CAMERAS", "id": "50"}],
+  "ports": [{"name": "DESKS", "ports": "port1-40", "mode": "access", "vlan": "USERS", "description": "Desk ports", "edge": true},
+            {"name": "APS", "ports": "port41-46", "mode": "trunk", "vlans": "WIFI, USERS", "native": "MGMT", "description": "Wi-Fi access points", "poe": "high"},
+            {"name": "CAMERAS", "ports": "port47-48", "mode": "access", "vlan": "CAMERAS", "description": "Cameras", "edge": true}],
+  "lags": [{"name": "lag1", "members": "port49-50", "lacp": "active", "lacp_fast": true, "mode": "trunk", "vlans": "MGMT, USERS, WIFI, CAMERAS", "description": "To core"}],
+  "services": {"storm_control": false},
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1", "preference": "20"}]}
+}

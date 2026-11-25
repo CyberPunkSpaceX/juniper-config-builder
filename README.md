@@ -11,6 +11,7 @@ pick a vendor:
 | Cisco Nexus | NX-OS: Nexus 9200, 9300, older 3000, and Nexus 9000v lab | ready |
 | Dell | SmartFabric OS10: N3200, N2200, S5200 and OS10 virtual lab | ready |
 | Extreme Networks | EXOS / Switch Engine: X440-G2, X450-G2, X460-G2, 5320, 5420 and EXOS VM | ready |
+| Fortinet FortiSwitch | FortiSwitchOS (standalone): FS-100F, 200E, 400E, 1000E | ready |
 | Brocade / Ruckus | FastIron: ICX 7000 and 6000, FCX, FGS, FLS | ready |
 | HPE Aruba CX | AOS-CX: CX 6000, 6100, 6200, 6300, 8320, 8325, 8360 | ready |
 | HPE Aruba / ProCurve | AOS-S: 2530, 2540, 2920, 2930F, 2930M, 3810M, 5400R, older ProCurve | ready |

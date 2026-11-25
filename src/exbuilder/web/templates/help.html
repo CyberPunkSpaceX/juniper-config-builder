@@ -138,6 +138,14 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>If something is wrong: <code>rollback running-config checkpoint before-change</code>.</li>
     <li><code>copy running-config startup-config</code> to keep it.</li>
   </ol>
+  <h3>Fortinet FortiSwitch (standalone)</h3>
+  <ol>
+    <li>Back up first: <code>execute backup config tftp before.conf &lt;server&gt;</code>.</li>
+    <li>Paste the commands at the prompt. Each <code>config ... end</code> block applies when it reaches <code>end</code>,
+      and FortiSwitchOS saves changes as it goes.</li>
+    <li>Check with <code>show</code>. To undo: <code>execute restore config tftp before.conf &lt;server&gt;</code> (the
+      switch reboots).</li>
+  </ol>
   <h3>Extreme Networks (EXOS / Switch Engine)</h3>
   <ol>
     <li>Back up first: <code>save configuration before-change</code>, and answer <b>No</b> when it asks to make it the default.</li>
@@ -213,6 +221,19 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>No PoE and no voice VLAN on Nexus. The Nexus 3000 can't translate VLANs.</li>
     <li>Not written yet: EVPN-VXLAN, vPC, policies, QoS and the Tools.</li>
   </ul>
+  <h3>Fortinet FortiSwitch (FortiSwitchOS, standalone): FS-108F, 124F, 148F, 248E, 424E, 448E, 1048E</h3>
+  <ul>
+    <li>This is for a <b>standalone</b> FortiSwitch. One managed by a FortiGate (FortiLink) is set up on the FortiGate.</li>
+    <li>Ports: <code>port1</code> (short: <code>1-24</code>). LAGs are trunks (<code>lag1</code>). FortiSwitches don't stack.</li>
+    <li>A port's untagged VLAN is its <code>native-vlan</code> and its tagged VLANs are <code>allowed-vlans</code>. A VLAN
+      address is a <code>config system interface</code> entry on <code>internal</code>; there are no routed ports.</li>
+    <li>The 100F series has no out-of-band port; manage it through a VLAN address.</li>
+    <li>OSPF and BGP need the Advanced Features license (400 series and up).</li>
+    <li>Passwords go in as plain text and the switch encrypts them. The time zone is picked from a numbered list on the switch,
+      so it is not written.</li>
+    <li>Not written yet: the time zone, login banner, SNMPv3, storm control, PoE power limits, the LLDP-MED voice profile,
+      VLAN translation, EVPN, policies, QoS and the Tools.</li>
+  </ul>
   <h3>Extreme Networks (EXOS / Switch Engine): X440-G2, X450-G2, X460-G2, 5320, 5420 and the EXOS VM</h3>
   <ul>
     <li>Ports: <code>1</code> to <code>52</code>; in a SummitStack <code>slot:port</code> (<code>2:1</code>). The output is a list of
@@ -285,6 +306,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Cisco Nexus: <code>switchport vlan mapping</code> on the Nexus 9000 (not the 3000).</li>
   <li>Dell OS10: not available.</li>
   <li>Extreme EXOS: not written.</li>
+  <li>FortiSwitch: not written.</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
   <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
@@ -293,7 +315,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S and Extreme EXOS, which
+    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S, Extreme EXOS and FortiSwitch, which
     only take plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>
