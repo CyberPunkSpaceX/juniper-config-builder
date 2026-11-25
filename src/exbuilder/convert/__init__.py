@@ -20,7 +20,8 @@ from ..generator import build
 from . import ios, portmap
 
 # Vendors a config can be read from, and how to recognise their configs.
-READERS = {"juniper": "Junos (set or curly-brace)", "cisco": "Cisco IOS / IOS-XE"}
+READERS = {"juniper": "Junos (set or curly-brace)", "cisco": "Cisco IOS / IOS-XE", "arista": "Arista EOS",
+           "nexus": "Cisco NX-OS", "dell": "Dell OS10"}
 
 _SIGNS = [
     ("mikrotik", r"^/(?:interface|ip|system)\b"),
@@ -56,8 +57,8 @@ def read(text: str, source: str) -> dict:
         res = importer.parse(text, "", det["members"])
         res["project"].pop("_facts", None)
         return res
-    if source == "cisco":
-        return ios.parse(text)
+    if source in ("cisco", "arista", "nexus", "dell"):
+        return ios.parse(text, source)
     raise ValueError(f"Reading {vendors.get(source).name} configs is not ready yet.")
 
 

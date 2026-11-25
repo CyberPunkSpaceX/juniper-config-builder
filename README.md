@@ -354,7 +354,7 @@ config per switch.
 ## Converter
 
 **Converter** (first screen after sign-in, or the top bar) turns a config from one vendor into another: paste a
-Cisco Catalyst (IOS / IOS-XE) or Juniper EX config, auto-detect or pick the source, pick the target vendor and
+Cisco Catalyst (IOS / IOS-XE), Cisco Nexus, Arista EOS, Dell OS10 or Juniper EX config, auto-detect or pick the source, pick the target vendor and
 model, and get the target config plus a report of everything not carried over (unread lines, features the target
 lacks, password hashes that must be retyped, the old-to-new port map). Ports move by position onto the target model.
 Save the result to a client's Lab, test it, then promote it with the usual approval flow. Code: `src/exbuilder/convert/`
