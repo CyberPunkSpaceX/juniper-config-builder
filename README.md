@@ -9,6 +9,7 @@ pick a vendor:
 | Arista | EOS: 720XP, 722XPM, 7010, 7050X3, vEOS and cEOS lab | ready |
 | Cisco | IOS-XE and IOS: Catalyst 9200, 9300, 9500, older 2960-X, 3650, 3850, and Cat9kv lab | ready |
 | Cisco Nexus | NX-OS: Nexus 9200, 9300, older 3000, and Nexus 9000v lab | ready |
+| Dell | SmartFabric OS10: N3200, N2200, S5200 and OS10 virtual lab | ready |
 | Brocade / Ruckus | FastIron: ICX 7000 and 6000, FCX, FGS, FLS | ready |
 | HPE Aruba CX | AOS-CX: CX 6000, 6100, 6200, 6300, 8320, 8325, 8360 | ready |
 | HPE Aruba / ProCurve | AOS-S: 2530, 2540, 2920, 2930F, 2930M, 3810M, 5400R, older ProCurve | ready |

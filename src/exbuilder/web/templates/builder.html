@@ -254,6 +254,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <p class="hint" data-only="aruba">One row per switch. Add rows to build a VSF stack (6200 and 6300): each member gets its number (1-10), so its ports are named <b>2</b>/1/1 and so on. Write ports like <code>1/1/1-1/1/24</code> or <code>1/1/1-24</code>.</p>
       <p class="hint" data-only="ruckus">One row per switch. Add rows to build an ICX or FCX stack: each unit gets its number (1-12), so its ports are named <b>2</b>/1/1 and so on. FGS and FLS don't stack and number their ports 0/1/1. Write ports like <code>1/1/1-24</code>; <code>ethe 1/1/1</code> also works.</p>
       <p class="hint" data-only="nexus">Pick the switch model. Nexus switches don't stack: a vPC pair is two projects, one per switch. Ports are named <code>Ethernet1/1</code> (short: <code>Eth1/1-48</code>), and breakout lanes <code>Ethernet1/49/1</code>.</p>
+      <p class="hint" data-only="dell">Pick the switch model. OS10 switches don't stack: a VLT pair is two projects, one per switch. Ports are named <code>ethernet1/1/1</code> (short: <code>eth1/1/1-24</code>).</p>
       <p class="hint" data-only="arista">Pick the switch model. Arista switches don't stack: a pair that shares LAGs (MLAG) is two projects, one per switch. Ports are named <code>Ethernet1</code>, and QSFP ports <code>Ethernet49/1</code>.</p>
       <div class="rows compact" data-table="switch.members"></div>
       <button class="secondary small" type="button" data-add="switch.members" data-feature="virtual_chassis"><span data-only="juniper">Add Virtual Chassis member</span><span data-not="juniper">Add stack member</span></button>
@@ -313,12 +314,12 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
     </div>
     <div class="panel">
       <h2>Management port</h2>
-      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0, or FastEthernet0 on the 2960-X).</span><span data-only="ruckus">The dedicated out-of-band port (management 1).</span><span data-only="aruba">The dedicated out-of-band port (mgmt), always in the mgmt VRF. The 6000 and 6100 have none.</span><span data-only="nexus">The dedicated out-of-band port (mgmt0), always in the management VRF.</span><span data-only="procurve">The out-of-band port (OOBM) on the 3810M and 5400R; the others are managed through a VLAN address.</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
+      <p class="hint"><span data-only="juniper">The dedicated out-of-band port (me0, or em0 on the EX4100 and EX4400).</span><span data-only="arista">The dedicated out-of-band port (Management1).</span><span data-only="cisco">The dedicated out-of-band port (GigabitEthernet0/0, or FastEthernet0 on the 2960-X).</span><span data-only="ruckus">The dedicated out-of-band port (management 1).</span><span data-only="aruba">The dedicated out-of-band port (mgmt), always in the mgmt VRF. The 6000 and 6100 have none.</span><span data-only="dell">The dedicated out-of-band port (mgmt1/1/1); its gateway becomes a management route.</span><span data-only="nexus">The dedicated out-of-band port (mgmt0), always in the management VRF.</span><span data-only="procurve">The out-of-band port (OOBM) on the 3810M and 5400R; the others are managed through a VLAN address.</span> Leave the address empty if you manage the switch through a VLAN (IRB) instead.</p>
       <div class="grid">
         <div class="field"><label>Interface</label><input type="text" data-bind="system.mgmt_interface" placeholder="(model default)"></div>
         <div class="field"><label>Address / prefix</label><input type="text" data-bind="system.mgmt_address" placeholder="192.168.1.10/24"></div>
         <div class="field"><label>Gateway</label><input type="text" data-bind="system.mgmt_gateway" placeholder="192.168.1.1"></div>
-        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (<span data-only="juniper">mgmt_junos</span><span data-only="arista">MGMT</span><span data-only="cisco">Mgmt-vrf</span><span data-only="ruckus">not written on FastIron</span><span data-only="aruba">mgmt</span><span data-only="procurve">not needed on AOS-S</span><span data-only="nexus">management: NTP, DNS, logging and SNMP go out through mgmt0</span>)</label>
+        <label class="adv check"><input type="checkbox" data-bind="system.mgmt_vrf"> Management VRF (<span data-only="juniper">mgmt_junos</span><span data-only="arista">MGMT</span><span data-only="cisco">Mgmt-vrf</span><span data-only="ruckus">not written on FastIron</span><span data-only="aruba">mgmt</span><span data-only="procurve">not needed on AOS-S</span><span data-only="dell">not written on OS10</span><span data-only="nexus">management: NTP, DNS, logging and SNMP go out through mgmt0</span>)</label>
         <label class="adv check" data-only="juniper"><input type="checkbox" data-bind="system.ignore_mgmt_alarm"> Ignore the alarm when the port is unplugged</label>
       </div>
     </div>
@@ -332,15 +333,15 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Users">
     <div class="panel">
       <h2>Root account</h2>
-      <p class="hint"><span data-only="juniper">Junos won't commit without a root password.</span><span data-only="arista">Optional on Arista: the root account stays locked without one.</span><span data-only="cisco">On Cisco this is the <b>enable secret</b>.</span><span data-only="ruckus">On FastIron this is the <b>enable super-user password</b>.</span><span data-only="nexus">On NX-OS this is the password of the built-in <b>admin</b> user.</span><span data-only="procurve">On AOS-S this is the <b>manager</b> password, used when no super-user is listed below. AOS-S passwords go into the config as plain text and the switch hashes them.</span><span data-only="aruba">On AOS-CX this is the password of the built-in <b>admin</b> user. AOS-CX passwords go into the config as plain text and the switch encrypts them.</span> Passwords are turned into hashes as soon as the config is generated, so plain text is never saved in a project.</p>
+      <p class="hint"><span data-only="juniper">Junos won't commit without a root password.</span><span data-only="arista">Optional on Arista: the root account stays locked without one.</span><span data-only="cisco">On Cisco this is the <b>enable secret</b>.</span><span data-only="ruckus">On FastIron this is the <b>enable super-user password</b>.</span><span data-only="nexus">On NX-OS this is the password of the built-in <b>admin</b> user.</span><span data-only="dell">On OS10 this is the password of the built-in <b>admin</b> user (at least 9 characters).</span><span data-only="procurve">On AOS-S this is the <b>manager</b> password, used when no super-user is listed below. AOS-S passwords go into the config as plain text and the switch hashes them.</span><span data-only="aruba">On AOS-CX this is the password of the built-in <b>admin</b> user. AOS-CX passwords go into the config as plain text and the switch encrypts them.</span> Passwords are turned into hashes as soon as the config is generated, so plain text is never saved in a project.</p>
       <div class="grid">
-        <div class="field"><label><span data-not="cisco ruckus aruba procurve nexus">Root password</span><span data-only="procurve">Manager password</span><span data-only="aruba nexus">admin password</span><span data-only="cisco">Enable secret</span><span data-only="ruckus">Super-user password</span><span data-only="juniper"> *</span></label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
+        <div class="field"><label><span data-not="cisco ruckus aruba procurve nexus dell">Root password</span><span data-only="procurve">Manager password</span><span data-only="aruba nexus dell">admin password</span><span data-only="cisco">Enable secret</span><span data-only="ruckus">Super-user password</span><span data-only="juniper"> *</span></label><input type="password" data-bind="access.root_password" autocomplete="new-password"></div>
         <div class="adv field wide" data-only="juniper"><label>Root SSH public key (optional)</label><textarea data-bind="access.root_ssh_key" placeholder="ssh-ed25519 AAAA... you@laptop"></textarea></div>
       </div>
     </div>
     <div class="panel">
       <h2>Local users</h2>
-      <p class="hint"><span data-only="juniper">super-user = full access, operator = view and clear, read-only = view only.</span><span data-only="arista">super-user = network-admin (privilege 15), operator and read-only = network-operator (view only).</span><span data-only="cisco">super-user = privilege 15 (full access), operator and read-only = privilege 1 (view only).</span><span data-only="ruckus">super-user = privilege 0 (full access), operator = privilege 4 (port settings), read-only = privilege 5 (view only).</span><span data-only="nexus">super-user = network-admin (full access), operator and read-only = network-operator (view only). NX-OS keeps one SSH key per user.</span><span data-only="aruba">super-user = administrators (full access), operator and read-only = operators (view only).</span><span data-only="procurve">AOS-S has one <b>manager</b> (the first super-user) and one <b>operator</b> (the first other user) account.</span></p>
+      <p class="hint"><span data-only="juniper">super-user = full access, operator = view and clear, read-only = view only.</span><span data-only="arista">super-user = network-admin (privilege 15), operator and read-only = network-operator (view only).</span><span data-only="cisco">super-user = privilege 15 (full access), operator and read-only = privilege 1 (view only).</span><span data-only="ruckus">super-user = privilege 0 (full access), operator = privilege 4 (port settings), read-only = privilege 5 (view only).</span><span data-only="nexus">super-user = network-admin (full access), operator and read-only = network-operator (view only). NX-OS keeps one SSH key per user.</span><span data-only="dell">super-user = sysadmin (full access), operator and read-only = netoperator (view only). Every user needs a password; add SSH keys by hand.</span><span data-only="aruba">super-user = administrators (full access), operator and read-only = operators (view only).</span><span data-only="procurve">AOS-S has one <b>manager</b> (the first super-user) and one <b>operator</b> (the first other user) account.</span></p>
       <div class="rows" data-table="access.users"></div>
       <button class="secondary small" type="button" data-add="access.users">Add user</button>
     </div>
@@ -351,7 +352,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div class="adv field"><label>SSH connection limit</label><input type="text" data-bind="access.ssh_connection_limit"></div>
         <div class="adv field" data-only="juniper"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
         <label class="adv check"><input type="checkbox" data-bind="access.netconf"> NETCONF over SSH (Ansible, automation)</label>
-        <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span><span data-only="cisco">Web UI (HTTPS)</span><span data-only="ruckus">Web UI (HTTPS)</span><span data-only="aruba procurve">Web UI and REST API (HTTPS)</span><span data-only="nexus">NX-API (HTTPS API)</span></label>
+        <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span><span data-only="cisco">Web UI (HTTPS)</span><span data-only="ruckus">Web UI (HTTPS)</span><span data-only="aruba procurve">Web UI and REST API (HTTPS)</span><span data-only="nexus">NX-API (HTTPS API)</span><span data-only="dell">RESTCONF API (HTTPS)</span></label>
         <label class="check"><input type="checkbox" data-bind="access.retry_options"> Slow down password guessing</label>
       </div>
     </div>
@@ -393,7 +394,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="VLANs">
     <div class="panel">
       <h2>VLANs</h2>
-      <p class="hint">Give a VLAN an <span data-only="juniper">IRB</span><span data-only="arista cisco nexus">SVI (interface Vlan)</span> address to route it (layer 3). Several addresses can be comma-separated, including IPv6. Tick <b>Voice VLAN</b> on your phone VLAN to give it to every access port that has no voice VLAN of its own: phones learn it through LLDP-MED and their calls get priority. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
+      <p class="hint">Give a VLAN an <span data-only="juniper">IRB</span><span data-only="arista cisco nexus">SVI (interface Vlan)</span><span data-only="dell">interface vlan</span> address to route it (layer 3). Several addresses can be comma-separated, including IPv6. Tick <b>Voice VLAN</b> on your phone VLAN to give it to every access port that has no voice VLAN of its own: phones learn it through LLDP-MED and their calls get priority. DHCP relay forwards requests to the server on the Routing tab. Snooping, DAI and IP source guard protect against rogue DHCP servers and spoofing.</p>
       <div class="rows" data-table="vlans"></div>
       <button class="secondary small" type="button" data-add="vlans">Add VLAN</button>
     </div>
@@ -403,7 +404,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Ports">
     <div class="panel">
       <h2>Port groups</h2>
-      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code data-only="juniper">ge-0/0/0-23, ge-0/0/30</code><code data-only="arista">Ethernet1-24, Ethernet30</code><code data-only="cisco">Gi1/0/1-24, Gi1/0/30</code><code data-only="ruckus">1/1/1-24, 1/1/30</code><code data-only="aruba">1/1/1-1/1/24, 1/1/30</code><code data-only="procurve">1-24, 30, A1</code><code data-only="nexus">Ethernet1/1-24, Eth1/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
+      <p class="hint">Each group gives the same settings to a set of ports. Write ports like <code data-only="juniper">ge-0/0/0-23, ge-0/0/30</code><code data-only="arista">Ethernet1-24, Ethernet30</code><code data-only="cisco">Gi1/0/1-24, Gi1/0/30</code><code data-only="ruckus">1/1/1-24, 1/1/30</code><code data-only="aruba">1/1/1-1/1/24, 1/1/30</code><code data-only="procurve">1-24, 30, A1</code><code data-only="nexus">Ethernet1/1-24, Eth1/30</code><code data-only="dell">ethernet1/1/1-24, eth1/1/30</code>. Modes: <b>access</b> (one VLAN, plus an optional voice VLAN), <b>trunk</b> (several tagged VLANs, optional untagged native VLAN), <b>routed</b> (layer 3 port with its own IP), <b>disabled</b>.</p>
       <div class="rows" data-table="ports"></div>
       <button class="secondary small" type="button" data-add="ports">Add port group</button>
     </div>
@@ -412,7 +413,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <!-- ===================================================== LAGS -->
   <section class="section" data-tab="LAGs">
     <div class="panel">
-      <h2>Link aggregation (LAG / <span data-only="juniper">ae</span><span data-only="arista">Port-Channel</span><span data-only="cisco">Port-channel</span><span data-only="ruckus aruba">lag</span><span data-only="procurve">Trk</span><span data-only="nexus">port-channel</span>)</h2>
+      <h2>Link aggregation (LAG / <span data-only="juniper">ae</span><span data-only="arista">Port-Channel</span><span data-only="cisco">Port-channel</span><span data-only="ruckus aruba">lag</span><span data-only="procurve">Trk</span><span data-only="nexus dell">port-channel</span>)</h2>
       <p class="hint">Bundle ports into one logical link with LACP. The other end must be set up the same way. Usually a trunk to a core switch, firewall or server.</p>
       <div class="rows" data-table="lags"></div>
       <button class="secondary small" type="button" data-add="lags">Add LAG</button>
@@ -423,7 +424,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="Routing">
     <div class="panel adv">
       <h2>Routing identity</h2>
-      <p class="hint">The loopback (<span data-only="juniper">lo0</span><span data-only="arista cisco">Loopback0</span><span data-only="nexus">loopback0</span>) is a stable address for OSPF, BGP and EVPN-VXLAN. The router ID defaults to the loopback.</p>
+      <p class="hint">The loopback (<span data-only="juniper">lo0</span><span data-only="arista cisco">Loopback0</span><span data-only="nexus dell">loopback0</span>) is a stable address for OSPF, BGP and EVPN-VXLAN. The router ID defaults to the loopback.</p>
       <div class="grid">
         <div class="field"><label>Loopback address</label><input type="text" data-bind="routing.loopback" placeholder="10.255.0.11/32"></div>
         <div class="field"><label>Router ID</label><input type="text" data-bind="routing.router_id" placeholder="(loopback)"></div>
@@ -450,7 +451,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <section class="section" data-tab="OSPF & BGP">
     <div class="panel">
       <h2>OSPF</h2>
-      <p class="hint">List the interfaces that run OSPF in each area, like <code data-only="juniper">xe-0/2/0, irb.20, lo0</code><code data-only="arista">Ethernet49/1, Vlan20, Loopback0</code><code data-only="cisco">Te1/1/1, Vlan20, Loopback0</code><code data-only="ruckus">1/2/1, ve 20, loopback 1</code><code data-only="aruba">1/1/49, vlan 20, loopback 0</code><code data-only="procurve">vlan 20, vlan 30, loopback 0</code><code data-only="nexus">Ethernet1/49, Vlan20, loopback0</code><span data-only="juniper"> (unit .0 is added when you leave it out)</span>. <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
+      <p class="hint">List the interfaces that run OSPF in each area, like <code data-only="juniper">xe-0/2/0, irb.20, lo0</code><code data-only="arista">Ethernet49/1, Vlan20, Loopback0</code><code data-only="cisco">Te1/1/1, Vlan20, Loopback0</code><code data-only="ruckus">1/2/1, ve 20, loopback 1</code><code data-only="aruba">1/1/49, vlan 20, loopback 0</code><code data-only="procurve">vlan 20, vlan 30, loopback 0</code><code data-only="nexus">Ethernet1/49, Vlan20, loopback0</code><code data-only="dell">ethernet1/1/49, vlan20, loopback0</code><span data-only="juniper"> (unit .0 is added when you leave it out)</span>. <b>Passive</b> interfaces are advertised but form no neighbours: use it for user VLANs and the loopback. <b>Point-to-point</b> is right for a routed link between two switches.</p>
       <div class="grid">
         <label class="check"><input type="checkbox" data-bind="routing.ospf.enabled"> Turn on OSPF</label>
         <div class="field"><label>Reference bandwidth</label><input type="text" data-bind="routing.ospf.reference_bandwidth" placeholder="100g"></div>
@@ -955,6 +956,8 @@ const hasFeature = f => VENDOR.features.includes(f);
 // Placeholders and names that depend on the vendor's port naming.
 const PH = VENDOR.key === "procurve" ? {ports: "1-24", members: "49-50", lag: "Trk1", ospf: "vlan 20, loopback 0",
                     passive: "vlan 20", p2p: "", custom: "e.g. C1-C24 for another module", mgmt: "oobm", host: "hp-floor2-01"}
+         : VENDOR.key === "dell" ? {ports: "ethernet1/1/1-24", members: "ethernet1/1/49-50", lag: "port-channel1", ospf: "ethernet1/1/49, vlan20, loopback0",
+                    passive: "vlan20, loopback0", p2p: "ethernet1/1/49", custom: "e.g. ethernet1/1/55-56", mgmt: "mgmt1/1/1", host: "dell-floor2-01"}
          : VENDOR.key === "nexus" ? {ports: "Ethernet1/1-24", members: "Ethernet1/49-50", lag: "port-channel1", ospf: "Ethernet1/49, Vlan20, loopback0",
                     passive: "Vlan20, loopback0", p2p: "Ethernet1/49", custom: "e.g. Ethernet1/49/1-4 for breakout lanes", mgmt: "mgmt0", host: "nx-floor2-01"}
          : VENDOR.key === "aruba" ? {ports: "1/1/1-1/1/24", members: "1/1/49-1/1/50", lag: "lag1", ospf: "1/1/49, vlan 20, loopback 0",
@@ -967,7 +970,7 @@ const PH = VENDOR.key === "procurve" ? {ports: "1-24", members: "49-50", lag: "T
                     p2p: "xe-0/2/0", custom: "e.g. ge-0/1/0-1 for 1G optics in the uplinks", mgmt: "(model default)", host: "ex-floor2-01"}
                  : {ports: "Ethernet1-24", members: "Ethernet49-50", lag: "Port-Channel1", ospf: "Ethernet49, Vlan20, Loopback0",
                     passive: "Vlan20, Loopback0", p2p: "Ethernet49", custom: "e.g. Ethernet49/2-4 for breakout lanes", mgmt: "Management1", host: "sw-floor2-01"};
-function lagName(n) { return JUNOS ? "ae" + n : ({cisco: "Port-channel", ruckus: "lag", aruba: "lag", procurve: "Trk", nexus: "port-channel"}[VENDOR.key] || "Port-Channel") + (n + 1); }
+function lagName(n) { return JUNOS ? "ae" + n : ({cisco: "Port-channel", ruckus: "lag", aruba: "lag", procurve: "Trk", nexus: "port-channel", dell: "port-channel"}[VENDOR.key] || "Port-Channel") + (n + 1); }
 // Hide what this vendor's builder can't write: data-feature="x" needs feature x,
 // data-only="juniper arista" shows for those vendors, data-not="juniper" hides for them.
 function applyVendor() {
@@ -1497,7 +1500,9 @@ function showOutput() {
   document.getElementById("msgs").innerHTML =
     result.errors.map(m => `<li class="err" data-goto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
     result.warnings.map(m => `<li class="warn" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
-  document.getElementById("load-hint").innerHTML = VENDOR.key === "nexus"
+  document.getElementById("load-hint").innerHTML = VENDOR.key === "dell"
+    ? "On the switch: back up first with <code>copy running-configuration config://before.xml</code>, then <code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-configuration</code>, then <code>write memory</code>. To undo: <code>copy config://before.xml running-configuration</code>."
+    : VENDOR.key === "nexus"
     ? "On the switch: save a restore point with <code>checkpoint before-change</code>, then <code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>, then <code>copy running-config startup-config</code>. To undo: <code>rollback running-config checkpoint before-change</code>."
     : VENDOR.key === "procurve"
     ? "On the switch: back up first with <code>copy running-config tftp &lt;server&gt; before.cfg</code>, then <code>configure terminal</code>, paste, check with <code>show running-config</code>, then <code>write memory</code>. On a remote switch, start with <code>reload after 10</code> and <code>no reload</code> once you're still connected."

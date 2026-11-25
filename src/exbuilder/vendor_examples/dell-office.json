@@ -1,0 +1,21 @@
+{
+  "vendor": "dell",
+  "name": "Office access switch (Dell OS10)",
+  "switch": {"members": [{"fpc": 1, "model": "N3248P-ON"}]},
+  "system": {"hostname": "dell-office-01", "domain": "example.lan", "timezone": "America/Edmonton",
+             "name_servers": "10.10.0.10, 1.1.1.1", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}],
+             "banner": "Authorized access only.", "mgmt_address": "192.168.100.41/24", "mgmt_gateway": "192.168.100.1"},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "snmp": {"location": "Office", "communities": [{"name": "s3cret-ro", "access": "read-only", "clients": "10.10.0.50"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.4/24"},
+            {"name": "USERS", "id": "20", "irb": "10.10.20.1/24", "dhcp_relay": true},
+            {"name": "WIFI", "id": "40"},
+            {"name": "CAMERAS", "id": "50"}],
+  "ports": [{"name": "DESKS", "ports": "ethernet1/1/1-40", "mode": "access", "vlan": "USERS", "description": "Desk ports", "edge": true},
+            {"name": "APS", "ports": "eth1/1/41-46", "mode": "trunk", "vlans": "WIFI, USERS", "native": "MGMT", "description": "Wi-Fi access points"},
+            {"name": "CAMERAS", "ports": "ethernet1/1/47-48", "mode": "access", "vlan": "CAMERAS", "description": "Cameras", "edge": true}],
+  "lags": [{"name": "Po1", "members": "ethernet1/1/49-50", "lacp": "active", "lacp_fast": true, "mode": "trunk", "vlans": "MGMT, USERS, WIFI, CAMERAS", "description": "To core"}],
+  "services": {"storm_control": false},
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1"}], "dhcp_relay_servers": "10.10.0.10"}
+}
