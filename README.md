@@ -170,40 +170,65 @@ secret) still works for clients that have no key of their own.
 ### Test in an EVE-NG lab (push and pull)
 
 With an [EVE-NG](https://www.eve-ng.net/) server you can try the configs on
-virtual switches before they go near production.
+virtual switches before they go near production. Labs are built in the **Lab**
+space only.
+
+| Vendor | Lab node | Lab ports | Needs about |
+| --- | --- | --- | --- |
+| Juniper | vJunos-switch | ge-0/0/0-9 | 4 CPU, 5 GB |
+| Arista | vEOS-lab | Ethernet1-12 | 2 CPU, 4 GB |
+| Cisco Catalyst | Cat9kv | Gi1/0/1-8 | 4 CPU, 18 GB |
+| Cisco Nexus | Nexus 9000v | Ethernet1/1-16 | 2 CPU, 10 GB |
+| Dell | OS10 virtual | ethernet1/1/1-16 | 2 CPU, 4 GB |
+| Extreme | EXOS VM | 1-8 | 1 CPU, 1 GB |
+| HPE Aruba CX | AOS-CX simulator | 1/1/1-8 | 2 CPU, 4 GB |
+| MikroTik | CHR | ether1-8 | 1 CPU, 0.5 GB |
+
+FortiSwitch, Brocade/Ruckus ICX, ProCurve/AOS-S and UniFi have no virtual
+switch image, so the EVE-NG lab tab says so for them.
 
 **Set it up once per client** (client admin): **Clients → (client) → EVE-NG lab
 server**. Enter the EVE-NG address, an EVE-NG account made for the builder, and
 the folder for its labs (default `/exbuilder`), then **Test the connection**.
-It lists the Juniper images installed on EVE-NG. Labs use **vJunos-switch** (or
-vJunos-router) nodes. The address must be inside the networks the server may
-reach (`EXB_SSH_ALLOW`, or the private ranges), and the password is stored
-encrypted with the master key.
+It lists the lab images installed on EVE-NG. The address must be inside the
+networks the server may reach (`EXB_SSH_ALLOW`, or the private ranges), and the
+password is stored encrypted with the master key.
 
-**Push** (Network map tab → **Test in an EVE-NG lab**):
+**One switch, any vendor** (EVE-NG lab tab → **Build this switch in EVE-NG**):
+the project open in the builder is moved onto the vendor's lab switch. The
+ports it uses go, in order, onto the lab ports (every port group and LAG gets at
+least one; the mapping is listed under the lab); other stack members, the
+management address and the banner are left out; a lab login, `exb-lab`, with a
+random password is added. The lab starts, the builder answers the first-boot
+questions on the console (ZTP/POAP, initial dialog, the new admin password),
+types the config in line by line, lists any line the switch refuses, and saves
+it. **Pull configs** reads it back (`show running-config`, `/export`, ...)
+with the project's port names and without the lab login.
+
+**Several Juniper switches from the map** (EVE-NG lab tab → **Build lab from
+the map**):
 
 1. Put the switches on the map and draw it, so the links between them are known
    (LLDP output, /30-/31 addresses or port descriptions).
-2. Name the lab, pick the image and click **Build lab in EVE-NG** (client admins).
+2. Name the lab, pick the vJunos-switch image and click **Build lab from the
+   map** (client admins).
 3. Each switch becomes a node and each link between two switches a cable. The
    real ports are mapped onto the lab node's ports, `ge-0/0/0` to `ge-0/0/9`, in
-   port order (the mapping is listed under the lab), and the configs are
-   rewritten to match: lines for ports not linked to another switch on the map,
-   `chassis` (except LAG device counts), Virtual Chassis, PoE, `version` and the
-   management port are left out. A lab login, `exb-lab`, with a random password
-   is added so the builder can read the config back.
+   port order, and the configs are rewritten to match: lines for ports not
+   linked to another switch on the map, `chassis` (except LAG device counts),
+   Virtual Chassis, PoE, `version` and the management port are left out.
 4. With **Start the lab and load the configs** ticked, the lab starts and each
    config is typed into its node's console (`load set terminal`, then
    `commit and-quit`). vJunos takes 5 to 10 minutes to boot; progress shows on
    the page and you can leave it.
-
-**Pull**: **Pull configs** reads every node's config over its console, maps the
-ports back to the real names, leaves out the lab login, and offers **Put them
-on the map** or **Download**. From the map, **Open in builder** loads one into
-the tabs.
+5. **Pull configs** reads every node's config back, maps the ports back to the
+   real names, and offers **Put them on the map** or **Download**. Junos configs
+   pulled from a lab are also kept under Backups & compare.
 
 Labs can be started, stopped and deleted from the same list. Every build and
-change is in the audit log (`audit: … EVE-NG lab …`).
+change is in the audit log (`audit: … EVE-NG … lab …`). The console dialogues
+for the non-Juniper OSes are tested against simulated consoles; try a first lab
+per vendor and watch the progress list.
 
 ![Building a lab in EVE-NG from the network map](docs/screenshots/10-eve-ng-lab.png)
 

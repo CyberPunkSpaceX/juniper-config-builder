@@ -739,37 +739,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div id="ssh-known" class="hide"></div>
         {% endif %}
       </details>
-      <details class="explain" id="eve-box" style="margin-top:10px"><summary>Test in an EVE-NG lab</summary>
-        {% if not client %}
-        <p class="hint">You are not in any client yet.</p>
-        {% elif client.space != 'lab' %}
-        <p class="hint">EVE-NG labs are built in the <b>Lab</b> space, so test configs never mix with production ones.
-          Click <b>Lab</b> at the top of the page to switch; your Production projects stay here.</p>
-        {% elif not eve.configured %}
-        <p class="hint">EVE-NG is not set up for {{ client.name }} yet. {% if client.role == 'admin' %}Add the server under <a href="{{ url_for('clients.client_page', cid=client.id) }}#eve">Clients → {{ client.name }} → EVE-NG</a>.{% else %}Ask an admin of {{ client.name }} to add it.{% endif %}</p>
-        {% else %}
-        <ol class="hint howto">
-          <li>Put the switches on the map (files, paste, SSH fetch or a saved map) and draw it, so the links between them are known.</li>
-          <li>{% if client.role == 'admin' %}Pick a vJunos-switch image, name the lab and click <b>Build lab</b>.{% else %}An admin of {{ client.name }} builds the lab.{% endif %} Each switch becomes a lab node, and each link between two switches becomes a cable between the matching lab ports (the real ports are mapped to <code>ge-0/0/0</code> to <code>ge-0/0/9</code>; the mapping is listed under each lab).</li>
-          <li>The lab starts and each config is typed into its node's console and committed. vJunos takes 5 to 10 minutes to boot, so this takes a while; you can leave the page.</li>
-          <li>Test in EVE-NG ({{ eve.url }}). Change things on the nodes if you like.</li>
-          <li><b>Pull configs</b> reads every node's config back, with the real port names again, so you can load it into the map and open it in the builder.</li>
-        </ol>
-        {% if client.role == 'admin' %}
-        <div class="grid">
-          <div class="field"><label>Lab name</label><input type="text" id="eve-name" placeholder="office-test" maxlength="48"></div>
-          <div class="field wide"><label>Image</label><select id="eve-image"><option value="">Loading the images from EVE-NG…</option></select></div>
-        </div>
-        <label class="check"><input type="checkbox" id="eve-start" checked> Start the lab and load the configs</label>
-        <label class="check"><input type="checkbox" id="eve-replace"> Replace a lab with the same name</label>
-        <div class="toolbar" style="margin-top:8px"><button type="button" id="eve-build">Build lab in EVE-NG</button><span class="status" id="eve-status"></span></div>
-        {% endif %}
-        <ul class="msgs" id="eve-steps"></ul>
-        <div id="eve-pulled" class="hide"></div>
-        <h3 style="margin:14px 0 6px;font-size:15px">Labs of {{ client.name }}</h3>
-        <table class="plist"><tbody id="eve-labs"></tbody></table>
-        {% endif %}
-      </details>
+      <p class="hint" style="margin-top:10px">Want to try these switches in EVE-NG? Use the <a href="#" data-goto-tab="EVE-NG lab">EVE-NG lab</a> tab: it builds a lab from this map (every switch, linked like here) or from the switch open in the builder.</p>
       {% if client %}
       <div id="map-saved" class="savedmaps hide">
         <div class="toolbar">
@@ -804,6 +774,69 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="mapdetail" id="map-detail"></div>
       <h3>Checks</h3>
       <ul class="msgs recs" id="map-checks"></ul>
+    </div>
+  </section>
+
+  <!-- ===================================================== EVE-NG -->
+  <section class="section" data-tab="EVE-NG lab">
+    <div class="panel" id="eve-box">
+      <h2>Test in an EVE-NG lab</h2>
+      {% if eve_lab and eve_lab.possible %}
+      <p class="hint">{{ vendor.name }} runs in EVE-NG as <b>{{ eve_lab.label }}</b> ({{ eve_lab.cpu }} CPU, {{ (eve_lab.ram / 1024)|round(1) }} GB RAM, boots in about {{ eve_lab.boot }}). The lab node has {{ eve_lab.ports }} ports, so the ports this project uses are moved onto them in order; every port group and LAG gets at least one.</p>
+      {% else %}
+      <p class="hint"><b>Not possible for {{ vendor.name }}.</b> {{ eve_lab.why if eve_lab else "This vendor has no EVE-NG lab image." }}</p>
+      {% endif %}
+      {% if eve_lab and eve_lab.possible %}
+      {% if not client %}
+      <p class="hint">You are not in any client yet.</p>
+      {% elif client.space != 'lab' %}
+      <p class="hint">EVE-NG labs are built in the <b>Lab</b> space, so test configs never mix with production ones.
+        Click <b>Lab</b> at the top of the page to switch; your Production projects stay here.</p>
+      {% elif not eve.configured %}
+      <p class="hint">EVE-NG is not set up for {{ client.name }} yet. {% if client.role == 'admin' %}Add the server under <a href="{{ url_for('clients.client_page', cid=client.id) }}#eve">Clients → {{ client.name }} → EVE-NG</a>.{% else %}Ask an admin of {{ client.name }} to add it.{% endif %}</p>
+      {% else %}
+      <h3 style="margin:10px 0 6px;font-size:15px">This switch</h3>
+      <ol class="hint howto">
+        <li>Build the switch in the builder as usual, with no errors left.</li>
+        <li>{% if client.role == 'admin' %}Pick the {{ eve_lab.label }} image, name the lab and click <b>Build this switch in EVE-NG</b>.{% else %}An admin of {{ client.name }} builds the lab.{% endif %} The builder makes a lab with one {{ eve_lab.label }} node, starts it, answers its first-boot questions on the console, types the config in and saves it. A lab login <code>exb-lab</code> with a random password is added so the builder can read the config back.</li>
+        <li>Test in EVE-NG ({{ eve.url }}): connect the node's ports to other nodes or networks there. The port mapping is listed under the lab below.</li>
+        <li><b>Pull configs</b> reads the config back from the lab{% if vendor.key == 'juniper' %}, with the real port names again{% endif %}, so you can compare it with your project or download it.</li>
+      </ol>
+      {% if client.role == 'admin' %}
+      <div class="grid">
+        <div class="field"><label>Lab name</label><input type="text" id="eve1-name" placeholder="{{ vendor.key }}-test" maxlength="48"></div>
+        <div class="field wide"><label>Image</label><select id="eve1-image"><option value="">Loading the images from EVE-NG…</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="eve1-start" checked> Start the lab and load the config</label>
+      <label class="check"><input type="checkbox" id="eve1-replace"> Replace a lab with the same name</label>
+      <div class="toolbar" style="margin-top:8px"><button type="button" id="eve1-build">Build this switch in EVE-NG</button></div>
+      {% endif %}
+      {% if vendor.key == 'juniper' %}
+      <h3 style="margin:16px 0 6px;font-size:15px">Several switches from the network map</h3>
+      <ol class="hint howto">
+        <li>Put the switches on the <a href="#" data-goto-tab="Network map">Network map</a> (files, paste, SSH fetch or a saved map) and draw it, so the links between them are known.</li>
+        <li>{% if client.role == 'admin' %}Pick a vJunos-switch image, name the lab and click <b>Build lab from the map</b>.{% else %}An admin of {{ client.name }} builds the lab.{% endif %} Each switch becomes a lab node, and each link between two switches becomes a cable between the matching lab ports (the real ports are mapped to <code>ge-0/0/0</code> to <code>ge-0/0/9</code>).</li>
+        <li>The lab starts and each config is typed into its node's console and committed. vJunos takes 5 to 10 minutes to boot, so this takes a while; you can leave the page.</li>
+        <li><b>Pull configs</b> reads every node's config back, with the real port names again, so you can load it into the map.</li>
+      </ol>
+      {% if client.role == 'admin' %}
+      <div class="grid">
+        <div class="field"><label>Lab name</label><input type="text" id="eve-name" placeholder="office-test" maxlength="48"></div>
+        <div class="field wide"><label>Image</label><select id="eve-image"><option value="">Loading the images from EVE-NG…</option></select></div>
+      </div>
+      <label class="check"><input type="checkbox" id="eve-start" checked> Start the lab and load the configs</label>
+      <label class="check"><input type="checkbox" id="eve-replace"> Replace a lab with the same name</label>
+      <div class="toolbar" style="margin-top:8px"><button type="button" id="eve-build">Build lab from the map</button></div>
+      {% endif %}
+      {% endif %}
+      <p class="status" id="eve-status"></p>
+      <ul class="msgs" id="eve-steps"></ul>
+      <div id="eve-pulled" class="hide"></div>
+      <h3 style="margin:14px 0 6px;font-size:15px">Labs of {{ client.name }}</h3>
+      <table class="plist"><tbody id="eve-labs"></tbody></table>
+      {% endif %}
+      {% endif %}
+      <p class="hint" style="margin-top:12px">Which vendors can run in EVE-NG: Juniper (vJunos-switch), Arista (vEOS-lab), Cisco Catalyst (Cat9kv), Cisco Nexus (Nexus 9000v), Dell (OS10 virtual), Extreme (EXOS VM), Aruba CX (AOS-CX simulator) and MikroTik (CHR). FortiSwitch, Ruckus ICX, ProCurve and UniFi have no virtual switch image. See <a href="{{ url_for('help_page') }}#eve">Help</a> for how to install the images.</p>
     </div>
   </section>
 
@@ -1427,14 +1460,14 @@ function compact(list) {
 // ------------------------------------------------------------------- tabs
 const TAB_SECTION = {Switch: ["Switch"], System: ["System"], Users: ["Access"], "SNMP & logs": ["SNMP", "Logging"], VLANs: ["VLANs"],
                      Ports: ["Ports"], LAGs: ["LAGs"], Routing: ["Routing"], "OSPF & BGP": ["OSPF", "BGP"], Policies: ["Policies"],
-                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "Backups & compare": [], "Projects": []};
+                     "EVPN-VXLAN": ["EVPN"], Services: ["Services", "QoS", "Security"], "Import & check": [], "Network map": [], "EVE-NG lab": [], "Backups & compare": [], "Projects": []};
 const ADVANCED_TABS = ["OSPF & BGP", "Policies", "EVPN-VXLAN"];
 // Tabs that need a builder feature; the vendor's feature list decides whether they show.
 const TAB_FEATURE = {"OSPF & BGP": ["ospf", "bgp"], Policies: ["policies"], "EVPN-VXLAN": ["evpn_vxlan"],
                      "Import & check": ["import"], "Network map": ["network_map"], "Backups & compare": ["backups"]};
 const tabOk = t => !TAB_FEATURE[t] || TAB_FEATURE[t].some(hasFeature);
 const TAB_GROUPS = [["Essentials", ["Switch", "System", "Users", "VLANs", "Ports", "LAGs", "Routing", "SNMP & logs", "Services"]],
-                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "Backups & compare", "Projects"]]]
+                    ["Advanced", ADVANCED_TABS], ["Tools", ["Import & check", "Network map", "EVE-NG lab", "Backups & compare", "Projects"]]]
                    .map(([h, tabs]) => [h, tabs === ADVANCED_TABS ? tabs : tabs.filter(tabOk)]);
 let LEVEL = "basic";
 try { LEVEL = localStorage.getItem("exbuilder-level") || "basic"; } catch (e) {}
@@ -1467,6 +1500,7 @@ function updateTabs() {
     return `<div class="navhead${adv ? " adv-h" : ""}">${head}</div>` + tabs.filter(tabOk).map(button).join("");
   }).join("");
   document.querySelectorAll("#sections > section").forEach(s => s.classList.toggle("active", s.dataset.tab === activeTab));
+  if (activeTab === "EVE-NG lab" && window.onEveTab) window.onEveTab();
 }
 // Each tab gets its own browser history entry (#Ports, #Network%20map, ...),
 // so Back and Forward move between tabs instead of leaving the page.
@@ -2356,13 +2390,30 @@ document.getElementById("map-clear").onclick = () => {
 };
 document.getElementById("map-draw").onclick = drawMap;
 // ------------------------------------------------------------ EVE-NG labs
-if (EVE.configured && document.getElementById("eve-box")) {
+document.addEventListener("click", ev => {
+  const a = ev.target.closest("[data-goto-tab]"); if (!a) return;
+  ev.preventDefault(); activeTab = a.dataset.gotoTab; updateTabs(); window.scrollTo(0, 0);
+});
+if (EVE.configured && document.getElementById("eve-labs")) {
   const eveStatus = (t, c) => { const el = document.getElementById("eve-status"); if (el) { el.textContent = t || ""; el.className = "status " + (c || ""); } };
-  let imagesLoaded = false, polling = null;
+  let imagesLoaded = false, labsLoaded = false, polling = null;
+  const VENDORS_LAB = {{ eve_labs_all|tojson }};
   async function loadImages() {
-    const sel = document.getElementById("eve-image"); if (!sel || imagesLoaded) return;
+    if (imagesLoaded) return; imagesLoaded = true;
+    const one = document.getElementById("eve1-image");
+    if (one) {
+      try {
+        const data = await api("eve/vendor?vendor=" + encodeURIComponent(VENDOR.key));
+        const opts = [];
+        data.images.forEach(t => t.images.forEach(img => opts.push([`${t.template}|${img}`, `${t.label}: ${img}`, t.template])));
+        one.innerHTML = opts.length ? opts.map(o => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("")
+          : `<option value="">No ${esc(data.lab.label)} image found on the EVE-NG server</option>`;
+        const pref = opts.find(o => o[2] === data.lab.default); if (pref) one.value = pref[0];
+      } catch (e) { one.innerHTML = `<option value="">Could not list images: ${esc(e.message)}</option>`; }
+    }
+    const sel = document.getElementById("eve-image"); if (!sel) return;
     try {
-      const data = await api("eve/images"); imagesLoaded = true;
+      const data = await api("eve/images");
       const opts = [];
       data.images.forEach(t => t.images.forEach(img => opts.push([`${t.template}|${img}`, `${t.label}: ${img}${t.supported ? "" : " (not usable for labs yet)"}`, t.supported])));
       const usable = opts.filter(o => o[2]);
@@ -2392,15 +2443,17 @@ if (EVE.configured && document.getElementById("eve-box")) {
   function showPulled(items) {
     const box = document.getElementById("eve-pulled"); box.classList.toggle("hide", !items.length);
     window._evePulled = items;
-    box.innerHTML = `<div class="toolbar"><b>${items.length} config(s) read from the lab</b> <span class="note">(also kept under Backups &amp; compare)</span><span class="grow"></span>
+    const junos = items.every(i => (i.vendor || "juniper") === "juniper");
+    box.innerHTML = `<div class="toolbar"><b>${items.length} config(s) read from the lab</b> ${junos ? `<span class="note">(also kept under Backups &amp; compare)</span>` : ""}<span class="grow"></span>
       <button class="secondary small" type="button" id="eve-pulled-dl">Download</button>
-      <button class="small" type="button" id="eve-pulled-load">Put them on the map</button></div>`;
+      ${junos ? `<button class="small" type="button" id="eve-pulled-load">Put them on the map</button>` : ""}</div>
+      ${junos ? "" : items.map(i => `<details open><summary><b>${esc(i.name)}</b></summary><pre class="cfg">${esc(i.text)}</pre></details>`).join("")}`;
     document.getElementById("eve-pulled-dl").onclick = () => {
       const text = items.map(i => `# ===== ${i.name}\n${i.text}`).join("\n");
       const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([text], {type: "text/plain"}));
       a.download = "lab-configs.txt"; a.click();
     };
-    document.getElementById("eve-pulled-load").onclick = () => {
+    if (junos) document.getElementById("eve-pulled-load").onclick = () => {
       if (mapItems.length && !window.confirm("Replace the switches on the map with the configs from the lab? Save the current map first if you want to keep it.")) return;
       mapItems = items.map(i => ({name: i.name, text: i.text, lldp: ""})); saveMap(); renderMapList(); drawMap();
     };
@@ -2410,8 +2463,8 @@ if (EVE.configured && document.getElementById("eve-box")) {
     const admin = data.can_build; const canPull = EVE.role !== "viewer";
     document.getElementById("eve-labs").innerHTML = data.labs.map(l => `<tr><td><b>${esc(l.name)}</b>
         <div class="note">${esc(l.image)} · ${esc(l.created_at)} by ${esc(l.created_by)}</div>
-        <details><summary class="note">Port mapping</summary><div class="note">${l.nodes.map(n => `${esc(n.hostname)}: ${Object.entries(n.ports).map(([a, b]) => `${esc(a)} → ${esc(b)}`).join(", ") || "no links"}`).join("<br>")}</div></details></td>
-      <td style="text-align:right;white-space:nowrap">
+        <details><summary class="note">Port mapping</summary><div class="note">${l.nodes.map(n => `${esc(n.hostname)}: ${Object.entries(n.ports).map(([a, b]) => `${esc(a)} → ${esc(b)}`).join(", ") || "no ports"}`).join("<br>")}</div></details></td>
+      <td style="text-align:right;white-space:nowrap">${l.nodes.length === 1 && l.nodes[0].vendor ? `<span class="note">${esc((VENDORS_LAB[l.nodes[0].vendor] || {}).label || l.nodes[0].vendor)}</span> ` : ""}
         ${canPull ? `<button class="secondary small" type="button" data-eve="pull" data-lab="${l.id}">Pull configs</button>` : ""}
         ${admin ? `<button class="secondary small" type="button" data-eve="start" data-lab="${l.id}">Start</button>
         <button class="secondary small" type="button" data-eve="stop" data-lab="${l.id}">Stop</button>
@@ -2440,7 +2493,18 @@ if (EVE.configured && document.getElementById("eve-box")) {
       eveStatus("Building…"); watchJob(r.job);
     } catch (e) { eveStatus(e.message, "bad"); }
   };
-  document.getElementById("eve-box").addEventListener("toggle", ev => { if (ev.target.open) { loadImages(); refreshLabs(); } });
+  const oneBtn = document.getElementById("eve1-build");
+  if (oneBtn) oneBtn.onclick = async () => {
+    const [template, image] = (document.getElementById("eve1-image").value || "|").split("|");
+    const name = document.getElementById("eve1-name").value.trim();
+    if (result && result.errors.length) { eveStatus(`Fix the ${result.errors.length} error(s) first; the lab gets the same config.`, "bad"); return; }
+    try {
+      const r = await api("eve/project-labs", {name, template, image, project: state,
+        start: document.getElementById("eve1-start").checked, replace: document.getElementById("eve1-replace").checked});
+      eveStatus("Building…"); watchJob(r.job);
+    } catch (e) { eveStatus(e.message, "bad"); }
+  };
+  window.onEveTab = () => { loadImages(); if (!labsLoaded) { labsLoaded = true; refreshLabs(); } };
 }
 
 // Saved maps: kept on the server, per client.

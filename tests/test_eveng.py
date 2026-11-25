@@ -213,6 +213,10 @@ def test_console_push_and_pull():
 
 # ------------------------------------------------------------ fake EVE-NG
 class FakeEve:
+    TEMPLATES = {"vjunosswitch": "Juniper vJunos-switch", "vmx": "Juniper vMX", "linux": "Linux",
+                 "vsrxng": "Juniper vSRX NG.missing"}
+    IMAGES = {"vjunosswitch": ["vjunos-switch-23.2R1.14"], "vmx": ["vmx-22.1"]}
+
     def __init__(self):
         self.labs, self.folders, self.calls = {}, {"/"}, []
         self.consoles: dict[int, FakeConsole] = {}
@@ -253,11 +257,10 @@ class FakeEve:
                 if path == "/api/status":
                     return self._send(200, {"version": "6.2.0-test"})
                 if path == "/api/list/templates/":
-                    return self._send(200, {"vjunosswitch": "Juniper vJunos-switch", "vmx": "Juniper vMX",
-                                            "linux": "Linux", "vsrxng": "Juniper vSRX NG.missing"})
+                    return self._send(200, fake.TEMPLATES)
                 m = re.match(r"^/api/list/templates/(\w+)$", path)
                 if m:
-                    imgs = {"vjunosswitch": ["vjunos-switch-23.2R1.14"], "vmx": ["vmx-22.1"]}.get(m.group(1), [])
+                    imgs = fake.IMAGES.get(m.group(1), [])
                     return self._send(200, {"options": {"image": {"list": {i: i for i in imgs}}}})
                 if path.startswith("/api/folders"):
                     if method == "GET":
@@ -283,7 +286,7 @@ class FakeEve:
                     return self._send(200)
                 if rest == "/nodes" and method == "POST":
                     nid = len(L["nodes"]) + 1
-                    con = FakeConsole(fake.box)
+                    con = globals()["FakeConsole"](fake.box)
                     fake.consoles[nid] = con
                     L["nodes"][str(nid)] = dict(body, id=nid, url=f"telnet://eve.example:{con.port}", ifs={})
                     return self._send(201, {"id": nid})
@@ -381,7 +384,7 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         assert "Connected to EVE-NG 6.2.0-test" in resp.get_data(as_text=True)
         imgs = c.get("/eve/images").json["images"]
         assert imgs[0]["images"] == ["vjunos-switch-23.2R1.14"]
-        assert "Build lab in EVE-NG" in c.get("/build/juniper").get_data(as_text=True)
+        assert "Build lab from the map" in c.get("/build/juniper").get_data(as_text=True)
 
         items = example_items()
         body = {"name": "office-test", "template": "vjunosswitch", "image": "vjunos-switch-23.2R1.14",
