@@ -68,6 +68,12 @@ VENDORS: dict[str, Vendor] = {
         # translation; PoE, port security, EVPN, policies, QoS and the tools come later.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x"}),
         ready=True),
+    "extreme": Vendor(
+        "extreme", "Extreme Networks", "EXOS / Switch Engine", "X440-G2, X450-G2, X460-G2, 5320, 5420 and the EXOS VM",
+        # What the EXOS builder writes today. No routed ports and no VLAN translation; 802.1X (netlogin),
+        # EVPN, policies, QoS and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "poe", "virtual_chassis"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port

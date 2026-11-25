@@ -138,6 +138,13 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>If something is wrong: <code>rollback running-config checkpoint before-change</code>.</li>
     <li><code>copy running-config startup-config</code> to keep it.</li>
   </ol>
+  <h3>Extreme Networks (EXOS / Switch Engine)</h3>
+  <ol>
+    <li>Back up first: <code>save configuration before-change</code>, and answer <b>No</b> when it asks to make it the default.</li>
+    <li>Paste the commands, or upload them as <code>change.xsf</code> and run <code>load script change.xsf</code>.</li>
+    <li>Check with <code>show configuration</code>, then <code>save configuration</code>.</li>
+    <li>To undo: <code>use configuration before-change</code>, then <code>reboot</code>.</li>
+  </ol>
   <h3>Dell (OS10)</h3>
   <ol>
     <li>Back up first: <code>copy running-configuration config://before.xml</code>.</li>
@@ -206,6 +213,19 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>No PoE and no voice VLAN on Nexus. The Nexus 3000 can't translate VLANs.</li>
     <li>Not written yet: EVPN-VXLAN, vPC, policies, QoS and the Tools.</li>
   </ul>
+  <h3>Extreme Networks (EXOS / Switch Engine): X440-G2, X450-G2, X460-G2, 5320, 5420 and the EXOS VM</h3>
+  <ul>
+    <li>Ports: <code>1</code> to <code>52</code>; in a SummitStack <code>slot:port</code> (<code>2:1</code>). The output is a list of
+      one-line commands, like a script.</li>
+    <li>VLANs have names and take their ports (<code>configure vlan USERS add ports 1-40 untagged</code>). Every port starts in the
+      <code>Default</code> VLAN, so the script empties it first. VLAN 1 is Default, so use IDs 2-4094.</li>
+    <li>A LAG is a sharing group named after its first port (the master port): <code>enable sharing 49 grouping 49-50 ... lacp</code>.
+      The master port stands for the LAG in VLANs.</li>
+    <li>There are no routed ports: put the address on a VLAN. OSPF needs the Advanced Edge license and BGP the Core license.</li>
+    <li>Users are created with plain-text passwords, which EXOS encrypts. The built-in admin password is set at the CLI.</li>
+    <li>Not written yet: 802.1X / MAB (netlogin), SNMPv3, the login banner, storm control, OSPF authentication, VLAN translation,
+      EVPN, policies, QoS and the Tools.</li>
+  </ul>
   <h3>Dell (SmartFabric OS10): N3248TE, N3248P, N3248PXE, N2248PX, S5248F, S5232F and the OS10 virtual lab</h3>
   <ul>
     <li>Ports: <code>ethernet1/1/1</code> (short: <code>eth1/1/1-24</code>). Port groups become <code>interface range</code>
@@ -264,6 +284,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Cisco: <code>switchport vlan mapping</code> on the 9300, 9500, 3650 and 3850 (not the 9200 or 2960-X).</li>
   <li>Cisco Nexus: <code>switchport vlan mapping</code> on the Nexus 9000 (not the 3000).</li>
   <li>Dell OS10: not available.</li>
+  <li>Extreme EXOS: not written.</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
   <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
@@ -272,7 +293,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX and AOS-S, which
+    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S and Extreme EXOS, which
     only take plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>

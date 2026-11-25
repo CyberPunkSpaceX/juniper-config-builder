@@ -7,7 +7,7 @@ from test_generator import base, msgs, sets
 
 def test_vendor_catalog_and_fallback():
     keys = [v["key"] for v in vendors.catalog()]
-    assert keys == ["juniper", "arista", "cisco", "nexus", "dell", "ruckus", "aruba", "procurve"]
+    assert keys == ["juniper", "arista", "cisco", "nexus", "dell", "extreme", "ruckus", "aruba", "procurve"]
     assert vendors.get(None).key == "juniper"
     assert vendors.get("nope").key == "juniper"
     assert vendors.get("Arista").key == "arista"
