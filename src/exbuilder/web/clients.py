@@ -119,6 +119,8 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
     from . import backups, eve
     eve.migrate(conn)
     backups.migrate(conn)
+    from . import promote
+    promote.migrate(conn)
     old_known = folder / "ssh_known_hosts"
     if old_known.exists() and first:
         dest = client_folder(first[0], folder)
@@ -392,7 +394,7 @@ def client_update(cid: int):
         if request.form.get("confirm", "").strip() != r["name"]:
             flash("Type the client's name exactly to delete it.", "error")
             return redirect(url_for("clients.client_page", cid=cid))
-        for table in ("projects", "maps", "client_members", "eve_labs", "eve_jobs", "config_backups"):
+        for table in ("projects", "maps", "client_members", "eve_labs", "eve_jobs", "config_backups", "project_reviews"):
             db.execute(f"DELETE FROM {table} WHERE client_id = ?", (cid,))
         db.execute("DELETE FROM clients WHERE id = ?", (cid,))
         db.commit()

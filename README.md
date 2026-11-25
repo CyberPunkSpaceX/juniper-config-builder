@@ -167,6 +167,25 @@ set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519
 A server-wide key (`EXB_SSH_KEY_FILE` plus `EXB_SSH_KEY_USER`, from a Docker
 secret) still works for clients that have no key of their own.
 
+### From Lab to Production (approval and promote)
+
+A project tested in a client's **Lab** space reaches **Production** only
+through an approval:
+
+1. In Lab, save the project, then **Projects → Ask for approval** (editor or
+   admin), with an optional note on what was tested. The saved project is
+   frozen as a snapshot and must build with no errors.
+2. A client admin opens the snapshot and clicks **Approve** or **Reject** (a
+   reason is required). If the client has another admin (server admins count),
+   nobody approves their own request.
+3. A client admin clicks **Promote to Production**. The approved snapshot is
+   copied into Production under the same name. If the Lab project changed after
+   approval, it must be approved again. A Production project with that name is
+   replaced; **Undo** restores it (or removes the project if it was new).
+
+Every step is in the client's list (who, when, notes) and the audit log
+(`audit: … promote …`).
+
 ### Test in an EVE-NG lab (push and pull)
 
 With an [EVE-NG](https://www.eve-ng.net/) server you can try the configs on
