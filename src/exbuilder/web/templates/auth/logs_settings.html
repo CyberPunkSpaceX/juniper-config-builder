@@ -1,0 +1,50 @@
+{% extends "auth/base.html" %}
+{% block title %}Switch logs · {{ c['name'] }} · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('clients.client_page', cid=c['id']) }}">← {{ c['name'] }}</a> · <a href="{{ url_for('logs.logs_page') }}">Logs page</a></p>
+<h1>Switch logs of {{ c['name'] }}</h1>
+
+<section class="panel">
+  <h2>Settings</h2>
+  <p class="hint">This server has a built-in syslog server (UDP and TCP port 514). A message is kept for
+    {{ c['name'] }} when it comes from an address in the networks below, and nobody outside {{ c['name'] }} sees it.
+    Messages from addresses no client lists are dropped. {{ count }} message{{ '' if count == 1 else 's' }} kept now.</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="font-weight:400"><input type="checkbox" name="enabled" value="1" {% if s['enabled'] %}checked{% endif %}> Keep logs for {{ c['name'] }}</label>
+    <div class="field" style="margin-top:10px"><label for="nets">Networks the switches send from</label>
+      <input id="nets" type="text" name="networks" value="{{ s['networks'] }}" placeholder="{{ ssh_nets or '10.40.10.0/24' }}">
+      <p class="hint">Empty = the SSH switch networks of {{ c['name'] }}{% if ssh_nets %} ({{ ssh_nets }}){% endif %}. When two clients
+        list overlapping networks, the more specific network wins, so give each client its own.</p></div>
+    <div class="field"><label for="kd">Keep logs for (days)</label><input id="kd" type="text" name="keep_days" value="{{ s['keep_days'] }}" style="max-width:120px"></div>
+    <h2 style="margin-top:18px">Alerts</h2>
+    <div class="row" style="grid-template-columns: 1fr 2fr">
+      <div><label for="as">Alert on</label><select id="as" name="alert_severity">
+        <option value="-1" {% if s['alert_severity'] == -1 %}selected{% endif %}>No alerts</option>
+        {% for v in severities %}{% if loop.index0 <= 5 %}<option value="{{ loop.index0 }}" {% if s['alert_severity'] == loop.index0 %}selected{% endif %}>{{ v }} or worse</option>{% endif %}{% endfor %}
+      </select></div>
+      <div><label for="am">Only messages containing (optional)</label><input id="am" type="text" name="alert_match" value="{{ s['alert_match'] }}" placeholder="UPDOWN"></div>
+    </div>
+    <p class="hint">Alerts go to the same email addresses and webhooks as the
+      <a href="{{ url_for('nightly.nightly_page', cid=c['id']) }}">nightly backups</a>{% if not targets %} (none set yet){% endif %},
+      at most one every 5 minutes, listing every matching message since the last alert.</p>
+    <button type="submit">Save</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Point the switches here</h2>
+  <p class="hint">Use this server's address{% if address %} (<b>{{ address }}</b>){% endif %}, port 514. Examples:</p>
+  {% set a = address or '10.40.45.200' %}
+  <table>
+    <tr><td>Juniper</td><td><code>set system syslog host {{ a }} any notice</code></td></tr>
+    <tr><td>Cisco IOS / Nexus / Arista / Dell OS10</td><td><code>logging host {{ a }}</code> (OS10: <code>logging server {{ a }}</code>)</td></tr>
+    <tr><td>Aruba CX</td><td><code>logging {{ a }}</code></td></tr>
+    <tr><td>ProCurve / Ruckus</td><td><code>logging {{ a }}</code> (Ruckus: <code>logging host {{ a }}</code>)</td></tr>
+    <tr><td>Extreme EXOS</td><td><code>configure syslog add {{ a }} vr VR-Default local0</code>, then <code>enable log target syslog {{ a }} vr VR-Default local0</code></td></tr>
+    <tr><td>FortiSwitch</td><td><code>config log syslogd setting</code> / <code>set status enable</code> / <code>set server {{ a }}</code> / <code>end</code></td></tr>
+    <tr><td>MikroTik</td><td><code>/system logging action add name=sb target=remote remote={{ a }}</code> and <code>/system logging add topics=info action=sb</code></td></tr>
+    <tr><td>UniFi</td><td>UniFi Network: Settings &gt; System &gt; Remote logging (syslog), server {{ a }}</td></tr>
+  </table>
+</section>
+{% endblock %}

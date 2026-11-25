@@ -401,6 +401,9 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     and who hears about changes (email, Teams, Slack or Discord). Each night every switch is read with the client's SSH
     key; a changed config is kept as a new version and the alert shows the changed lines. <b>Changes</b> on any backup
     (Backups &amp; compare tab) shows what changed since the version before.</li>
+  <li><b>Switch logs</b>: point the switches' syslog at this server (port 514). On the client's page a client admin turns
+    logs on and lists the networks the switches send from; each client sees only its own logs on the <b>Logs</b> page
+    (search, filters, live view, CSV), and can get an alert for serious messages.</li>
 </ul>
 
 <h2 id="tools">10. Tools (Juniper for now)</h2>

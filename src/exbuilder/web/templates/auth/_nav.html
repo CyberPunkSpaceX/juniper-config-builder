@@ -5,6 +5,7 @@
   <a href="{{ url_for('clients.start_page') }}"{% if request.endpoint == 'clients.start_page' %} aria-current="page"{% endif %}>Home</a>
   <a href="{{ url_for('index') }}">Vendors</a>
   <a href="{{ url_for('converter.page') }}">Converter</a>
+  {% if current_client %}<a href="{{ url_for('logs.logs_page') }}"{% if request.endpoint == 'logs.logs_page' %} aria-current="page"{% endif %}>Logs</a>{% endif %}
   <a href="{{ url_for('help_page') }}">Help</a>
   {% if current_space and request.endpoint != 'clients.start_page' %}
   <form class="space-switch" method="post" action="{{ url_for('clients.set_space') }}" title="Switch between the Production and Lab spaces">

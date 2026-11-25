@@ -38,6 +38,8 @@ services:
       EXB_SMTP_FROM: ${EXB_SMTP_FROM:-}
       # EXB_SMTP_PASSWORD_FILE: /run/secrets/switchbuilder_smtp_password
       EXB_PUBLIC_URL: ${EXB_PUBLIC_URL:-}
+      # The syslog server address shown to people on the log settings page.
+      EXB_SYSLOG_ADDRESS: ${EXB_SYSLOG_ADDRESS:-}
     ports:
       # Published on every node through the swarm routing mesh.
       # The reverse proxy (switchbuilder.cyberpunkx.ca) forwards here.
@@ -78,10 +80,25 @@ services:
   jobs:
     image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
     command: ["switchbuilder", "jobs"]
+    # Built-in syslog server. Host mode keeps the switches' real addresses (the
+    # routing mesh would hide them, and logs are given to clients by address).
+    # Point switches at the address of the node in EXB_NODE, port 514.
+    ports:
+      - target: 5514
+        published: ${EXB_SYSLOG_PUBLISHED:-514}
+        protocol: udp
+        mode: host
+      - target: 5514
+        published: ${EXB_SYSLOG_PUBLISHED:-514}
+        protocol: tcp
+        mode: host
     environment:
       EXB_SSH_ALLOW: ${EXB_SSH_ALLOW:-}
       EXB_SSH_DISABLE: ${EXB_SSH_DISABLE:-false}
       # EXB_MASTER_KEY_FILE: /run/secrets/switchbuilder_master_key   # the same as the web service
+      # Syslog: messages a second per sender, and messages kept per client at most.
+      EXB_SYSLOG_RATE: ${EXB_SYSLOG_RATE:-200}
+      EXB_SYSLOG_MAX_ROWS: ${EXB_SYSLOG_MAX_ROWS:-2000000}
       # Link in alerts, for example https://switchbuilder.example.com
       EXB_PUBLIC_URL: ${EXB_PUBLIC_URL:-}
       # Email alerts (optional; webhooks work without them). Put the password in
@@ -112,7 +129,7 @@ services:
         condition: any
       resources:
         limits:
-          memory: 192M
+          memory: 256M
       labels:
         app: switchbuilder
 
