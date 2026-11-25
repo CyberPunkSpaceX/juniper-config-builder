@@ -357,7 +357,7 @@ def _load_user() -> Response | None:
         if user is None:
             if username:
                 record_failure(username, "API sign-in")
-            return Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="exbuilder"'})
+            return Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="Switch Config Builder"'})
         if user["must_change"]:
             return Response("Sign in to the web UI and change your password first", 403)
         if needs_2fa(user) and not user["totp_secret"]:

@@ -54,7 +54,8 @@ SOURCES = {"ssh": "SSH fetch", "eve": "EVE-NG lab", "upload": "uploaded", "map":
            "builder": "builder output", "restore": "restored"}
 MAX_TEXT = 2_000_000
 KEEP = 50            # versions kept per switch and source
-FORMAT = "exbuilder-client-backup"
+FORMAT = "switchbuilder-client-backup"
+FORMATS = (FORMAT, "exbuilder-client-backup")   # files exported before the rename still import
 HOST_RE = re.compile(r"host-name\s+\"?([\w.-]+)")
 
 
@@ -285,7 +286,7 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
     """Load a client backup into client ``cid``. Returns [(level, message)]."""
     from .. import eveng
     from . import eve
-    if not isinstance(data, dict) or data.get("format") != FORMAT:
+    if not isinstance(data, dict) or data.get("format") not in FORMATS:
         return [("error", "That is not a client backup from Multi-Vendor Switch Config Builder.")]
     db, who, notes, now = auth.db(), auth.current_user()["username"], [], _now()
     counts = {"projects": [0, 0], "maps": [0, 0]}
@@ -437,7 +438,7 @@ def client_import(cid: int):
 def client_restore_new():
     """Server admins: make a new client from a backup file."""
     data, problem = _read_backup_file()
-    if problem is None and (not isinstance(data, dict) or data.get("format") != FORMAT):
+    if problem is None and (not isinstance(data, dict) or data.get("format") not in FORMATS):
         problem = "That is not a client backup from Multi-Vendor Switch Config Builder."
     name = (request.form.get("name") or "").strip() or str(((data or {}).get("client") or {}).get("name") or "").strip()
     if problem is None and not clients.NAME_RE.match(name):

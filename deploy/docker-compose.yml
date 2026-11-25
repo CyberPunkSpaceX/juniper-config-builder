@@ -2,7 +2,7 @@
 # Then open http://<host>:8088 and sign in as admin / admin (you'll be asked
 # for a new password straight away). See INSTALL.md.
 services:
-  exbuilder:
+  switchbuilder:
     image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
     restart: unless-stopped
     ports:
@@ -15,7 +15,7 @@ services:
     tmpfs:
       - /tmp:size=64m
     volumes:
-      - exbuilder_data:/data
+      - switchbuilder_data:/data
 
 volumes:
-  exbuilder_data:
+  switchbuilder_data:

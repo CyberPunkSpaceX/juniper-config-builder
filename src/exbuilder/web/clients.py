@@ -460,7 +460,7 @@ def client_update(cid: int):
             flash("SSH settings saved." if nets else "SSH settings saved. SSH fetch is off for this client "
                   "until you add the switch networks.", "ok")
     elif action == "key_generate":
-        private, public = sshfetch.generate_key(f"exbuilder-{re.sub(r'[^A-Za-z0-9]+', '-', r['name']).strip('-')}")
+        private, public = sshfetch.generate_key(f"switchbuilder-{re.sub(r'[^A-Za-z0-9]+', '-', r['name']).strip('-')}")
         db.execute("UPDATE clients SET ssh_key = ?, ssh_key_pub = ? WHERE id = ?",
                    (_fernet().encrypt(private.encode()).decode(), public, cid))
         del private

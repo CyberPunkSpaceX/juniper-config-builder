@@ -159,9 +159,9 @@ The client page shows the commands for a read-only Junos account with the
 client's public key, like this:
 
 ```
-set system login class exbuilder-ro permissions view-configuration
-set system login class exbuilder-ro permissions view
-set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
+set system login class switchbuilder-ro permissions view-configuration
+set system login class switchbuilder-ro permissions view
+set system login user switchbuilder-ro class switchbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
 ```
 
 A server-wide key (`EXB_SSH_KEY_FILE` plus `EXB_SSH_KEY_USER`, from a Docker
@@ -426,16 +426,16 @@ and sign-in lockout work the same as in firewall-converter.
 
 ```
 pip install '.[web]'
-exbuilder models                                 # list switch models and ports
-exbuilder build project.json                     # set commands to stdout
-exbuilder build project.json -f hierarchy -o sw1.conf
+switchbuilder models                                 # list switch models and ports
+switchbuilder build project.json                     # set commands to stdout
+switchbuilder build project.json -f hierarchy -o sw1.conf
 ```
 
 Scripts can call the server with a user name and an API token (from "My account"):
 
 ```
 curl -u alice:exb_TOKEN -H 'Content-Type: application/json' \
-     --data @project.json 'https://exbuilder.example.com/api/generate?format=set'
+     --data @project.json 'https://switchbuilder.example.com/api/generate?format=set'
 ```
 
 `format=json` (the default) returns the set and hierarchical text, errors,
@@ -446,8 +446,10 @@ warnings and generated password hashes.
 ```
 pip install -e '.[dev,web]'
 pytest -q
-exbuilder serve          # http://127.0.0.1:8080, data in $EXB_DATA_DIR
+switchbuilder serve          # http://127.0.0.1:8080, data in $EXB_DATA_DIR
 ```
+
+The Python package inside is still called `exbuilder` (an older name); the app, the image, the CLI (`switchbuilder`; `exbuilder` still works) and the deploy files use the new name.
 
 Layout: `src/exbuilder/models.py` (switch models and port layouts),
 `generator.py` (project JSON to config, with all checks), `junos.py` (config
