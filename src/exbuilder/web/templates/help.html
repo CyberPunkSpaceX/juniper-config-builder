@@ -131,6 +131,13 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
     <li><code>reload cancel</code>, then <code>write memory</code>.</li>
   </ol>
+  <h3>Cisco Nexus (NX-OS)</h3>
+  <ol>
+    <li>Save a restore point: <code>checkpoint before-change</code>.</li>
+    <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
+    <li>If something is wrong: <code>rollback running-config checkpoint before-change</code>.</li>
+    <li><code>copy running-config startup-config</code> to keep it.</li>
+  </ol>
   <h3>Brocade / Ruckus (FastIron)</h3>
   <ol>
     <li>Back up first: <code>copy running-config tftp &lt;server&gt; before.cfg</code>.</li>
@@ -180,6 +187,18 @@ if you lose the connection. The steps for each vendor are below the config in th
       <code>FastEthernet0</code> with <code>ip default-gateway</code> (no management VRF), and no VLAN mapping. It only does
       static routes, after <code>sdm prefer lanbase-routing</code> and a reload; OSPF and BGP give an error.</li>
   </ul>
+  <h3>Cisco Nexus (NX-OS): Nexus 9200, 9300, older 3000, and the Nexus 9000v lab</h3>
+  <ul>
+    <li>Ports: <code>Ethernet1/1</code> (short: <code>Eth1/1-48</code>); breakout lanes are <code>Ethernet1/49/1</code>.
+      LAGs are <code>port-channel1</code> (<code>Po1</code>). Nexus switches don't stack: a vPC pair is two projects.</li>
+    <li>The config starts with the <code>feature</code> lines it needs (lacp, interface-vlan, ospf, bgp, dhcp and so on).</li>
+    <li>The management port <code>mgmt0</code> is always in the <code>management</code> VRF, and its gateway goes there. With
+      "Management VRF" ticked (the default), NTP, DNS, logging, SNMP and RADIUS also go out through mgmt0.</li>
+    <li>The root password sets the built-in <b>admin</b> user. Passwords become SHA-256 hashes (<code>password 5</code>).</li>
+    <li>NX-OS wants a fixed offset for the time zone, so summer time needs a <code>clock summer-time</code> line added by hand.</li>
+    <li>No PoE and no voice VLAN on Nexus. The Nexus 3000 can't translate VLANs.</li>
+    <li>Not written yet: EVPN-VXLAN, vPC, policies, QoS and the Tools.</li>
+  </ul>
   <h3>Brocade / Ruckus (FastIron): ICX 7000 and 6000, FCX, FGS, FLS</h3>
   <ul>
     <li>Ports: <code>1/1/1</code> (unit/module/port); <code>ethe 1/1/1</code> also works. FGS and FLS don't stack and
@@ -224,6 +243,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Juniper: <code>vlan-rewrite</code> on EX4100, EX4300 and EX4400 (not EX2300 or EX3400).</li>
   <li>Arista: <code>switchport vlan translation</code>.</li>
   <li>Cisco: <code>switchport vlan mapping</code> on the 9300, 9500, 3650 and 3850 (not the 9200 or 2960-X).</li>
+  <li>Cisco Nexus: <code>switchport vlan mapping</code> on the Nexus 9000 (not the 3000).</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
   <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
@@ -232,7 +252,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco (type 5 on the 2960-X), MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX and AOS-S, which
+    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX and AOS-S, which
     only take plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>

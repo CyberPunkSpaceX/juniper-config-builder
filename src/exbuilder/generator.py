@@ -1072,6 +1072,9 @@ def build(project: dict) -> Result:
     if vendor.key == "cisco":
         from . import ios
         return ios.build(project)
+    if vendor.key == "nexus":
+        from . import nxos
+        return nxos.build(project)
     if vendor.key == "procurve":
         from . import aoss
         return aoss.build(project)

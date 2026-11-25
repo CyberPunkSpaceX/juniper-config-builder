@@ -1,0 +1,21 @@
+{
+  "vendor": "nexus",
+  "name": "Server room switch (Cisco Nexus)",
+  "switch": {"members": [{"fpc": 1, "model": "N9K-C93180YC-FX"}]},
+  "system": {"hostname": "nx-server-01", "domain": "example.lan", "timezone": "America/Edmonton",
+             "name_servers": "10.10.0.10, 1.1.1.1", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}],
+             "banner": "Authorized access only.", "mgmt_address": "192.168.100.31/24", "mgmt_gateway": "192.168.100.1",
+             "mgmt_vrf": true},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "snmp": {"location": "Server room", "communities": [{"name": "s3cret-ro", "access": "read-only", "clients": "10.10.0.50"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.3/24"},
+            {"name": "SERVERS", "id": "100", "irb": "10.10.100.1/24", "dhcp_relay": true},
+            {"name": "STORAGE", "id": "110"},
+            {"name": "BACKUP", "id": "120"}],
+  "ports": [{"name": "SERVERS", "ports": "Ethernet1/1-40", "mode": "access", "vlan": "SERVERS", "description": "Servers", "edge": true},
+            {"name": "HYPERVISORS", "ports": "Eth1/41-46", "mode": "trunk", "vlans": "SERVERS, STORAGE, BACKUP", "native": "MGMT", "description": "Hypervisor hosts"},
+            {"name": "CARRIER", "ports": "Ethernet1/47", "mode": "trunk", "vlans": "MGMT, BACKUP", "vlan_translate": "1120>120", "description": "Off-site backup link, tag 1120"}],
+  "lags": [{"name": "Po1", "members": "Ethernet1/49-50", "lacp": "active", "lacp_fast": true, "mode": "trunk", "vlans": "MGMT, SERVERS, STORAGE, BACKUP", "description": "To core"}],
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1"}], "dhcp_relay_servers": "10.10.0.10"}
+}
