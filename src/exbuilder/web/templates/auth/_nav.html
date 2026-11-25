@@ -25,7 +25,7 @@
   </form>
   {% endif %}
   {% if current_user['role'] == 'admin' or (my_clients and my_clients|selectattr('role', 'equalto', 'admin')|list) %}<a href="{{ url_for('clients.clients_page') }}">Clients</a>{% endif %}
-  {% if current_user['role'] == 'admin' %}<a href="{{ url_for('auth.users') }}">Users</a>{% endif %}
+  {% if current_user['role'] == 'admin' %}<a href="{{ url_for('auth.users') }}">Users</a><a href="{{ url_for('sso.settings_page') }}">Sign-in</a>{% endif %}
   <a href="{{ url_for('auth.account') }}">My account</a>
   <span class="who">{{ current_user['username'] }}{% if current_user['role'] == 'admin' %} (Super Admin){% endif %}</span>
   <form method="post" action="{{ url_for('auth.logout') }}">

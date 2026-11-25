@@ -1,0 +1,139 @@
+{% extends "auth/base.html" %}
+{% block title %}Sign-in settings · Multi-Vendor Switch Config Builder{% endblock %}
+{% macro check(name, value, text) %}<label style="font-weight:400; display:block; margin:6px 0"><input type="checkbox" name="{{ name }}" value="1"{% if value %} checked{% endif %}> {{ text }}</label>{% endmacro %}
+{% macro text(name, label, value, ph="", hint="", kind="text") %}
+<div class="field"><label for="{{ name }}-{{ label|lower|replace(' ', '-') }}">{{ label }}{% if hint %} <span class="hint">({{ hint }})</span>{% endif %}</label>
+  <input id="{{ name }}-{{ label|lower|replace(' ', '-') }}" type="{{ kind }}" name="{{ name }}" value="{{ value }}" placeholder="{{ ph }}" autocomplete="off" style="width:100%"></div>
+{% endmacro %}
+{% macro area(name, value, rows=4, ph="") %}<textarea name="{{ name }}" rows="{{ rows }}" placeholder="{{ ph }}" spellcheck="false" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 13px ui-monospace, Menlo, Consolas, monospace">{{ value }}</textarea>{% endmacro %}
+{% macro rules(cfg, example) %}
+  <h3>Who gets in, and with what access</h3>
+  <p class="hint">One rule per line: <code>group = level @ clients</code>. Levels: <code>readonly</code>, <code>configurator</code>,
+    <code>admin</code>, <code>superadmin</code>. Clients: <code>all</code> (also clients added later) or names separated by commas.
+    At every sign-in the person's access is set from the rules their groups match; the highest level wins.
+    Your clients: {{ client_names|join(", ") or "none yet" }}.</p>
+  {{ area("rules", cfg.rules, 5, example) }}
+  {{ check("allow_unmapped", cfg.allow_unmapped, "Let people in without a matching group (new people get no clients until a Super Admin gives them some)") }}
+{% endmacro %}
+{% block content %}
+<style>
+  .settings h3 { margin: 18px 0 6px; font-size: 15px; }
+  .settings code { font-size: 12px; }
+  .copy { font: 12px ui-monospace, Menlo, Consolas, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+  @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+</style>
+<h1>Sign-in settings</h1>
+<p class="hint">Let people sign in with their company account. Local accounts keep working, so you can always sign in
+  as a local Super Admin if the directory is down. People from OpenID Connect and SAML use their identity provider's
+  MFA instead of this app's two-factor codes, so require MFA there. LDAP only checks a password, so LDAP users follow
+  this app's two-factor rules.</p>
+
+<form class="panel settings" method="post" id="general">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="general">
+  <h2>App address</h2>
+  {{ text("base_url", "Address people use to open this app", general.base_url, "https://switchbuilder.example.com", "used in the links the identity provider sends people back to; empty = the address of this request") }}
+  <p class="hint">Now: <code>{{ base }}</code></p>
+  <button type="submit">Save</button>
+</form>
+
+<form class="panel settings" method="post" id="ldap">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="ldap">
+  <h2>LDAP / Active Directory {% if ldap.enabled %}<span class="badge on">on</span>{% else %}<span class="badge">off</span>{% endif %}</h2>
+  <p class="hint">People type their directory username and password on the normal sign-in page.</p>
+  {{ check("enabled", ldap.enabled, "Turn on LDAP sign-in") }}
+  <div class="grid2">
+    {{ text("url", "Server", ldap.url, "ldaps://dc1.corp.example.com:636", "several separated by spaces") }}
+    {{ text("base_dn", "Search base", ldap.base_dn, "DC=corp,DC=example,DC=com") }}
+    {{ text("bind_dn", "Service account", ldap.bind_dn, "CN=svc-switchbuilder,OU=Service,DC=corp,DC=example,DC=com", "read-only account used to find people") }}
+    <div class="field"><label for="bindpw">Service account password {% if ldap_secret %}<span class="hint">(saved; leave empty to keep it)</span>{% endif %}</label>
+      <input id="bindpw" type="password" name="bind_password" autocomplete="new-password" style="width:100%"></div>
+    {{ text("user_filter", "User filter", ldap.user_filter, "(&(objectClass=user)(sAMAccountName={username}))", "{username} is what people type; OpenLDAP: (uid={username})") }}
+    {{ text("group_attr", "Group attribute", ldap.group_attr, "memberOf") }}
+  </div>
+  {{ check("starttls", ldap.starttls, "Use StartTLS (for ldap:// on port 389)") }}
+  {{ check("verify_tls", ldap.verify_tls, "Check the server's certificate (recommended)") }}
+  {{ check("nested_ad", ldap.nested_ad, "Active Directory: include groups inside groups") }}
+  <div class="field"><label>CA certificate <span class="hint">(PEM, only if your domain uses its own certificate authority)</span></label>
+    {{ area("ca_pem", ldap.ca_pem, 3, "-----BEGIN CERTIFICATE-----") }}</div>
+  {{ rules(ldap, "CN=Network Admins,OU=Groups,DC=corp,DC=example,DC=com = superadmin\nNetwork Engineers = configurator @ all\nHelpdesk = readonly @ Acme, Default") }}
+  <button type="submit">Save LDAP settings</button>
+</form>
+<form class="panel settings" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="ldap_test">
+  <h3 style="margin-top:0">Test LDAP</h3>
+  <p class="hint">Connects with the saved settings and the service account. Give a username to see which groups and rules match.</p>
+  <div class="row" style="grid-template-columns: 1fr auto"><div><input type="text" name="test_user" placeholder="jsmith" autocomplete="off"></div>
+    <div><button class="secondary" type="submit">Test</button></div></div>
+</form>
+
+<form class="panel settings" method="post" id="oidc">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="oidc">
+  <h2>OpenID Connect {% if oidc.enabled %}<span class="badge on">on</span>{% else %}<span class="badge">off</span>{% endif %}</h2>
+  <p class="hint">For Microsoft Entra ID (Azure AD), Google Workspace, Okta, Authentik, Keycloak and others. Register this app
+    at your provider as a web application with this redirect URI:</p>
+  <div class="copy">{{ redirect_uri }}</div>
+  <p class="hint">Issuer examples: Entra ID <code>https://login.microsoftonline.com/&lt;tenant-id&gt;/v2.0</code>,
+    Google <code>https://accounts.google.com</code>, Okta <code>https://&lt;org&gt;.okta.com</code>,
+    Authentik <code>https://auth.example.com/application/o/&lt;slug&gt;/</code>.</p>
+  {{ check("enabled", oidc.enabled, "Turn on OpenID Connect sign-in") }}
+  <div class="grid2">
+    {{ text("label", "Button text", oidc.label, "Microsoft", "shown as “Sign in with …”") }}
+    {{ text("issuer", "Issuer", oidc.issuer, "https://login.microsoftonline.com/<tenant-id>/v2.0") }}
+    {{ text("client_id", "Client ID", oidc.client_id) }}
+    <div class="field"><label for="csec">Client secret {% if oidc_secret %}<span class="hint">(saved; leave empty to keep it)</span>{% endif %}</label>
+      <input id="csec" type="password" name="client_secret" autocomplete="new-password" style="width:100%"></div>
+    {{ text("scopes", "Scopes", oidc.scopes, "openid email profile", "add groups for Okta and Authentik") }}
+    {{ text("username_claim", "Username claim", oidc.username_claim, "preferred_username", "email for Google") }}
+    {{ text("groups_claim", "Groups claim", oidc.groups_claim, "groups", "Entra ID sends group object IDs; Google sends none") }}
+    {{ text("email_domains", "Allowed email domains", oidc.email_domains, "example.com", "optional; needed for Google, which has no groups") }}
+  </div>
+  {{ rules(oidc, "Network Admins = superadmin\n3f1c2a7e-0000-4d5e-9a8b-123456789abc = configurator @ all\nHelpdesk = readonly @ Acme") }}
+  <p class="hint">Google sends no groups, so group rules can't match. Fill in “Allowed email domains”, tick
+    “Let people in without a matching group”, then give each person their clients on the Users page.</p>
+  <button type="submit">Save OpenID Connect settings</button>
+</form>
+<form class="panel settings" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="oidc_test">
+  <button class="secondary" type="submit">Test: find the provider</button>
+</form>
+
+<form class="panel settings" method="post" id="saml">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="saml">
+  <h2>SAML {% if saml.cfg.enabled %}<span class="badge on">on</span>{% else %}<span class="badge">off</span>{% endif %}</h2>
+  <p class="hint">For Entra ID, ADFS, Okta, Google Workspace, Authentik, JumpCloud and others. Give your provider these values
+    (or the metadata address):</p>
+  <table>
+    <tr><th>Entity ID / Identifier</th><td class="copy">{{ saml.entity_id }}</td></tr>
+    <tr><th>Reply URL / ACS URL</th><td class="copy">{{ saml.acs }}</td></tr>
+    <tr><th>Metadata</th><td class="copy">{{ saml.metadata }}</td></tr>
+  </table>
+  <p class="hint">Sign the assertion or the response (SHA-256), and leave assertion encryption off.</p>
+  {{ check("enabled", saml.cfg.enabled, "Turn on SAML sign-in") }}
+  <div class="grid2">
+    {{ text("label", "Button text", saml.cfg.label, "Entra ID") }}
+    {{ text("idp_entity_id", "Provider entity ID / issuer", saml.cfg.idp_entity_id, "https://sts.windows.net/<tenant-id>/") }}
+    {{ text("idp_sso_url", "Provider sign-in URL", saml.cfg.idp_sso_url, "https://login.microsoftonline.com/<tenant-id>/saml2") }}
+    {{ text("username_attr", "Username attribute", saml.cfg.username_attr, "empty = NameID", "e.g. http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name") }}
+    {{ text("groups_attr", "Groups attribute", saml.cfg.groups_attr, "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups") }}
+  </div>
+  <div class="field"><label>Provider signing certificate <span class="hint">(PEM; {{ saml.certs }} saved; paste two during a certificate rollover)</span></label>
+    {{ area("idp_cert", saml.cfg.idp_cert, 4, "-----BEGIN CERTIFICATE-----") }}</div>
+  {{ rules(saml.cfg, "Network Admins = superadmin\nNetwork Engineers = configurator @ all") }}
+  <button type="submit">Save SAML settings</button>
+</form>
+<form class="panel settings" method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="provider" value="saml_metadata">
+  <h3 style="margin-top:0">Fill SAML in from the provider's metadata</h3>
+  <p class="hint">Paste the provider's federation metadata XML to fill in its entity ID, sign-in URL and certificate.</p>
+  {{ area("metadata_xml", "", 3, "<EntityDescriptor ...>") }}
+  <button class="secondary" type="submit" style="margin-top:6px">Read metadata</button>
+</form>
+{% endblock %}
