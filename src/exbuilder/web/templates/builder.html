@@ -953,6 +953,23 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <table class="plist"><thead><tr><th>Name</th><th>Saved</th><th></th></tr></thead><tbody id="plist"></tbody></table>
       <p class="status" id="plist-status"></p>
     </div>
+    {% if client %}
+    <div class="panel" id="promote-box">
+      <h2>From Lab to Production</h2>
+      {% if client.space == 'lab' %}
+      <ol class="hint howto">
+        <li>Test the project in the Lab (for example in an EVE-NG lab) and save it to {{ client.name }}.</li>
+        <li>Click <b>Ask for approval</b> next to it above. The project is frozen as it is now; it must have no errors.</li>
+        <li>An admin of {{ client.name }} opens it, checks it and clicks <b>Approve</b> (or <b>Reject</b> with a reason).{% if client.role == 'admin' %} When the client has another admin, you can't approve your own request.{% endif %}</li>
+        <li>An admin clicks <b>Promote to Production</b>. The approved project is copied into Production under the same name. A Production project with that name is replaced, and <b>Undo</b> puts it back.</li>
+      </ol>
+      {% else %}
+      <p class="hint">Projects come here from the Lab space after they are tested and approved. Approved requests can be promoted from here too; <b>Undo</b> puts back what a promotion replaced.</p>
+      {% endif %}
+      <table class="plist"><thead><tr><th>Project</th><th>Status</th><th></th></tr></thead><tbody id="reviews"></tbody></table>
+      <p class="status" id="reviews-status"></p>
+    </div>
+    {% endif %}
   </section>
   </div>
 
@@ -1751,13 +1768,69 @@ async function refreshProjects() {
     const data = await api("projects");
     tb.innerHTML = data.projects.map(p => `<tr><td>${esc(p.name)}</td><td class="note">${esc(p.updated_at)}${p.updated_by ? " by " + esc(p.updated_by) : ""}</td>
       <td style="text-align:right"><button class="secondary small" data-open="${p.id}" type="button">Open</button>
+      ${data.can_edit && CLIENT && CLIENT.space === "lab" ? `<button class="small" data-ask="${p.id}" data-name="${esc(p.name)}" type="button">Ask for approval</button>` : ""}
       ${data.can_edit ? `<button class="danger small" data-del="${p.id}" data-name="${esc(p.name)}" type="button">Delete</button>` : ""}</td></tr>`).join("")
       || `<tr><td colspan="3" class="note">No saved projects yet.</td></tr>`;
   } catch (e) { document.getElementById("plist-status").textContent = "Could not load projects: " + e.message; }
+  refreshReviews();
 }
+const REVIEW_LABEL = {pending: ["Waiting for approval", "warn"], approved: ["Approved", "ok"], rejected: ["Rejected", "bad"],
+                      promoted: ["In Production", "ok"], undone: ["Promotion undone", "note"], replaced: ["Replaced or cancelled", "note"]};
+async function refreshReviews() {
+  const tb = document.getElementById("reviews"); if (!tb) return;
+  let data; try { data = await api("promote"); } catch (e) { document.getElementById("reviews-status").textContent = e.message; return; }
+  const admin = data.role === "admin";
+  tb.innerHTML = data.reviews.map(r => {
+    const [label, cls] = REVIEW_LABEL[r.status] || [r.status, "note"];
+    const who = [`asked by ${esc(r.requested_by)} ${esc(r.requested_at)}`,
+      r.decided_by && r.status !== "replaced" ? `${r.status === "rejected" ? "rejected" : "approved"} by ${esc(r.decided_by)} ${esc(r.decided_at)}` : "",
+      r.promoted_by ? `promoted by ${esc(r.promoted_by)} ${esc(r.promoted_at)}` : ""].filter(Boolean).join(" · ");
+    const warn = r.lab_changed ? `<div class="status bad">The Lab project changed after this request; ask for approval again to promote the new version.</div>`
+      : r.lab_gone ? `<div class="note">The Lab project was deleted; this snapshot can still be promoted.</div>` : "";
+    const b = [];
+    b.push(`<button class="secondary small" type="button" data-rv="open" data-id="${r.id}">Open</button>`);
+    if (r.status === "pending" && admin && (data.self_approve || r.requested_by !== data.me)) b.push(`<button class="small" type="button" data-rv="approve" data-id="${r.id}">Approve</button>`);
+    if (r.status === "pending" && admin) b.push(`<button class="danger small" type="button" data-rv="reject" data-id="${r.id}">Reject</button>`);
+    if (r.status === "pending" && (admin || r.requested_by === data.me)) b.push(`<button class="secondary small" type="button" data-rv="cancel" data-id="${r.id}">Cancel</button>`);
+    if (r.status === "approved" && admin && !r.lab_changed) b.push(`<button class="small" type="button" data-rv="promote" data-id="${r.id}" data-name="${esc(r.name)}">Promote to Production</button>`);
+    if (r.can_undo && admin) b.push(`<button class="secondary small" type="button" data-rv="undo" data-id="${r.id}" data-name="${esc(r.name)}">Undo</button>`);
+    return `<tr><td><b>${esc(r.name)}</b> <span class="note">${esc(r.vendor)}</span>${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ""}</td>
+      <td><span class="status ${cls}">${label}</span><div class="note">${who}</div>${r.decision_note ? `<div class="note">${esc(r.decision_note)}</div>` : ""}${warn}</td>
+      <td style="text-align:right;white-space:nowrap">${b.join(" ")}</td></tr>`;
+  }).join("") || `<tr><td colspan="3" class="note">No approval requests yet.</td></tr>`;
+}
+document.getElementById("promote-box") && document.getElementById("reviews").addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-rv]"); if (!b) return;
+  const st = document.getElementById("reviews-status"); st.className = "status"; st.textContent = "";
+  const what = b.dataset.rv, id = b.dataset.id;
+  try {
+    if (what === "open") {
+      if (!confirmReplace()) return;
+      const r = await api(`promote/${id}/data`);
+      if ((r.data.vendor || "juniper") !== VENDOR.key) { st.textContent = `This is a ${r.data.vendor || "juniper"} project: open it from the ${r.data.vendor || "juniper"} builder (Change vendor at the top).`; return; }
+      load(r.data); showTab("Switch"); setStatus(`Opened the snapshot of ${r.name} that is up for approval.`, "ok"); return;
+    }
+    let note = "";
+    if (what === "reject") { note = window.prompt("Why is it rejected? The requester will see this."); if (!note) return; }
+    if (what === "approve") { note = window.prompt("Approve this project for Production. A note (optional):", "") ; if (note === null) return; }
+    if (what === "promote" && !window.confirm(`Copy "${b.dataset.name}" into Production? A Production project with the same name is replaced (Undo puts it back).`)) return;
+    if (what === "undo" && !window.confirm(`Undo the promotion of "${b.dataset.name}"? Production goes back to what it was before.`)) return;
+    const r = await api(`promote/${id}/${what}`, {note});
+    st.className = "status ok";
+    st.textContent = what === "promote" ? `Promoted to Production${r.replaced ? " (the older Production version is kept for Undo)" : ""}.` : `Done: ${REVIEW_LABEL[r.status] ? REVIEW_LABEL[r.status][0] : r.status}.`;
+  } catch (e) { st.className = "status bad"; st.textContent = e.message; }
+  refreshReviews(); refreshProjects();
+});
 document.getElementById("plist").addEventListener("click", async ev => {
   const b = ev.target.closest("button"); if (!b) return;
   if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); showTab("Switch"); setStatus(`Opened ${p.name}.`, "ok"); }
+  if (b.dataset.ask) {
+    const note = window.prompt(`Ask for approval to put "${b.dataset.name}" into Production. What was tested? (optional)`, "");
+    if (note === null) return;
+    try { await api("promote/request", {project_id: Number(b.dataset.ask), note}); setStatus(`Asked for approval of ${b.dataset.name}.`, "ok"); }
+    catch (e) { setStatus(e.message, "bad"); }
+    refreshReviews(); return;
+  }
   if (b.dataset.del && window.confirm(`Delete the saved project "${b.dataset.name}"?`)) { await api(`projects/${b.dataset.del}/delete`, {}); refreshProjects(); }
 });
 document.getElementById("btn-save-server").onclick = async () => {
