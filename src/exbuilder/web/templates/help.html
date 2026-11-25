@@ -146,6 +146,15 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>Check with <code>show</code>. To undo: <code>execute restore config tftp before.conf &lt;server&gt;</code> (the
       switch reboots).</li>
   </ol>
+  <h3>MikroTik (RouterOS v7)</h3>
+  <ol>
+    <li>Back up first: <code>/export file=before</code>.</li>
+    <li>Press <b>Ctrl+X</b> to turn on Safe Mode. If you lose the connection, RouterOS undoes everything you changed.</li>
+    <li>Paste the script, or upload it as <code>change.rsc</code> and run <code>/import file-name=change.rsc</code>.
+      VLAN filtering is switched on in the very last line, so that is the moment a wrong VLAN table would cut you off.</li>
+    <li>Check with <code>/interface bridge vlan print</code>. When everything works, press <b>Ctrl+X</b> again to leave
+      Safe Mode and keep the changes. RouterOS saves changes as it goes.</li>
+  </ol>
   <h3>Extreme Networks (EXOS / Switch Engine)</h3>
   <ol>
     <li>Back up first: <code>save configuration before-change</code>, and answer <b>No</b> when it asks to make it the default.</li>
@@ -234,6 +243,20 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>Not written yet: the time zone, login banner, SNMPv3, storm control, PoE power limits, the LLDP-MED voice profile,
       VLAN translation, EVPN, policies, QoS and the Tools.</li>
   </ul>
+  <h3>MikroTik (RouterOS v7): CRS326, CRS328, CRS354, CRS310, CRS317 and CHR</h3>
+  <ul>
+    <li>Ports keep their RouterOS names: <code>ether1</code>, <code>sfp-sfpplus1</code>. LAGs are bonds (<code>bond1</code>).
+      MikroTik switches don't stack.</li>
+    <li>All ports join one bridge, <code>bridge1</code>, with hardware VLAN filtering. A port's untagged VLAN is its
+      <code>pvid</code>; the VLAN table is in <code>/interface bridge vlan</code>. A VLAN address is a VLAN interface
+      (<code>vlan10</code>) on the bridge, and the bridge is tagged in that VLAN for you.</li>
+    <li>There is no separate management port. Manage the switch through a VLAN address, or name a port as the management
+      port: it leaves the bridge and gets the address.</li>
+    <li>Load it in Safe Mode: VLAN filtering is switched on last, and a mistake there can lock you out.</li>
+    <li>Passwords go in as plain text and RouterOS stores them hashed. SSH keys need RouterOS 7.12 or later.</li>
+    <li>Not written yet: routed ports, port speed, MAC limits, ARP inspection, SNMPv3, PoE power limits,
+      VLAN translation, EVPN, policies, QoS and the Tools.</li>
+  </ul>
   <h3>Extreme Networks (EXOS / Switch Engine): X440-G2, X450-G2, X460-G2, 5320, 5420 and the EXOS VM</h3>
   <ul>
     <li>Ports: <code>1</code> to <code>52</code>; in a SummitStack <code>slot:port</code> (<code>2:1</code>). The output is a list of
@@ -307,6 +330,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Dell OS10: not available.</li>
   <li>Extreme EXOS: not written.</li>
   <li>FortiSwitch: not written.</li>
+  <li>MikroTik: not written.</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
   <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
@@ -315,7 +339,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S, Extreme EXOS and FortiSwitch, which
+    Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S, Extreme EXOS, FortiSwitch and MikroTik, which
     only take plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>

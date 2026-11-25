@@ -81,6 +81,12 @@ VENDORS: dict[str, Vendor] = {
         # tools come later.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe"}),
         ready=True),
+    "mikrotik": Vendor(
+        "mikrotik", "MikroTik", "RouterOS v7 (CRS3xx)", "CRS326, CRS328, CRS354, CRS310, CRS317 and CHR for labs",
+        # What the RouterOS builder writes today: one bridge with VLAN filtering. No stacking, routed ports or
+        # VLAN translation; EVPN, policies, QoS and the tools are not written.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port
