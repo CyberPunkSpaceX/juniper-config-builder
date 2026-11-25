@@ -1,7 +1,38 @@
 {% extends "auth/base.html" %}
 {% block title %}Users · Multi-Vendor Switch Config Builder{% endblock %}
+{% macro access_fields(prefix, a) %}
+  <div class="access">
+    <div><label for="{{ prefix }}-lvl">Access level</label>
+      <select id="{{ prefix }}-lvl" name="level">{% for k, label in levels.items() %}<option value="{{ k }}"{% if a.level == k %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    <fieldset class="scope">
+      <legend>Clients</legend>
+      <label><input type="radio" name="scope" value="all"{% if a.scope == 'all' %} checked{% endif %}> All clients, also ones added later</label>
+      <label><input type="radio" name="scope" value="some"{% if a.scope != 'all' %} checked{% endif %}> Only these clients:</label>
+      <div class="clientpick">
+        {% for c in clients %}<label><input type="checkbox" name="clients" value="{{ c['id'] }}"{% if c['id'] in a.clients %} checked{% endif %}> {{ c['name'] }}</label>{% else %}<span class="muted">No clients yet.</span>{% endfor %}
+      </div>
+    </fieldset>
+  </div>
+{% endmacro %}
 {% block content %}
+<style>
+  .access { display: grid; grid-template-columns: minmax(160px, 220px) 1fr; gap: 12px; align-items: start; margin-top: 10px; }
+  .access fieldset { border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; margin: 0; }
+  .access legend { font-weight: 600; padding: 0 4px; }
+  .access label { font-weight: 400; display: block; margin: 2px 0; }
+  .clientpick { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0 22px; }
+  .clientpick label { display: inline-block; }
+  .levels { margin: 0 0 6px; padding-left: 18px; }
+  details.edit summary { cursor: pointer; color: var(--accent, inherit); }
+  @media (max-width: 640px) { .access { grid-template-columns: 1fr; } }
+</style>
 <h1>Users</h1>
+<ul class="levels hint">
+  <li><b>Read-only</b>: opens projects, maps and config backups. Passwords, keys and SNMP communities are hidden.</li>
+  <li><b>Configurator</b>: builds configs, saves and deletes projects and maps, runs the converter, sees secrets.</li>
+  <li><b>Admin</b>: also manages a client's people, SSH and EVE-NG settings, approves Lab work and fetches configs over SSH.</li>
+  <li><b>Super Admin</b>: everything, in every client, plus users and clients. Must use two-factor sign-in.</li>
+</ul>
 
 <form class="panel" method="post" action="{{ url_for('auth.users_create') }}">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -10,31 +41,31 @@
     <div><label for="nu">Username</label><input id="nu" type="text" name="username" required autocomplete="off"></div>
     <div><label for="np">Password <span class="hint">(min {{ min_password }})</span></label>
       <input id="np" type="password" name="password" required autocomplete="new-password"></div>
-    <div><label for="nr">Role</label>
-      <select id="nr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
-    <div><button type="submit">Add user</button></div>
   </div>
+  {{ access_fields("new", {"level": "editor", "scope": "some", "clients": []}) }}
+  <div style="margin-top:10px"><button type="submit">Add user</button></div>
   <label style="margin-top:10px; font-weight:400"><input type="checkbox" name="must_change" value="1" checked>
     Ask them to choose a new password when they first sign in</label>
 </form>
 
 <section class="panel scroll">
   <table>
-    <tr><th>User</th><th>Role</th><th>Status</th><th>2FA</th><th>Last sign-in</th><th>Reset password</th><th></th></tr>
+    <tr><th>User</th><th>Access</th><th>Status</th><th>2FA</th><th>Last sign-in</th><th>Reset password</th><th></th></tr>
     {% for u in users %}
     {% set me = u['id'] == current_user['id'] %}
     <tr>
       <td><b>{{ u['username'] }}</b>{% if me %} <span class="muted">(you)</span>{% endif %}
         <div class="muted" style="font-size:12px">added {{ u['created_at'] }}</div></td>
-      <td>
-        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+      <td style="min-width:260px">
+        {{ access[u['id']].text }}
+        <details class="edit"><summary>Change</summary>
+        <form method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="role">
-          <select name="role" onchange="this.form.submit()" aria-label="Role for {{ u['username'] }}">
-            {% for r in roles %}<option value="{{ r }}" {% if r == u['role'] %}selected{% endif %}>{{ r }}</option>{% endfor %}
-          </select>
-          <noscript><button class="small secondary">Save</button></noscript>
+          <input type="hidden" name="action" value="access">
+          {{ access_fields("u" ~ u['id'], access[u['id']]) }}
+          <button class="small" style="margin-top:6px">Save access</button>
         </form>
+        </details>
       </td>
       <td>
         <span class="badge {{ 'on' if u['active'] else 'off' }}">{{ 'active' if u['active'] else 'disabled' }}</span>

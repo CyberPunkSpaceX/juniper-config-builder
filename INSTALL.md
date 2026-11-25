@@ -6,10 +6,10 @@
 2. Deploy:
 
    ```
-   EXB_NODE=CP-DOCKER-SWARM-01 docker stack deploy -c deploy/exbuilder-stack.yml --with-registry-auth exbuilder
+   EXB_NODE=CP-DOCKER-SWARM-01 docker stack deploy -c deploy/switchbuilder-stack.yml --with-registry-auth switchbuilder
    ```
 
-   In Portainer: Stacks > Add stack > Web editor, paste `deploy/exbuilder-stack.yml`,
+   In Portainer: Stacks > Add stack > Web editor, paste `deploy/switchbuilder-stack.yml`,
    and add the environment variable `EXB_NODE`.
 3. Open `http://<any-node>:8088`, sign in as `admin` / `admin` and choose a new password.
 4. Behind an HTTPS reverse proxy, set `EXB_SECURE_COOKIES=true` and redeploy.
@@ -36,4 +36,4 @@ needs `--with-registry-auth`.
 ## Backups
 
 Everything worth keeping is `users.db` in the data volume. Back it up with
-`sqlite3 users.db ".backup '/backup/exbuilder-users.db'"` (safe while running).
+`sqlite3 users.db ".backup '/backup/switchbuilder-users.db'"` (safe while running).

@@ -391,8 +391,11 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     Every step is listed with who did it and when.</li>
   <li>Your unsaved work is kept in the browser per client, space and vendor, so it never follows you into another
     client, and Arista work doesn't overwrite Juniper work.</li>
-  <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>viewer</b>
-    (look), <b>editor</b> (save and delete) or <b>admin</b> (also manage people, SSH and EVE-NG settings).</li>
+  <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>Read-only</b>
+    (look, with passwords, keys and SNMP communities hidden), <b>Configurator</b> (build, save and delete) or
+    <b>Admin</b> (also manage people, SSH and EVE-NG settings, approve Lab work). A <b>Super Admin</b> manages every
+    client and the users. A Super Admin can give someone a level in <b>all clients</b>, which includes clients
+    added later, or in chosen clients only.</li>
   <li>A client admin can <b>Download a backup</b> of a client (projects, maps, config backups) on the client's page.</li>
   <li><b>Nightly backups</b>: on the client's page a client admin lists the switches (address, vendor, port), the time,
     and who hears about changes (email, Teams, Slack or Discord). Each night every switch is read with the client's SSH

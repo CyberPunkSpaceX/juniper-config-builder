@@ -140,7 +140,7 @@ def test_client_backup_and_restore(app, admin, tmp_path):
     plain = admin.get("/clients/1/export")
     assert plain.headers["Content-Disposition"].startswith("attachment; filename=Default-backup-")
     data = json.loads(plain.data)
-    assert data["format"] == "exbuilder-client-backup" and "secrets" not in data
+    assert data["format"] == "switchbuilder-client-backup" and "secrets" not in data
     assert data["projects"][0]["data"]["system"]["hostname"] == "f2" and data["maps"][0]["name"] == "HQ"
     assert data["client"]["ssh_networks"] == "10.40.10.0/24" and len(data["config_backups"]) == 1
     assert "PRIVATE" not in plain.get_data(as_text=True)

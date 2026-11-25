@@ -159,9 +159,9 @@ The client page shows the commands for a read-only Junos account with the
 client's public key, like this:
 
 ```
-set system login class exbuilder-ro permissions view-configuration
-set system login class exbuilder-ro permissions view
-set system login user exbuilder-ro class exbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
+set system login class switchbuilder-ro permissions view-configuration
+set system login class switchbuilder-ro permissions view
+set system login user switchbuilder-ro class switchbuilder-ro authentication ssh-ed25519 "ssh-ed25519 AAAA..."
 ```
 
 A server-wide key (`EXB_SSH_KEY_FILE` plus `EXB_SSH_KEY_USER`, from a Docker
@@ -313,7 +313,7 @@ every switch that could not be read. **Back up now** and **Send a test alert**
 are on the same page, with the last runs below. Webhook addresses are stored
 encrypted with the master key. UniFi has no SSH config to read.
 
-The jobs service is a second service in the stack (`exbuilder jobs`, same
+The jobs service is a second service in the stack (`switchbuilder jobs`, same
 image and data volume, same node). Email needs `EXB_SMTP_HOST`, `EXB_SMTP_PORT`,
 `EXB_SMTP_TLS` (`starttls`, `ssl` or `none`), `EXB_SMTP_USER`,
 `EXB_SMTP_PASSWORD_FILE` and `EXB_SMTP_FROM`; `EXB_PUBLIC_URL` adds a link to
@@ -344,16 +344,24 @@ audit log.
 
 Every saved project and network map belongs to a **client**. Pick the client at
 the top of the page; **Save to (client)** and the **Projects** tab use it.
-People only see the clients they are added to:
+People only see the clients they are added to. Each person has one of four
+access levels:
 
-| Role | Can |
+| Level | Can |
 | --- | --- |
-| viewer | open the client's projects and maps |
-| editor | also save and delete them |
-| admin | also add people, set the SSH networks and key, and fetch configs over SSH |
+| Read-only | open the client's projects, maps and config backups; passwords, password hashes, keys and SNMP communities are hidden |
+| Configurator | also build, save and delete them, run the converter and ask for approval; sees the secrets |
+| Admin | also add people, set the SSH and EVE-NG settings, approve Lab work and fetch configs over SSH |
+| Super Admin | everything in every client, plus the Users page and creating, renaming and deleting clients; must use 2FA |
 
-Server admins (the `admin` role on the Users page) see every client and create,
-rename and delete clients under **Clients**. Deleting a client asks you to type
+When a Super Admin adds a user on the **Users** page, they pick the level and
+either **All clients, also ones added later** or **Only these clients**. A
+client's Admin can still add a person to that client with another level on the
+client's page; where both apply, the higher level wins. Internally the client
+roles are still called `viewer`, `editor` and `admin`, and Super Admin is the
+`admin` user role, so existing users keep exactly the access they had.
+
+Super Admins create, rename and delete clients under **Clients**. Deleting a client asks you to type
 its name, and removes its projects, maps, config backups and settings. On the first start after
 upgrading, everything saved before moves into a client called **Default**
 (rename it to suit), and people who had saved projects become its editors.
@@ -456,16 +464,16 @@ and sign-in lockout work the same as in firewall-converter.
 
 ```
 pip install '.[web]'
-exbuilder models                                 # list switch models and ports
-exbuilder build project.json                     # set commands to stdout
-exbuilder build project.json -f hierarchy -o sw1.conf
+switchbuilder models                                 # list switch models and ports
+switchbuilder build project.json                     # set commands to stdout
+switchbuilder build project.json -f hierarchy -o sw1.conf
 ```
 
 Scripts can call the server with a user name and an API token (from "My account"):
 
 ```
 curl -u alice:exb_TOKEN -H 'Content-Type: application/json' \
-     --data @project.json 'https://exbuilder.example.com/api/generate?format=set'
+     --data @project.json 'https://switchbuilder.example.com/api/generate?format=set'
 ```
 
 `format=json` (the default) returns the set and hierarchical text, errors,
@@ -476,8 +484,10 @@ warnings and generated password hashes.
 ```
 pip install -e '.[dev,web]'
 pytest -q
-exbuilder serve          # http://127.0.0.1:8080, data in $EXB_DATA_DIR
+switchbuilder serve          # http://127.0.0.1:8080, data in $EXB_DATA_DIR
 ```
+
+The Python package inside is still called `exbuilder` (an older name); the app, the image, the CLI (`switchbuilder`; `exbuilder` still works) and the deploy files use the new name.
 
 Layout: `src/exbuilder/models.py` (switch models and port layouts),
 `generator.py` (project JSON to config, with all checks), `junos.py` (config

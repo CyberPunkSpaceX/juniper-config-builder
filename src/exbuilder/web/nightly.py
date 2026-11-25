@@ -28,7 +28,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 
 from .. import compare as cmp
-from .. import notify, sshfetch
+from .. import notify, redact, sshfetch
 from . import auth, backups, clients
 
 bp = Blueprint("nightly", __name__, template_folder="templates")
@@ -217,7 +217,8 @@ def _run(conn: sqlite3.Connection, cid: int, trigger: str) -> dict:
                 before = backups.previous(conn, row)
                 d = {"host": r["host"], "name": saved["host"], "id": saved["id"], "status": "changed" if before else "new"}
                 if before is not None:
-                    res = cmp.compare(before["text"], row["text"], ignore_secrets=True)
+                    # Alerts leave the server (email, chat): never put a secret in them.
+                    res = cmp.compare(redact.config(before["text"]), redact.config(row["text"]), ignore_secrets=True)
                     d["previous"] = before["id"]
                     d["summary"] = (f"{res.get('only_a', 0)} lines removed, {res.get('only_b', 0)} added"
                                     if not res.get("identical") else "only passwords or keys changed")

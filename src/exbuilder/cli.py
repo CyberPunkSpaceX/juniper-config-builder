@@ -1,8 +1,8 @@
 """Command line: build a config from a saved project file.
 
-    exbuilder build project.json              # set commands to stdout
-    exbuilder build project.json -f hierarchy -o switch.conf
-    exbuilder models                          # list the known models
+    switchbuilder build project.json              # set commands to stdout
+    switchbuilder build project.json -f hierarchy -o switch.conf
+    switchbuilder models                          # list the known models
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from .generator import build
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="exbuilder", description="Juniper EX config builder")
+    ap = argparse.ArgumentParser(prog="switchbuilder", description="Multi-Vendor Switch Config Builder")
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     b = sub.add_parser("build", help="build a config from a project JSON file")
