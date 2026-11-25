@@ -1,0 +1,8 @@
+LLDP Port 49 detected 1 neighbor
+  Neighbor: 00:11:22:33:44:55/Ethernet5, age 21 seconds
+    - Chassis ID type: MAC Address (4); Chassis ID: 00:11:22:33:44:55
+    - Port ID type: Interface Name (5); Port ID: "Ethernet5"
+    - Time To Live: 120 seconds
+    - System Name: "core-sw1"
+    - Management Address Subtype: IPv4 (1)
+      Management Address        : 10.9.0.1

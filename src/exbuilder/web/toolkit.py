@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, render_template, request
 
-from .. import __version__, bulk, prepush, vendors
+from .. import __version__, bulk, neighbors, prepush, sshfetch, vendors
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
@@ -26,6 +26,9 @@ TOOLS = [
     ("toolkit.checks_page", "&#10003;", "Pre-push checks",
      "Check several projects together before they go live: duplicate IPs and VLANs, links whose ends disagree, "
      "VLANs no uplink carries, MTU and spanning-tree mismatches."),
+    ("toolkit.map_page", "&#9741;", "Auto network map",
+     "Draw the network from LLDP and CDP neighbours, for every brand. Paste the output, or let it log in over SSH "
+     "and follow the neighbours from switch to switch."),
     ("netbox.page", "&#8645;", "NetBox sync",
      "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
 ]
@@ -173,6 +176,76 @@ def checks_run():
         abort(400, "Pick the projects to check.")
     links = [x for x in body.get("links") or [] if isinstance(x, dict)][:200]
     return prepush.check(projects, links)
+
+
+# ------------------------------------------------------------ auto network map
+@bp.get("/map")
+def map_page():
+    c = clients.current()
+    ssh = False
+    if c and clients.RANK[c["role"]] >= clients.RANK["admin"]:
+        nets, _ = sshfetch.check_networks(clients.row(c["id"])["ssh_networks"])
+        ssh = bool(nets) and not sshfetch.disabled()
+    return render_template("tools/map.html", version=__version__, client=c, ssh=ssh, commands=neighbors.COMMANDS,
+                           max_hosts=sshfetch.MAX_HOSTS)
+
+
+@bp.post("/map/build")
+def map_build():
+    body = _body()
+    items = [x for x in body.get("switches") or [] if isinstance(x, dict)][:neighbors.MAX_SWITCHES]
+    if not items:
+        abort(400, "Add the neighbour output of at least one switch.")
+    if sum(len(str(x.get("text") or "")) for x in items) > 20_000_000:
+        abort(400, "That output is too large together (20 MB at most).")
+    return neighbors.build_map(items)
+
+
+@bp.post("/map/discover")
+def map_discover():
+    """Log in to the seed switches over SSH and follow their neighbours (client admins, like SSH fetch)."""
+    body = _body()
+    c = clients.need("admin")
+    row = clients.row(c["id"])
+    nets, _ = sshfetch.check_networks(row["ssh_networks"])
+    if sshfetch.disabled() or not nets:
+        return {"error": f"SSH is off for {c['name']}. A client admin adds the switch networks on the client page."}, 403
+    seeds = body.get("seeds") or []
+    if isinstance(seeds, str):
+        seeds = seeds.replace(",", "\n").split("\n")
+    seeds = [str(h).strip() for h in seeds if str(h).strip()][:sshfetch.MAX_HOSTS]
+    if not seeds:
+        return {"error": "Enter at least one switch address to start from."}, 400
+    username = str(body.get("username") or "").strip()
+    password = str(body.get("password") or "")
+    pkey = None
+    if body.get("use_key"):
+        pkey = clients.ssh_key_for(row)
+        if pkey is None:
+            return {"error": "This client has no SSH key yet. A client admin makes one on the client page."}, 400
+        username = username or row["ssh_user"] or sshfetch.key_user()
+        password = ""
+    elif not (username and password):
+        return {"error": "Enter the switch username and password, or sign in with the SSH key."}, 400
+    try:
+        port = int(body.get("port") or 22)
+        limit = int(body.get("limit") or sshfetch.MAX_HOSTS)
+        if not 1 <= port <= 65535:
+            raise ValueError
+    except (TypeError, ValueError):
+        return {"error": "SSH port must be 1-65535."}, 400
+    me = auth.current_user()["username"]
+    try:
+        sshfetch.check_rate(me)
+    except sshfetch.FetchError as exc:
+        return {"error": str(exc)}, 429
+    out = neighbors.discover(seeds, username, password, clients.client_folder(c["id"]), nets, port, pkey,
+                             limit=limit, follow=bool(body.get("follow", True)))
+    del password
+    for r in out["fetched"]:
+        sshfetch.log.warning("audit: neighbour discovery by %r for client %r: %s as %r -> %s", me, c["name"], r["host"],
+                             username, "ok" if r["ok"] else r["error"] or "failed")
+    return out
 
 
 def init_app(app) -> None:

@@ -1,0 +1,18 @@
+Chassis id: 0011.2233.4455
+Port id: Ethernet1/49
+Local Port id: Eth1/1
+Port Description: uplink
+System Name: leaf1
+System Description: Cisco Nexus Operating System (NX-OS) Software 10.3(4a)
+Time remaining: 107 seconds
+System Capabilities: B, R
+Enabled Capabilities: B, R
+Management Address: 10.9.1.21
+Vlan ID: not advertised
+
+Chassis id: 0011.2233.4456
+Port id: Ethernet1/49
+Local Port id: Eth1/2
+Port Description: uplink
+System Name: leaf2
+Management Address: 10.9.1.22

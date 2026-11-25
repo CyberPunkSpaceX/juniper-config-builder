@@ -1,0 +1,17 @@
+-------------------------
+Device ID: acc-sw2.example.lan
+Entry address(es): 
+  IP address: 10.9.0.12
+Platform: cisco WS-C2960X-48FPD-L,  Capabilities: Switch IGMP 
+Interface: GigabitEthernet1/0/50,  Port ID (outgoing port): GigabitEthernet1/0/49
+Holdtime : 155 sec
+
+Version :
+Cisco IOS Software, C2960X Software (C2960X-UNIVERSALK9-M), Version 15.2(7)E3
+
+-------------------------
+Device ID: core-sw1
+Entry address(es): 
+  IP address: 10.9.0.1
+Platform: Arista,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/49,  Port ID (outgoing port): Ethernet1

@@ -1,0 +1,204 @@
+{% extends "auth/base.html" %}
+{% block title %}Auto network map · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.sw { border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+.sw textarea { min-height: 110px; }
+.sw .grid3 { margin-bottom: 6px; }
+#svgwrap { overflow: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+#svgwrap svg { display: block; }
+.lvl { display: inline-block; min-width: 58px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.lvl.warn { color: var(--warn); } .lvl.info { color: var(--muted); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; }
+.tabs button[aria-pressed=true] { background: var(--accent); color: var(--accent-text); }
+.tabs button[aria-pressed=false] { background: transparent; color: var(--accent); }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Auto network map</h1>
+<p class="muted">Draws the switches and the cables between them from LLDP and CDP neighbours, for every brand. Both
+ends of a cable are matched, and devices that aren't switches you read (phones, access points, printers) show as
+neighbours.</p>
+
+<div class="tabs" role="group">
+  <button type="button" class="small" id="tabpaste" aria-pressed="true">Paste output</button>
+  <button type="button" class="small" id="tabssh" aria-pressed="false">Fetch over SSH</button>
+</div>
+
+<div class="panel" id="paste">
+  <p class="muted">For each switch, paste the output of one of these commands (or open text files, one per switch):
+    {% for c in commands %}<code>{{ c }}</code>{{ ", " if not loop.last }}{% endfor %}.</p>
+  <div id="sws"></div>
+  <div class="actions">
+    <button type="button" class="secondary small" id="addsw">Add a switch</button>
+    <input type="file" id="files" multiple accept=".txt,.log,text/plain">
+  </div>
+  <div class="actions"><button type="button" id="draw">Draw the map</button><span class="status" id="status"></span></div>
+</div>
+
+<div class="panel" id="ssh" hidden>
+  {% if ssh %}
+  <p class="muted">Logs in to the switches you list, reads their neighbours with read-only commands, then follows the
+    neighbours' management addresses inside {{ client.name }}'s allowed networks. At most {{ max_hosts }} switches.</p>
+  <div class="grid3">
+    <div class="field"><label for="seeds">Start from <span class="hint">(addresses, one per line)</span></label><textarea id="seeds" style="min-height:70px" placeholder="10.9.0.1"></textarea></div>
+    <div class="field"><label for="user">Username</label><input type="text" id="user" autocomplete="off">
+      <label for="pass" style="margin-top:8px">Password</label><input type="password" id="pass" autocomplete="off"></div>
+    <div class="field">
+      <label class="chk"><input type="checkbox" id="usekey"> Sign in with the client's SSH key</label>
+      <label class="chk"><input type="checkbox" id="follow" checked> Follow neighbours</label>
+      <label for="limit" style="margin-top:8px">At most</label><input type="text" id="limit" value="{{ max_hosts }}">
+    </div>
+  </div>
+  <div class="actions"><button type="button" id="discover">Discover</button><span class="status" id="sshstatus"></span></div>
+  <ul id="fetched"></ul>
+  {% else %}
+  <p class="muted">Fetching over SSH needs the client admin role and the client's switch networks, set on the client page.
+    You can still paste output on the other tab.</p>
+  {% endif %}
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <h2 id="summary"></h2>
+    <div id="svgwrap"></div>
+    <div class="actions">
+      <button type="button" class="small secondary" id="dlsvg">Download picture (SVG)</button>
+      <button type="button" class="small secondary" id="dlcsv">Download links (CSV)</button>
+    </div>
+  </div>
+  <div class="panel">
+    <h2>Links</h2>
+    <div class="scroll"><table><thead><tr><th>Switch</th><th>Port</th><th></th><th>Neighbour</th><th>Port</th><th>Seen</th></tr></thead><tbody id="links"></tbody></table></div>
+    <h3>Notes</h3>
+    <table><tbody id="checks"></tbody></table>
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function st(id, text, kind) { const e = $(id); e.textContent = text; e.className = "status " + (kind || ""); }
+async function call(url, body) {
+  const resp = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  let d; try { d = await resp.json(); } catch (e) { d = {error: resp.statusText || "Request failed"}; }
+  if (!resp.ok) throw new Error(d.error || "Request failed");
+  return d;
+}
+let last = null;
+
+function tab(which) {
+  $("tabpaste").setAttribute("aria-pressed", which === "paste"); $("tabssh").setAttribute("aria-pressed", which === "ssh");
+  $("paste").hidden = which !== "paste"; $("ssh").hidden = which !== "ssh";
+}
+$("tabpaste").onclick = () => tab("paste"); $("tabssh").onclick = () => tab("ssh");
+
+function addSwitch(name = "", text = "") {
+  const div = document.createElement("div");
+  div.className = "sw";
+  div.innerHTML = `<div class="grid3"><div class="field"><label>Switch name <span class="hint">(optional)</span></label><input type="text" class="n"></div>` +
+    `<div class="field"><label>Management IP <span class="hint">(optional)</span></label><input type="text" class="a"></div>` +
+    `<div class="field"><button type="button" class="small danger rm">Remove</button></div></div>` +
+    `<textarea class="t" spellcheck="false" placeholder="show lldp neighbors detail"></textarea>`;
+  div.querySelector(".n").value = name; div.querySelector(".t").value = text;
+  div.querySelector(".rm").onclick = () => div.remove();
+  $("sws").append(div);
+}
+$("addsw").onclick = () => addSwitch();
+$("files").onchange = async e => {
+  for (const f of e.target.files) addSwitch(f.name.replace(/\.[^.]+$/, ""), await f.text());
+  [...$("sws").children].forEach(d => { if (!d.querySelector(".t").value.trim()) d.remove(); });
+};
+addSwitch(); addSwitch();
+
+$("draw").onclick = async () => {
+  const switches = [...$("sws").children].map(d => ({name: d.querySelector(".n").value, address: d.querySelector(".a").value,
+                                                     text: d.querySelector(".t").value})).filter(s => s.text.trim());
+  if (!switches.length) { st("status", "Paste the neighbour output of at least one switch.", "bad"); return; }
+  st("status", "Drawing…");
+  try { show(await call("/tools/map/build", {switches})); st("status", ""); } catch (e) { st("status", e.message, "bad"); }
+};
+
+if ($("discover")) $("discover").onclick = async () => {
+  st("sshstatus", "Logging in and reading neighbours… this can take a minute.");
+  $("fetched").innerHTML = "";
+  try {
+    const d = await call("/tools/map/discover", {seeds: $("seeds").value, username: $("user").value, password: $("pass").value,
+      use_key: $("usekey").checked, follow: $("follow").checked, limit: $("limit").value});
+    $("pass").value = "";
+    $("fetched").innerHTML = d.fetched.map(f => `<li class="${f.ok ? "ok-text" : "bad-text"}">${esc(f.host)}: ${f.ok ? "read" : esc(f.error)}</li>`).join("");
+    st("sshstatus", `${d.fetched.filter(f => f.ok).length} of ${d.fetched.length} switches read.`, "ok");
+    show(d);
+  } catch (e) { st("sshstatus", e.message, "bad"); }
+};
+
+function layout(r) {
+  // Levels by distance from the best-connected switch; neighbours that were not read go one level below.
+  const adj = {}; r.nodes.forEach(n => adj[n.id] = new Set());
+  r.links.forEach(l => { adj[l.a].add(l.b); adj[l.b].add(l.a); });
+  const level = {}, order = [];
+  for (const start of r.nodes.map(n => n.id)) {
+    if (start in level) continue;
+    level[start] = 0; const q = [start];
+    while (q.length) { const x = q.shift(); order.push(x); for (const y of adj[x]) if (!(y in level)) { level[y] = level[x] + 1; q.push(y); } }
+  }
+  const rows = {}; order.forEach(id => (rows[level[id]] = rows[level[id]] || []).push(id));
+  const W = 170, H = 120, width = Math.max(...Object.values(rows).map(x => x.length)) * W + 40;
+  const pos = {};
+  Object.entries(rows).forEach(([lv, ids]) => ids.forEach((id, i) => {
+    pos[id] = {x: (width - ids.length * W) / 2 + i * W + W / 2, y: 50 + lv * H};
+  }));
+  return {pos, width, height: 60 + Object.keys(rows).length * H};
+}
+
+function svg(r) {
+  const {pos, width, height} = layout(r);
+  const byId = Object.fromEntries(r.nodes.map(n => [n.id, n]));
+  let s = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" font-family="system-ui, sans-serif" font-size="11">`;
+  s += `<rect width="100%" height="100%" fill="#ffffff"/>`;
+  for (const l of r.links) {
+    const a = pos[l.a], b = pos[l.b];
+    const both = l.seen === "both ends";
+    s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${both ? "#1f7a4d" : "#9aa5b4"}" stroke-width="2"${both ? "" : ' stroke-dasharray="5 4"'}/>`;
+    const t = (p, q, f) => ({x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f});
+    const pa = t(a, b, 0.4), pb = t(b, a, 0.32);
+    s += `<text x="${pa.x}" y="${pa.y}" text-anchor="middle" fill="#2f6fdf" paint-order="stroke" stroke="#fff" stroke-width="3">${esc(l.a_if)}</text>`;
+    if (l.b_if) s += `<text x="${pb.x}" y="${pb.y}" text-anchor="middle" fill="#2f6fdf" paint-order="stroke" stroke="#fff" stroke-width="3">${esc(l.b_if)}</text>`;
+  }
+  for (const n of r.nodes) {
+    const p = pos[n.id];
+    s += `<g><rect x="${p.x - 70}" y="${p.y - 20}" width="140" height="40" rx="7" fill="${n.read ? "#e8f0fe" : "#f6f7f9"}" stroke="${n.read ? "#2f6fdf" : "#9aa5b4"}"${n.read ? "" : ' stroke-dasharray="4 3"'}/>`;
+    s += `<text x="${p.x}" y="${p.y - 3}" text-anchor="middle" font-weight="700" fill="#1d2430">${esc(n.name.slice(0, 22))}</text>`;
+    s += `<text x="${p.x}" y="${p.y + 12}" text-anchor="middle" fill="#5b6676">${esc(n.mgmt || (n.platform || "").slice(0, 24))}</text></g>`;
+  }
+  return s + "</svg>";
+}
+
+function show(r) {
+  last = r;
+  const read = r.nodes.filter(n => n.read).length;
+  $("summary").textContent = `${read} switch(es) read, ${r.nodes.length - read} neighbour(s), ${r.links.length} link(s)`;
+  $("svgwrap").innerHTML = svg(r);
+  const name = Object.fromEntries(r.nodes.map(n => [n.id, n.name]));
+  $("links").innerHTML = r.links.map(l => `<tr><td>${esc(name[l.a])}</td><td>${esc(l.a_if)}</td><td>↔</td><td>${esc(name[l.b])}</td><td>${esc(l.b_if || "?")}</td><td>${esc(l.seen)}</td></tr>`).join("");
+  $("checks").innerHTML = r.checks.length ? r.checks.map(c => `<tr><td><span class="lvl ${c.level}">${c.level === "warn" ? "warning" : c.level}</span></td><td>${esc(c.message)}</td></tr>`).join("") : '<tr><td class="muted">Nothing to note.</td></tr>';
+  $("result").hidden = false;
+}
+
+function download(text, name, type) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$("dlsvg").onclick = () => download(svg(last), "network-map.svg", "image/svg+xml");
+$("dlcsv").onclick = () => {
+  const name = Object.fromEntries(last.nodes.map(n => [n.id, n.name]));
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  download(["switch,port,neighbour,neighbour_port,seen"].concat(last.links.map(l => [name[l.a], l.a_if, name[l.b], l.b_if, l.seen].map(q).join(","))).join("\n") + "\n",
+           "network-links.csv", "text/csv");
+};
+{% endraw %}
+</script>
+{% endblock %}
