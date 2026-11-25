@@ -1,0 +1,129 @@
+{% extends "auth/base.html" %}
+{% block title %}Pre-push checks · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.plist { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 4px 14px; margin: 6px 0 4px; }
+.lvl { display: inline-block; min-width: 58px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
+.lvl.error { color: var(--bad); } .lvl.warn { color: var(--warn); } .lvl.info { color: var(--muted); }
+.verdict { font-size: 18px; font-weight: 700; }
+.linkrow select { width: auto; max-width: 220px; }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Pre-push checks</h1>
+<p class="muted">Each builder checks its own switch. These checks look at several projects together, the way they
+will be cabled, and catch what only shows up across switches. Run them before you load configs on real switches.</p>
+
+<div class="panel">
+  <h2>1. Projects <span class="hint">({{ client.name if client else 'no client' }}, {{ client.space if client else '' }})</span></h2>
+  <div class="actions" style="margin-top:0">
+    <button type="button" class="small secondary" id="all">Select all</button>
+    <button type="button" class="small secondary" id="none">Clear</button>
+  </div>
+  <div class="plist" id="plist"><span class="muted">Loading…</span></div>
+  <p class="muted">Links are found from port-group and LAG descriptions that name another switch's host name, such as
+    <code>To core-sw1</code>. Add the others by hand after the first check.</p>
+  <div class="actions">
+    <button type="button" id="go">Run checks</button>
+    <span id="status" class="status" role="status"></span>
+  </div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <p class="verdict" id="verdict"></p>
+    <div class="scroll"><table><tbody id="checks"></tbody></table></div>
+  </div>
+  <div class="panel">
+    <h2>Links</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Switch</th><th>Port group / LAG</th><th></th><th>Switch</th><th>Port group / LAG</th><th>Found from</th><th>Result</th><th></th></tr></thead>
+      <tbody id="links"></tbody>
+    </table></div>
+    <h3>Add a link by hand</h3>
+    <div class="actions linkrow">
+      <select id="la"></select><select id="lar"></select> ↔ <select id="lb"></select><select id="lbr"></select>
+      <button type="button" class="small" id="addlink">Add and check again</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+let manual = [], last = null;
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function setStatus(text, kind) { $("status").textContent = text; $("status").className = "status " + (kind || ""); }
+
+async function loadProjects() {
+  const resp = await fetch("/projects");
+  const data = resp.ok ? await resp.json() : {projects: []};
+  $("plist").innerHTML = data.projects.length ? "" : '<span class="muted">No saved projects in this client and space yet.</span>';
+  for (const p of data.projects) {
+    const l = document.createElement("label");
+    l.className = "chk";
+    l.innerHTML = `<input type="checkbox" value="${p.id}"> ${esc(p.name)}`;
+    $("plist").append(l);
+  }
+}
+const boxes = () => [...$("plist").querySelectorAll("input[type=checkbox]")];
+$("all").onclick = () => boxes().forEach(b => b.checked = true);
+$("none").onclick = () => boxes().forEach(b => b.checked = false);
+
+async function run() {
+  const ids = boxes().filter(b => b.checked).map(b => +b.value);
+  if (!ids.length) { setStatus("Tick the projects to check.", "bad"); return; }
+  setStatus("Checking…");
+  const resp = await fetch("/tools/checks/run", {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+                                                 body: JSON.stringify({project_ids: ids, links: manual})});
+  let data;
+  try { data = await resp.json(); } catch (e) { data = {error: resp.statusText}; }
+  if (!resp.ok) { setStatus(data.error || "Check failed", "bad"); return; }
+  setStatus("");
+  last = data;
+  show(data);
+}
+$("go").onclick = run;
+
+function show(r) {
+  const c = r.counts;
+  $("verdict").innerHTML = r.ready
+    ? `<span class="ok-text">Ready to push</span> <span class="muted">· ${r.switches.length} switches, ${c.warn} warning(s)</span>`
+    : `<span class="bad-text">${c.error} problem(s) to fix before pushing</span> <span class="muted">· ${c.warn} warning(s)</span>`;
+  $("checks").innerHTML = r.checks.length ? r.checks.map(x =>
+    `<tr><td><span class="lvl ${x.level}">${x.level === "warn" ? "warning" : x.level}</span></td><td>${esc(x.message)}</td></tr>`).join("")
+    : '<tr><td class="muted">Nothing found.</td></tr>';
+  $("links").innerHTML = r.links.length ? "" : '<tr><td colspan="8" class="muted">No links found yet.</td></tr>';
+  r.links.forEach((l, i) => {
+    const worst = l.issues.find(x => x.level === "error") ? "bad-text" : l.issues.find(x => x.level === "warn") ? "warn-text" : "ok-text";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${esc(l.a)}</td><td>${esc(l.a_row || "?")}</td><td>↔</td><td>${esc(l.b)}</td><td>${esc(l.b_row || "?")}</td>` +
+      `<td>${esc(l.found)}</td><td class="${worst}">${l.issues.length ? l.issues.length + " issue(s)" : "Both ends agree"}</td>` +
+      `<td>${l.found === "added by hand" ? `<button class="small danger" type="button" data-i="${i}">Remove</button>` : ""}</td>`;
+    $("links").append(tr);
+  });
+  const sel = (id, opts) => { const s = $(id); const v = s.value; s.innerHTML = ""; opts.forEach(o => s.append(new Option(o, o))); if (opts.includes(v)) s.value = v; };
+  sel("la", r.switches.map(s => s.host)); sel("lb", r.switches.map(s => s.host));
+  if ($("la").value === $("lb").value && r.switches.length > 1) $("lb").value = r.switches[1].host;
+  const rows = id => (r.switches.find(s => s.host === $(id).value) || {rows: []}).rows;
+  const fill = () => { sel("lar", rows("la")); sel("lbr", rows("lb")); };
+  $("la").onchange = fill; $("lb").onchange = fill; fill();
+  $("result").hidden = false;
+}
+
+$("links").addEventListener("click", e => {
+  const b = e.target.closest("button[data-i]");
+  if (!b) return;
+  const l = last.links[+b.dataset.i];
+  manual = manual.filter(m => !(m.a === l.a && m.a_row === l.a_row && m.b === l.b && m.b_row === l.b_row));
+  run();
+});
+$("addlink").onclick = () => {
+  manual.push({a: $("la").value, a_row: $("lar").value, b: $("lb").value, b_row: $("lbr").value});
+  run();
+};
+loadProjects();
+{% endraw %}
+</script>
+{% endblock %}
