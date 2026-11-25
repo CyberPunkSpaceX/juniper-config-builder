@@ -177,3 +177,87 @@ def test_converter_refuses_hidden_lines():
     out = convert.convert(text, "cisco", "arista")
     assert "\x0b" not in out["config"]
     assert any("control character" in e["message"] for e in out["errors"])
+# ------------------------------------------------------------------ stage 2: Arista, Nexus, Dell
+def _example_text(vendor):
+    from exbuilder.generator import build
+    p = json.loads((Path(convert.__file__).parent.parent / "vendor_examples" / f"{vendor}-office.json").read_text())
+    return p, build(p).to_dict()["set"]
+
+
+@pytest.mark.parametrize("vendor", ["arista", "nexus", "dell"])
+def test_reads_back_builder_output(vendor):
+    p, text = _example_text(vendor)
+    assert convert.detect(text) == vendor
+    r = convert.convert(text, "", "juniper")
+    q = r["project"]
+    assert r["source"] == vendor
+    assert q["system"]["hostname"] == p["system"]["hostname"]
+    assert q["system"]["mgmt_address"] == p["system"]["mgmt_address"]
+    assert {v["id"] for v in q["vlans"]} == {v["id"] for v in p["vlans"]}
+    assert len(q["lags"]) == len(p["lags"]) == 1
+    assert q["routing"]["static"][-1]["next_hop"] == p["routing"]["static"][-1]["next_hop"]
+    assert [c["name"] for c in q["snmp"]["communities"]] == [c["name"] for c in p["snmp"]["communities"]]
+    # Only the SNMP access list (and Nexus' extra VLAN mapping line) is left unread.
+    assert len(r["not_read"]) <= 2, r["not_read"]
+
+
+def test_arista_phone_trunk_becomes_access_with_voice():
+    _, text = _example_text("arista")
+    q = convert.convert(text, "arista", "cisco")["project"]
+    desk = next(r for r in q["ports"] if r["name"] == "DESK-PORTS")
+    assert desk["mode"] == "access" and desk["vlan"] == "USERS" and desk["voice"] == "VOICE"
+    assert desk["mac_limit"] == "3" and desk["ports"].startswith("GigabitEthernet1/0/1-")
+    assert next(r for r in q["ports"] if r["vlan_translate"])["vlan_translate"] == "1050>50"
+    assert q["system"]["mgmt_gateway"] == "192.168.100.1"
+
+
+def test_dell_vlan_names_and_trunk_native():
+    _, text = _example_text("dell")
+    q = convert.convert(text, "dell", "arista")["project"]
+    assert {v["id"]: v["name"] for v in q["vlans"]}["20"] == "USERS"
+    ap = next(r for r in q["ports"] if r["name"] == "WI-FI-ACCESS-POINTS")
+    assert ap["mode"] == "trunk" and ap["native"] == "MGMT"
+
+
+def test_real_eos_running_config():
+    text = """! device: leaf1 (DCS-7050SX3-48YC8, EOS-4.30.1F)
+!
+hostname leaf1
+!
+vlan 20
+   name Users
+!
+interface Ethernet1
+   description pc
+   switchport access vlan 20
+   spanning-tree portfast
+!
+interface Ethernet2
+   no switchport
+   ip address 10.0.0.1/31
+!
+interface Management1
+   ip address 192.168.1.5/24
+!
+interface Vlan20
+   ip address 10.20.0.1/24
+!
+ip route 0.0.0.0/0 10.0.0.0
+!
+end
+"""
+    r = convert.convert(text, "", "nexus")
+    assert r["source"] == "arista"
+    q = r["project"]
+    routed = next(p for p in q["ports"] if p["mode"] == "routed")
+    assert routed["address"] == "10.0.0.1/31"
+    assert next(p for p in q["ports"] if p["mode"] == "access")["vlan"] == "Users"
+
+
+@pytest.mark.parametrize("source", ["cisco", "arista", "nexus", "dell"])
+def test_every_source_to_every_target_runs(source):
+    _, text = _example_text(source)
+    for target, v in vendors.VENDORS.items():
+        r = convert.convert(text, source, target)
+        assert "error" not in r, (source, target, r)
+        assert r["config"] or r["errors"]
