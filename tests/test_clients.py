@@ -158,6 +158,11 @@ def test_start_flow_space_and_client_pick(app, admin):
     nav = admin.get("/help").get_data(as_text=True)
     assert 'class="seg on seg-lab"' in nav and 'value="production"' in nav
     assert admin.post("/space", data={"csrf_token": csrf(admin, "/help"), "space": "prod!"}).status_code == 400
+    # Home (top bar and logo) goes back to the first page, and then to the client picker again.
+    assert nav.count('href="/start"') == 2 and ">Home</a>" in nav
+    assert "Production" in admin.get("/start").get_data(as_text=True)
+    pick_space(admin, "production")
+    assert admin.get("/").location.endswith("/clients/pick")
 
 
 def test_lab_and_production_keep_their_own_projects(app, admin):

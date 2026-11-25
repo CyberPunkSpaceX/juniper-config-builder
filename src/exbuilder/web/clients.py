@@ -274,7 +274,8 @@ def select():
 
 @bp.get("/start")
 def start_page():
-    """After sign-in: Production or Lab."""
+    """After sign-in (and Home in the top bar): Production or Lab, then the client again."""
+    session.pop("client_chosen", None)
     return render_template("start.html", spaces=SPACES, space=session.get("space"))
 
 

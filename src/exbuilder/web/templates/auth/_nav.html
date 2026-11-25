@@ -1,7 +1,8 @@
 {% include "auth/_style.html" %}
 {% if current_user %}
 <nav class="fw-nav">
-  <a class="brand" href="{{ url_for('index') }}"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
+  <a class="brand" href="{{ url_for('clients.start_page') }}" title="Home: pick Production, Lab or the converter, then the client"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
+  <a href="{{ url_for('clients.start_page') }}"{% if request.endpoint == 'clients.start_page' %} aria-current="page"{% endif %}>Home</a>
   <a href="{{ url_for('index') }}">Vendors</a>
   <a href="{{ url_for('converter.page') }}">Converter</a>
   <a href="{{ url_for('help_page') }}">Help</a>
