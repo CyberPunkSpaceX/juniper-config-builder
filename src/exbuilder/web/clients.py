@@ -40,6 +40,9 @@ bp = Blueprint("clients", __name__, template_folder="templates")
 log = logging.getLogger("exbuilder.clients")
 
 ROLES = ("viewer", "editor", "admin")
+# Every client has two spaces with their own projects, maps and config backups.
+# Lab also has the EVE-NG lab tools; Production never talks to EVE-NG.
+SPACES = {"production": "Production", "lab": "Lab"}
 RANK = {r: i for i, r in enumerate(ROLES)}
 NAME_RE = re.compile(r"^[^<>\"'`\\]{1,80}$")
 FIRST_CLIENT = "Default"
@@ -64,20 +67,22 @@ CREATE TABLE IF NOT EXISTS client_members (
 CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
+    space TEXT NOT NULL DEFAULT 'production',
     name TEXT NOT NULL,
     data TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     updated_by TEXT NOT NULL DEFAULT '',
-    UNIQUE (client_id, name)
+    UNIQUE (client_id, space, name)
 );
 CREATE TABLE IF NOT EXISTS maps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
+    space TEXT NOT NULL DEFAULT 'production',
     name TEXT NOT NULL,
     data TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     updated_by TEXT NOT NULL DEFAULT '',
-    UNIQUE (client_id, name)
+    UNIQUE (client_id, space, name)
 );
 """
 
@@ -91,6 +96,7 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
     if old_projects:
         conn.execute("ALTER TABLE projects RENAME TO projects_old")
     conn.executescript(SCHEMA)
+    _add_space(conn)
     if "clients" not in tables:  # first start with clients: make the first one
         conn.execute("INSERT INTO clients (name, created_at) VALUES (?, ?)", (FIRST_CLIENT, auth._now()))
     first = conn.execute("SELECT id FROM clients ORDER BY id LIMIT 1").fetchone()
@@ -121,6 +127,21 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
             shutil.move(str(old_known), dest / "ssh_known_hosts")
 
 
+def _add_space(conn: sqlite3.Connection) -> None:
+    """Projects and maps from before Lab / Production existed: rebuild them with a space column (production)."""
+    for table in ("projects", "maps"):
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if "space" in cols:
+            continue
+        conn.execute(f"ALTER TABLE {table} RENAME TO {table}_before_spaces")
+        conn.executescript(SCHEMA)
+        conn.execute(f"INSERT INTO {table} (id, client_id, space, name, data, updated_at, updated_by) "
+                     f"SELECT id, client_id, 'production', name, data, updated_at, updated_by FROM {table}_before_spaces")
+        conn.execute(f"DROP TABLE {table}_before_spaces")
+        conn.commit()
+        log.warning("Saved %s now belong to the Production space.", table)
+
+
 # ------------------------------------------------------------- helpers
 def client_folder(cid: int, folder: Path | None = None) -> Path:
     return (folder or auth.data_dir()) / "clients" / str(int(cid))
@@ -147,14 +168,20 @@ def my_clients() -> list[dict]:
     return g.my_clients
 
 
+def space() -> str:
+    """The space picked after sign-in: 'production' (the default) or 'lab'."""
+    s = session.get("space")
+    return s if s in SPACES else "production"
+
+
 def current() -> dict | None:
-    """The client picked in the switcher (or the first one the user can open)."""
+    """The client picked in the switcher (or the first one the user can open), with the space."""
     mine = my_clients()
     want = session.get("client_id")
     for c in mine:
         if c["id"] == want:
-            return c
-    return mine[0] if mine else None
+            return {**c, "space": space()}
+    return {**mine[0], "space": space()} if mine else None
 
 
 def role_in(cid: int) -> str | None:
@@ -238,8 +265,50 @@ def select():
     if role_in(cid) is None:
         abort(403)
     session["client_id"] = cid
+    session["client_chosen"] = True
     back = request.form.get("next") or url_for("index")
     return redirect(auth._safe_next(back))
+
+
+@bp.get("/start")
+def start_page():
+    """After sign-in: Production or Lab."""
+    return render_template("start.html", spaces=SPACES, space=session.get("space"))
+
+
+@bp.post("/space")
+def set_space():
+    """Pick Production or Lab (the first step after sign-in, or the switch in the top bar)."""
+    want = request.form.get("space", "")
+    if want not in SPACES:
+        abort(400)
+    session["space"] = want
+    back = request.form.get("next")
+    return redirect(auth._safe_next(back) if back else url_for("index"))
+
+
+@bp.get("/clients/pick")
+def pick_page():
+    """After sign-in: pick the client to work on."""
+    return render_template("pick_client.html", space=space(), spaces=SPACES)
+
+
+def need_lab(role: str) -> dict:
+    """Like need(), but only in the Lab space (EVE-NG is a lab tool)."""
+    c = need(role)
+    if c["space"] != "lab":
+        _json_abort(409, "EVE-NG labs are in the Lab space. Switch to Lab at the top of the page.")
+    return c
+
+
+def start_redirect():
+    """Where a signed-in user still has to go before the vendor screen, or None."""
+    if session.get("space") not in SPACES:
+        return redirect(url_for("clients.start_page"))
+    mine = my_clients()
+    if len(mine) > 1 and not session.get("client_chosen"):
+        return redirect(url_for("clients.pick_page"))
+    return None
 
 
 # ------------------------------------------------------------ client pages
@@ -425,15 +494,16 @@ def _stamp() -> str:
 @bp.get("/maps")
 def maps_list():
     c = need("viewer")
-    rows = auth.db().execute("SELECT id, name, updated_at, updated_by FROM maps WHERE client_id = ? "
-                             "ORDER BY name COLLATE NOCASE", (c["id"],))
+    rows = auth.db().execute("SELECT id, name, updated_at, updated_by FROM maps WHERE client_id = ? AND space = ? "
+                             "ORDER BY name COLLATE NOCASE", (c["id"], c["space"]))
     return {"maps": [dict(r) for r in rows], "client": c["name"], "can_edit": RANK[c["role"]] >= RANK["editor"]}
 
 
 @bp.get("/maps/<int:mid>")
 def maps_get(mid: int):
     c = need("viewer")
-    r = auth.db().execute("SELECT * FROM maps WHERE id = ? AND client_id = ?", (mid, c["id"])).fetchone()
+    r = auth.db().execute("SELECT * FROM maps WHERE id = ? AND client_id = ? AND space = ?",
+                          (mid, c["id"], c["space"])).fetchone()
     if r is None:
         abort(404)
     return {"id": r["id"], "name": r["name"], "data": json.loads(r["data"])}
@@ -451,18 +521,20 @@ def maps_save():
     if len(text) > MAX_MAP_BYTES:
         return {"error": "This map is too large to save."}, 400
     db = auth.db()
-    db.execute("INSERT INTO maps (client_id, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?) "
-               "ON CONFLICT (client_id, name) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, "
-               "updated_by = excluded.updated_by", (c["id"], name, text, _stamp(), auth.current_user()["username"]))
+    db.execute("INSERT INTO maps (client_id, space, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?) "
+               "ON CONFLICT (client_id, space, name) DO UPDATE SET data = excluded.data, "
+               "updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+               (c["id"], c["space"], name, text, _stamp(), auth.current_user()["username"]))
     db.commit()
-    mid = db.execute("SELECT id FROM maps WHERE client_id = ? AND name = ?", (c["id"], name)).fetchone()[0]
+    mid = db.execute("SELECT id FROM maps WHERE client_id = ? AND space = ? AND name = ?",
+                     (c["id"], c["space"], name)).fetchone()[0]
     return {"id": mid, "name": name}
 
 
 @bp.post("/maps/<int:mid>/delete")
 def maps_delete(mid: int):
     c = need("editor")
-    cur = auth.db().execute("DELETE FROM maps WHERE id = ? AND client_id = ?", (mid, c["id"]))
+    cur = auth.db().execute("DELETE FROM maps WHERE id = ? AND client_id = ? AND space = ?", (mid, c["id"], c["space"]))
     auth.db().commit()
     if cur.rowcount == 0:
         abort(404)
@@ -477,4 +549,4 @@ def init_app(app) -> None:
     def inject_clients():
         if auth.current_user() is None:
             return {}
-        return {"my_clients": my_clients(), "current_client": current()}
+        return {"my_clients": my_clients(), "current_client": current(), "spaces": SPACES, "current_space": space()}

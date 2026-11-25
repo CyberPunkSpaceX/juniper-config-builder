@@ -102,11 +102,12 @@ def save_settings(cid: int, form) -> list[str]:
 def page_settings() -> dict:
     """For the builder page: is EVE-NG set up for the current client, and may this user build labs."""
     c = clients.current()
-    if c is None:
-        return {"configured": False, "role": ""}
+    if c is None or c["space"] != "lab":
+        return {"configured": False, "role": "", "space": c["space"] if c else "production"}
     out = settings(clients.row(c["id"]))
     out.pop("user", None)
     out["role"] = c["role"]
+    out["space"] = "lab"
     return out
 
 
@@ -305,7 +306,7 @@ def _pull(job: Job, row: dict, lab_row: dict) -> dict:
         if out:   # keep them as config backups too
             from . import backups
             with job._db() as conn:
-                backups.store(conn, lab_row["client_id"], out, "eve", job.who, note=f"lab {lab_row['name']}")
+                backups.store(conn, lab_row["client_id"], out, "eve", job.who, note=f"lab {lab_row['name']}", space="lab")
         return {"items": out}
     finally:
         eve.logout()
@@ -313,7 +314,7 @@ def _pull(job: Job, row: dict, lab_row: dict) -> dict:
 
 # --------------------------------------------------------------- routes
 def _client_row(role: str):
-    c = clients.need(role)
+    c = clients.need_lab(role)
     return c, dict(clients.row(c["id"]))
 
 

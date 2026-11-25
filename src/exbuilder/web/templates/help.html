@@ -34,7 +34,12 @@ switch configuration appears live on the right, ready to copy or download and pa
 
 <h2 id="start">1. Getting started</h2>
 <ol>
-  <li><b>Pick a vendor</b> on the first page after you sign in (<a href="{{ url_for('index') }}">Vendors</a> in
+  <li><b>Pick Production or Lab</b> right after you sign in. <b>Production</b> is the real network; <b>Lab</b> is for
+    testing, with the EVE-NG lab tools. Each has its own saved projects, maps and backups. Switch any time with the
+    <b>Production | Lab</b> button in the top bar.</li>
+  <li><b>Pick the client</b> you're working for (if you're in more than one). Change it later with the
+    <b>Client</b> list in the top bar.</li>
+  <li><b>Pick a vendor</b> (<a href="{{ url_for('index') }}">Vendors</a> in
     the top bar takes you back). The builder only offers what that vendor's switches can do, so options
     that would give config the switch can't load are hidden.</li>
   <li><b>Pick Basic or Advanced</b> (top left of the builder). Basic shows what a normal access switch needs.
@@ -369,9 +374,13 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 
 <h2 id="projects">9. Projects and clients</h2>
 <ul>
-  <li><b>Projects</b> (under Tools) saves your work on the server, in the client picked at the top of the page.
-    You can also download a project as a JSON file and open it later.</li>
-  <li>Your unsaved work is kept in the browser per vendor, so Arista work doesn't overwrite Juniper work.</li>
+  <li><b>Projects</b> (under Tools) saves your work on the server, in the client and space (Production or Lab) picked
+    at the top of the page. You can also download a project as a JSON file and open it later.</li>
+  <li><b>Production and Lab are kept apart:</b> a project, map or config backup saved in Lab is not shown in
+    Production, and the other way round. To move a tested config to Production, download it (Save JSON) in Lab and
+    open it in Production.</li>
+  <li>Your unsaved work is kept in the browser per client, space and vendor, so it never follows you into another
+    client, and Arista work doesn't overwrite Juniper work.</li>
   <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>viewer</b>
     (look), <b>editor</b> (save and delete) or <b>admin</b> (also manage people, SSH and EVE-NG settings).</li>
   <li>A client admin can <b>Download a backup</b> of a client (projects, maps, config backups) on the client's page.</li>
@@ -385,7 +394,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li><b>Network map</b>: drop several switch configs (or a .zip) to draw the switches and the links between them,
     and check that both ends of each link agree. Client admins can fetch configs straight from the switches over SSH
     (read-only commands only, inside the client's allowed networks).</li>
-  <li><b>EVE-NG lab</b>: build a virtual lab from the map, push the configs, test, and pull them back.</li>
+  <li><b>EVE-NG lab</b> (Lab space only): build a virtual lab from the map, push the configs, test, and pull them back.</li>
   <li><b>Backups &amp; compare</b>: keeps every fetched config, and compares any two configs (live, backup, builder,
     lab or pasted), with the commands that make one like the other.</li>
   <li><b>EVPN-VXLAN fabric wizard</b> (Advanced): pick a fabric type and the number of switches; it works out every
