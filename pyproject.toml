@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "juniper-config-builder"
+name = "switch-config-builder"
 version = "0.2.0"
 description = "Web GUI and CLI that build Juniper EX switch configuration (Junos ELS)"
 readme = "README.md"
