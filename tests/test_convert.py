@@ -171,6 +171,12 @@ def test_convert_save_needs_editor(app, admin):
     assert _post(viewer, "/convert/save", {"client_id": 99, "name": "x", "data": proj}).status_code == 403
 
 
+def test_converter_refuses_hidden_lines():
+    # A description with an escape sequence in the pasted config is refused, not passed on.
+    text = CISCO.replace("\n", "\r\n", 3) + "\ninterface GigabitEthernet1/0/48\n description up\x0blink\n"
+    out = convert.convert(text, "cisco", "arista")
+    assert "\x0b" not in out["config"]
+    assert any("control character" in e["message"] for e in out["errors"])
 # ------------------------------------------------------------------ stage 2: Arista, Nexus, Dell
 def _example_text(vendor):
     from exbuilder.generator import build

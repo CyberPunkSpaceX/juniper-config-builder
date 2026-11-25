@@ -1064,7 +1064,59 @@ def header(project: dict) -> list[str]:
             f"Made by Multi-Vendor Switch Config Builder {__version__}. Review before you commit."]
 
 
+# Text fields end up inside config lines. A line break (or any other control
+# character) in one would let a project slip extra lines into the config, so
+# they are refused here, for every vendor, before any builder sees them.
+# Multi-line fields: the banner (each vendor checks its own terminator) and
+# lists with one item per line, which the builders split line by line.
+_CONTROL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f\u0085\u2028\u2029]")
+_CONTROL_OR_BREAK = re.compile(r"[\x00-\x1f\x7f\u0085\u2028\u2029]")
+_MULTILINE = {"system.banner", "access.root_ssh_key", "access.users.ssh_keys", "evpn.peers",
+              "routing.bgp_groups.neighbors"}
+_SECTIONS = {"switch": "Switch", "system": "System", "access": "Access", "snmp": "SNMP", "syslog": "Syslog",
+             "vlans": "VLANs", "ports": "Ports", "lags": "LAGs", "routing": "Routing", "policy": "Policy",
+             "evpn": "EVPN", "qos": "QoS", "services": "Services", "security": "Security"}
+
+
+def control_problems(project) -> tuple[object, list[dict]]:
+    """(the project with control characters made safe, an error for each field that had them)."""
+    problems: list[dict] = []
+
+    def walk(value, path: list[str]):
+        if isinstance(value, dict):
+            return {k: walk(v, [*path, str(k)]) for k, v in value.items()}
+        if isinstance(value, list):
+            return [walk(v, [*path, str(i)]) for i, v in enumerate(value)]
+        if not isinstance(value, str):
+            return value
+        key = ".".join(path)
+        if ".".join(p for p in path if not p.isdigit()) in _MULTILINE:
+            text = value.replace("\r\n", "\n").replace("\t", "    ")
+            pattern = _CONTROL
+        else:
+            text, pattern = value.replace("\t", " "), _CONTROL_OR_BREAK
+        if pattern.search(text):
+            section = _SECTIONS.get(path[0] if path else "", "Project")
+            label = " ".join(p for p in path[1:] if not p.isdigit()) or key
+            problems.append({"section": section, "field": key,
+                             "message": f"{label.replace('_', ' ').capitalize()}: remove the line break or "
+                                        "control character (it would add hidden lines to the config)."})
+            text = pattern.sub(" ", text)
+        return text
+
+    return walk(project, []), problems
+
+
 def build(project: dict) -> Result:
+    """Any vendor's config for a project. Refuses line breaks and control characters in text fields."""
+    cleaned, problems = control_problems(project) if isinstance(project, dict) else (project, [])
+    res = _build(cleaned)
+    if problems:
+        res.errors[:0] = problems
+    return res
+
+
+def _build(project: dict) -> Result:
     vendor = vendors.get((project or {}).get("vendor") if isinstance(project, dict) else None)
     if vendor.key == "arista":
         from . import eos
