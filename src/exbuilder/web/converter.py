@@ -31,7 +31,8 @@ def page():
     targets = [v.to_dict() for v in vendors.VENDORS.values() if v.ready]
     model_lists = {v["key"]: [m for m in portmap.model_names(v["key"]) if m != "Custom"] for v in targets}
     return render_template("convert.html", vendors=targets, readers=convert.READERS, models=model_lists,
-                           clients=_editable_clients(), current=clients.current())
+                           clients=_editable_clients(), current=clients.current(),
+                           is_admin=clients._is_server_admin())
 
 
 @bp.post("/convert/run")
@@ -48,7 +49,7 @@ def run():
     if source and not vendors.known(source):
         source = ""
     res = convert.convert(text, source, str(body.get("target") or "").strip().lower(),
-                          str(body.get("model") or "").strip())
+                          str(body.get("model") or "").strip(), str(body.get("source_model") or "").strip())
     if "error" in res:
         return res, 400
     res["detected"] = not source
@@ -92,6 +93,19 @@ def save():
     pid = db.execute("SELECT id FROM projects WHERE client_id = ? AND space = 'lab' AND name = ?", (cid, name)).fetchone()[0]
     log.info("audit: converter saved %r (%s) to Lab of client %s by %s", name, data.get("vendor"), cid, user)
     return {"id": pid, "name": name, "vendor": data["vendor"]}
+
+
+@bp.post("/convert/client")
+@auth.admin_required
+def new_client():
+    """Make a client without leaving the Converter (server admins only, like the Clients page)."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        abort(400)
+    cid, error = clients.create(str(body.get("name") or "").strip())
+    if error:
+        return {"error": error}, 400
+    return {"id": cid, "name": clients.row(cid)["name"]}
 
 
 @bp.post("/convert/open")

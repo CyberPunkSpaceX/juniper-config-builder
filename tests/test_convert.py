@@ -261,3 +261,69 @@ def test_every_source_to_every_target_runs(source):
         r = convert.convert(text, source, target)
         assert "error" not in r, (source, target, r)
         assert r["config"] or r["errors"]
+
+
+# ------------------------------------------------------------------ older Cisco (Gi0/x) and routing
+L3 = (DATA / "convert" / "cisco-ios15-l3.txt").read_text()
+
+
+def test_old_cisco_ports_match_by_order_not_dropped():
+    r = convert.convert(L3, "", "juniper", "EX4100-48P")
+    assert r["source"] == "cisco" and r["source_models"] == [""]
+    assert {"from": "GigabitEthernet0/1", "to": "ge-0/0/0"} in r["ports"]
+    assert {"from": "GigabitEthernet0/5", "to": "ge-0/0/4"} in r["ports"]
+    assert not [c for c in r["changes"] if c["level"] == "lost"]
+    assert any("matched by order" in c["text"] for c in r["changes"] if c["level"] == "check")
+    q = r["project"]
+    assert len(q["ports"]) == 5
+    routed = {p["description"]: p for p in q["ports"] if p["mode"] == "routed"}
+    assert routed["Routed P2P Link to Edge Router R1"]["address"] == "172.16.1.1/30"
+    acct = next(p for p in q["ports"] if p["description"] == "Workstation - Accounting")
+    assert acct["mac_limit"] == "2" and acct["sticky"] and acct["voice"] == "VOICE" and acct["edge"]
+    assert next(p for p in q["ports"] if p["mode"] == "trunk")["native"] == "BLACKHOLE"
+
+
+def test_old_cisco_routing_carries_over():
+    r = convert.convert(L3, "cisco", "juniper", "EX4100-48P")
+    q, cfg = r["project"], r["config"]
+    assert q["routing"]["loopback"] == "10.255.255.1/32" and q["routing"]["router_id"] == "10.255.255.1"
+    assert q["routing"]["static"] == [{"prefix": "0.0.0.0/0", "next_hop": "192.168.99.1"}]
+    assert "set protocols ospf area 0.0.0.0 interface ge-0/0/3.0 interface-type p2p" in cfg
+    assert "set protocols ospf area 0.0.0.10 interface irb.99 passive" in cfg
+    assert "set protocols bgp group ISP-Edge-Peer neighbor 198.51.100.1 peer-as 65100" in cfg
+    assert "set protocols bgp group ISP-Edge-Peer import RM-BGP-IN-ISP" in cfg
+    assert "set policy-options policy-statement RM-BGP-IN-ISP term seq-10 then local-preference 200" in cfg
+    assert "set policy-options prefix-list PL-OUT-ADVERTISE 192.168.99.0/24" in cfg
+    assert "set policy-options policy-statement RM-BGP-OUT-ISP term deny-rest then reject" in cfg
+    # Only the password errors are left, and what was skipped is listed.
+    assert all("password" in e["message"].lower() for e in r["errors"])
+    notes = " ".join(r["notes"])
+    assert "redistribute" in notes and "ACL-SSH-MGMT" in notes and "area 10 range" in notes
+
+
+@pytest.mark.parametrize("target", ["cisco", "arista", "nexus", "aruba", "dell"])
+def test_old_cisco_routing_to_other_targets(target):
+    r = convert.convert(L3, "cisco", target)
+    assert len(r["project"]["ports"]) == 5 and r["project"]["routing"]["bgp_groups"]
+
+
+def test_source_model_can_be_picked():
+    r = convert.convert(CISCO, "cisco", "juniper", source_model="C9300-24P")
+    assert r["source_models"][0] == "C9300-24P"
+
+
+def test_create_client_from_converter(app, admin):
+    r = _post(admin, "/convert/client", {"name": "Acme Lab"})
+    assert r.status_code == 200 and r.json["name"] == "Acme Lab"
+    assert _post(admin, "/convert/client", {"name": "Acme Lab"}).status_code == 400
+    proj = _post(admin, "/convert/run", {"text": L3, "target": "juniper"}).json["project"]
+    s = _post(admin, "/convert/save", {"client_id": r.json["id"], "name": "core", "data": proj})
+    assert s.status_code == 200
+    page = admin.get("/convert").get_data(as_text=True)
+    assert "Create a new client" in page and "Acme Lab" in page
+
+
+def test_create_client_needs_server_admin(app, admin):
+    bob = _bob(app, admin, "editor")
+    assert _post(bob, "/convert/client", {"name": "Nope"}).status_code in (302, 403)
+    assert "Create a new client" not in bob.get("/convert").get_data(as_text=True)

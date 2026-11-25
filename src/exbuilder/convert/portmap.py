@@ -13,6 +13,7 @@ import re
 from .. import (aoscx_models, aoss_models, eos_models, exos_models, fastiron_models, fortiswitch_models, ios_models,
                 models, nxos_models, os10_models, routeros_models, unifi_models)
 from .. import ports as P
+from .. import vendors
 
 MODELS = {"juniper": models, "arista": eos_models, "cisco": ios_models, "nexus": nxos_models, "dell": os10_models,
           "extreme": exos_models, "fortiswitch": fortiswitch_models, "mikrotik": routeros_models,
@@ -105,6 +106,35 @@ def loopback(vendor: str) -> str:
             "dell": "loopback0", "ruckus": "loopback 1", "aruba": "loopback 0"}.get(vendor, "loopback")
 
 
+# ------------------------------------------------------------------ ports of unknown models
+_FAST_WORDS = ("tengig", "twentyfive", "forty", "hundred", "sfp", "qsfp", "xe-", "et-", "te", "fo", "hu")
+
+
+def _nums(name: str) -> list[int]:
+    return [int(x) for x in re.findall(r"\d+", name)]
+
+
+def guess_place(vendor: str, name: str) -> tuple[int, str]:
+    """For a port no catalog model has: (member number, 'access' or 'uplink'), from the name alone.
+
+    Cisco Gi1/0/5 is member 1, Gi1/1/1 is an uplink (slot 1); older Gi0/5 is a single switch.
+    Juniper ge-1/0/5 is member 1; xe-/et- and PIC 1/2 are uplinks. Faster port words are uplinks.
+    """
+    low = name.lower()
+    nums = _nums(name)
+    member, kind = 0, "access"
+    word = re.match(r"[a-z-]*", low).group(0)
+    if vendor == "juniper" and len(nums) == 3:
+        member = nums[0]
+        kind = "uplink" if word in ("xe-", "et-") or nums[1] > 0 else "access"
+    elif len(nums) == 3:
+        member = nums[0]
+        kind = "uplink" if nums[1] > 0 else "access"
+    if word and any(word.startswith(w) for w in _FAST_WORDS) and word not in ("", "ethernet"):
+        kind = "uplink"
+    return member, kind
+
+
 # ------------------------------------------------------------------ guessing a model
 def _classes(ports: list[dict]) -> dict[str, list[dict]]:
     out = {"access": [], "uplink": []}
@@ -167,6 +197,7 @@ class PortMove:
                  dst_stacks: bool, mgmt: bool = False, l3: bool = False):
         self.src, self.dst = src_vendor, dst_vendor
         self.notes: list[str] = []
+        self.checks: list[str] = []
         self.table: list[dict] = []          # [{from, to}] for the report
         self.map: dict[str, str] = {}
         stacked = len(src_members) > 1
@@ -199,7 +230,25 @@ class PortMove:
             if n in where:
                 _, kind, pos = where[n]
                 used_need[kind] = max(used_need[kind], pos + 1)
-        self.unknown = [n for n in used if n not in where]
+        # Ports no catalog model has (older switches such as a 2960 or 3560 with Gi0/1): match them by
+        # their order instead, member by member, so they are never all dropped.
+        self.guessed = [n for n in used if n not in where]
+        if self.guessed:
+            by_member = sorted({guess_place(src_vendor, n)[0] for n in self.guessed})
+            count: dict[tuple, int] = {}
+            for n in sorted(self.guessed, key=lambda x: (guess_place(src_vendor, x), P.named_key(x), _nums(x))):
+                mem, kind = guess_place(src_vendor, n)
+                i = by_member.index(mem)
+                pos = count.get((i, kind), 0)
+                count[(i, kind)] = pos + 1
+                where[n] = (i, kind, pos)
+                used_need[kind] = max(used_need[kind], pos + 1)
+            if len(by_member) > len(src_members):
+                src_members = src_members + [{"fpc": m, "model": ""} for m in by_member[len(src_members):]]
+            self.checks.append(f"{len(self.guessed)} port(s) like {self.guessed[0]} are not on any "
+                              f"{vendors.get(src_vendor).name} model the builder knows, so they were matched by order (the first port "
+                              "becomes the new switch's first port). Pick the old switch model if that's wrong.")
+        self.unknown: list[str] = []
         members = src_members if dst_stacks else src_members[:1]
         if len(src_members) > len(members):
             self.notes.append(f"{len(src_members)} stacked switches, but the target doesn't stack: only the first "

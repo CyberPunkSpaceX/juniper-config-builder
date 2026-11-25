@@ -328,21 +328,29 @@ def clients_page():
     return render_template("auth/clients.html", clients=mine, counts=counts, server_admin=_is_server_admin())
 
 
+def create(name: str) -> tuple[int | None, str]:
+    """Make a client. Returns (id, '') or (None, why not)."""
+    if not NAME_RE.match(name):
+        return None, "Client names are 1 to 80 characters, without < > quotes or backslashes."
+    if auth.db().execute("SELECT 1 FROM clients WHERE name = ?", (name,)).fetchone():
+        return None, f"A client called {name} already exists."
+    cid = auth.db().execute("INSERT INTO clients (name, created_at) VALUES (?, ?)", (name, auth._now())).lastrowid
+    auth.db().commit()
+    g.pop("my_clients", None)
+    log.warning("audit: %r created client %r", auth.current_user()["username"], name)
+    return cid, ""
+
+
 @bp.post("/clients")
 @auth.admin_required
 def clients_create():
     name = request.form.get("name", "").strip()
-    if not NAME_RE.match(name):
-        flash("Client names are 1 to 80 characters, without < > quotes or backslashes.", "error")
-    elif auth.db().execute("SELECT 1 FROM clients WHERE name = ?", (name,)).fetchone():
-        flash(f"A client called {name} already exists.", "error")
-    else:
-        cid = auth.db().execute("INSERT INTO clients (name, created_at) VALUES (?, ?)", (name, auth._now())).lastrowid
-        auth.db().commit()
-        log.warning("audit: %r created client %r", auth.current_user()["username"], name)
-        flash(f"Client {name} created. Add its people and switch networks below.", "ok")
-        return redirect(url_for("clients.client_page", cid=cid))
-    return redirect(url_for("clients.clients_page"))
+    cid, error = create(name)
+    if error:
+        flash(error, "error")
+        return redirect(url_for("clients.clients_page"))
+    flash(f"Client {name} created. Add its people and switch networks below.", "ok")
+    return redirect(url_for("clients.client_page", cid=cid))
 
 
 def _client_admin(cid: int) -> sqlite3.Row:

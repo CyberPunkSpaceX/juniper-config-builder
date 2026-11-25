@@ -3,10 +3,12 @@
 {% block content %}
 <style>
 main { max-width: 1200px; }
+[hidden] { display: none !important; }
 textarea { width: 100%; min-height: 260px; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--bg); color: var(--text); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: end; }
-@media (max-width: 800px) { .grid3 { grid-template-columns: 1fr; } }
+.grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: end; }
+@media (max-width: 800px) { .grid3, .grid4 { grid-template-columns: 1fr; } }
 pre.out { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; max-height: 520px;
   overflow: auto; font-size: 12.5px; white-space: pre; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
@@ -36,13 +38,17 @@ Lab, test it there, then ask for approval to promote it to Production.</p>
     <textarea id="cfg" spellcheck="false" placeholder="Paste the config here, or open a file below."></textarea>
     <div class="actions"><input type="file" id="file" accept=".txt,.conf,.cfg,.log,text/plain"></div>
   </div>
-  <div class="grid3">
+  <div class="grid4">
     <div class="field">
       <label for="source">From</label>
       <select id="source">
         <option value="">Detect it for me</option>
         {% for v in vendors %}<option value="{{ v.key }}"{% if v.key not in readers %} disabled{% endif %}>{{ v.name }}{% if v.key not in readers %} (coming soon){% endif %}</option>{% endfor %}
       </select>
+    </div>
+    <div class="field">
+      <label for="smodel">Old switch model</label>
+      <select id="smodel"></select>
     </div>
     <div class="field">
       <label for="target">To</label>
@@ -80,7 +86,7 @@ Lab, test it there, then ask for approval to promote it to Production.</p>
 
   <div class="panel">
     <h2>Save to a client's Lab</h2>
-    {% if clients %}
+    {% if clients or is_admin %}
     <p class="muted">The project lands in the client's Lab space. Open it there to check it, build an EVE-NG lab, then use
       “Ask for approval” on the Projects tab to promote it to Production.</p>
     <div class="grid3">
@@ -88,6 +94,7 @@ Lab, test it there, then ask for approval to promote it to Production.</p>
         <label for="client">Client</label>
         <select id="client">
           {% for c in clients %}<option value="{{ c.id }}"{% if current and c.id == current.id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+          {% if is_admin %}<option value="new"{% if not clients %} selected{% endif %}>+ Create a new client…</option>{% endif %}
         </select>
       </div>
       <div class="field">
@@ -96,6 +103,15 @@ Lab, test it there, then ask for approval to promote it to Production.</p>
       </div>
       <div class="field"><button id="save" type="button">Save to Lab</button></div>
     </div>
+    {% if is_admin %}
+    <div class="grid3" id="newclient" hidden>
+      <div class="field">
+        <label for="newname">New client name</label>
+        <input type="text" id="newname" maxlength="80">
+      </div>
+      <div class="field"><button id="createclient" type="button" class="secondary">Create client</button></div>
+    </div>
+    {% endif %}
     <div class="actions">
       <span id="savestatus" class="status" role="status"></span>
       <form id="openform" method="post" action="{{ url_for('converter.open_in_lab') }}" hidden>
@@ -126,6 +142,32 @@ function fillModels() {
 }
 $("target").addEventListener("change", fillModels);
 fillModels();
+function fillSourceModels(keep) {
+  const sel = $("smodel"), list = MODELS[$("source").value] || [];
+  sel.innerHTML = "";
+  sel.append(new Option($("source").value ? "Work it out from the port names" : "Pick “From” first, or convert", ""));
+  for (const m of list) sel.append(new Option(m, m));
+  sel.disabled = !list.length;
+  if (keep && list.includes(keep)) sel.value = keep;
+}
+$("source").addEventListener("change", () => fillSourceModels());
+fillSourceModels();
+function newClientBox() {
+  if ($("newclient")) $("newclient").hidden = $("client").value !== "new";
+}
+if ($("client")) { $("client").addEventListener("change", newClientBox); newClientBox(); }
+if ($("createclient")) $("createclient").addEventListener("click", async () => {
+  const name = $("newname").value.trim();
+  if (!name) { status($("savestatus"), "Type a name for the new client.", "bad"); return; }
+  const res = await post("{{ url_for('converter.new_client') }}", {name});
+  if (!res.ok) { status($("savestatus"), res.data.error || "Couldn't create the client.", "bad"); return; }
+  const opt = new Option(res.data.name, res.data.id);
+  $("client").insertBefore(opt, $("client").querySelector('option[value="new"]'));
+  $("client").value = String(res.data.id);
+  $("newname").value = "";
+  newClientBox();
+  status($("savestatus"), `Client ${res.data.name} created. Press Save to Lab to put the project there.`, "ok");
+});
 
 $("file").addEventListener("change", async e => {
   const f = e.target.files[0];
@@ -161,10 +203,12 @@ function section(root, title, items, cls, open) {
 function render(r) {
   last = r;
   $("result").hidden = false;
+  if ($("source").value !== r.source) { $("source").value = r.source; fillSourceModels(r.source_models[0]); }
   $("summary").textContent = `${NAMES[r.source]} → ${NAMES[r.target]} (${r.model})`;
   const st = r.stats;
   $("subsummary").textContent = `${r.detected ? "Detected " + NAMES[r.source] + ". " : ""}Read ${st.vlans} VLANs, `
-    + `${st.port_groups} port groups and ${st.lags} LAGs from a ${(r.source_models || []).filter(Boolean).join(" + ") || "switch"}. `
+    + `${st.port_groups} port groups and ${st.lags} LAGs from ${(r.source_models || []).filter(Boolean).length ? "a " + r.source_models.filter(Boolean).join(" + ")
+                                     : "a switch model the builder doesn't know (ports matched by order)"}. `
     + (r.errors.length ? `${r.errors.length} thing(s) to fix before the config will load.` : "No errors from the builder.");
   $("config").textContent = r.config || "(no config: fix the errors in the report)";
   const rep = $("report");
@@ -193,7 +237,8 @@ async function post(url, body) {
 $("go").addEventListener("click", async () => {
   status($("status"), "Converting…");
   const {ok, data} = await post("{{ url_for('converter.run') }}", {text: $("cfg").value, source: $("source").value,
-                                                                   target: $("target").value, model: $("model").value});
+                                                                   target: $("target").value, model: $("model").value,
+                                                                   source_model: $("smodel").value});
   if (!ok) { status($("status"), data.error || "Conversion failed.", "bad"); return; }
   status($("status"), "Done. Read the report before you use the config.", "ok");
   render(data);
@@ -216,6 +261,7 @@ if ($("save")) $("save").addEventListener("click", async () => {
     for (const k of path.slice(0, -1)) o = o?.[k];
     if (o && typeof o === "object") o[path[path.length - 1]] = hash;
   }
+  if ($("client").value === "new") { status($("savestatus"), "Create the client first, or pick one.", "bad"); return; }
   const body = {client_id: $("client").value, name: $("pname").value.trim(), data};
   let res = await post("{{ url_for('converter.save') }}", body);
   if (res.status === 409 && res.data.exists && confirm(res.data.error + " Replace it?")) {

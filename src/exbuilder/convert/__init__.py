@@ -81,7 +81,7 @@ def _iface_ref(src: str, dst: str, raw: str, move: portmap.PortMove, lags: dict)
     return None
 
 
-def retarget(project: dict, src: str, dst: str, model: str = "") -> dict:
+def retarget(project: dict, src: str, dst: str, model: str = "", source_model: str = "") -> dict:
     """Move a project from vendor ``src`` to ``dst``. Returns {project, changes, ports, model}."""
     p = copy.deepcopy(project)
     p["vendor"] = dst
@@ -104,12 +104,16 @@ def retarget(project: dict, src: str, dst: str, model: str = "") -> dict:
             pass
     used = list(dict.fromkeys(used))
     members = p["switch"].get("members") or [{"fpc": portmap.first_member(src), "model": ""}]
+    if source_model:
+        members = [dict(m, model=source_model) for m in members]
     move = portmap.PortMove(src, members, dst, model, used, v.has("virtual_chassis"),
                             mgmt=bool(p["system"].get("mgmt_address")),
                             l3=any(x.get("irb") for x in p.get("vlans", [])) or any(
                                 r.get("mode") == "routed" for r in p.get("ports", [])))
     for n in move.notes:
         note("Switch", n)
+    for n in move.checks:
+        note("Ports", n, "check")
     if move.unknown:
         note("Ports", f"{len(move.unknown)} port(s) are not on the source switch model and were left out: "
                       f"{', '.join(move.unknown[:6])}{'…' if len(move.unknown) > 6 else ''}.", "lost")
@@ -208,11 +212,11 @@ def retarget(project: dict, src: str, dst: str, model: str = "") -> dict:
     if p["system"].get("timezone") and dst != "juniper" and "/" not in p["system"]["timezone"] and \
             p["system"]["timezone"] != "UTC":
         note("Switch", f"Time zone {p['system']['timezone']} may not exist on {v.name}; check it.", "check")
-    return {"project": p, "changes": changes, "ports": move.table, "model": move.dst_model,
+    return {"project": p, "changes": changes, "ports": move.table, "model": move.dst_model, "guessed": move.guessed,
             "source_models": move.src_models}
 
 
-def convert(text: str, source: str = "", target: str = "juniper", model: str = "") -> dict:
+def convert(text: str, source: str = "", target: str = "juniper", model: str = "", source_model: str = "") -> dict:
     """Pasted config -> {source, target, project, config, report}."""
     source = source or detect(text)
     if not source:
@@ -228,7 +232,9 @@ def convert(text: str, source: str = "", target: str = "juniper", model: str = "
         got = read(text, source)
     except ValueError as e:
         return {"error": str(e)}
-    moved = retarget(got["project"], source, target, model)
+    if source_model and portmap.model(source, source_model) is None:
+        source_model = ""
+    moved = retarget(got["project"], source, target, model, source_model)
     p = moved["project"]
     res = build(p).to_dict()
     return {
@@ -236,7 +242,7 @@ def convert(text: str, source: str = "", target: str = "juniper", model: str = "
         "project": p, "config": res.get("set", ""), "hierarchy": res.get("hierarchy", ""),
         "errors": res.get("errors", []), "warnings": res.get("warnings", []), "hashed": res.get("hashed", {}),
         "not_read": got.get("unparsed", []), "notes": got.get("notes", []), "changes": moved["changes"],
-        "ports": moved["ports"],
+        "ports": moved["ports"], "source_models_guessed": bool(moved.get("guessed")),
         "stats": {"vlans": len(p["vlans"]), "port_groups": len(p["ports"]), "lags": len(p["lags"]),
                   "not_read": len(got.get("unparsed", []))},
     }
