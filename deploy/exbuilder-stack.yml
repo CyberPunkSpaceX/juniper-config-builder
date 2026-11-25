@@ -11,7 +11,7 @@ version: "3.8"
 
 services:
   web:
-    image: ghcr.io/cyberpunkspacex/juniper-config-builder:latest
+    image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
     environment:
       # Set to "true" once users only reach the UI over HTTPS.
       EXB_SECURE_COOKIES: ${EXB_SECURE_COOKIES:-false}

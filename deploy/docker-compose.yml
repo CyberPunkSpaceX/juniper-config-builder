@@ -3,7 +3,7 @@
 # for a new password straight away). See INSTALL.md.
 services:
   exbuilder:
-    image: ghcr.io/cyberpunkspacex/juniper-config-builder:latest
+    image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
     restart: unless-stopped
     ports:
       - "8088:8080"
