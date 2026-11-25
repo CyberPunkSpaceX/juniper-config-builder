@@ -87,6 +87,12 @@ VENDORS: dict[str, Vendor] = {
         # VLAN translation; EVPN, policies, QoS and the tools are not written.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe"}),
         ready=True),
+    "unifi": Vendor(
+        "unifi", "Ubiquiti UniFi", "UniFi Network (settings sheet)", "USW Lite, Standard, Pro, Pro Max and Aggregation",
+        # UniFi switches are set up in the UniFi Network app, so this writes the settings to make there.
+        # No CLI, stacking, routed ports, OSPF, BGP or VLAN translation.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "dot1x", "poe"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port

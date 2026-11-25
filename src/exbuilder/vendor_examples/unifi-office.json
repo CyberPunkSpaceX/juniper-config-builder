@@ -1,0 +1,21 @@
+{
+  "vendor": "unifi",
+  "name": "Office access switch (UniFi)",
+  "switch": {"members": [{"fpc": 1, "model": "USW-Pro-24-PoE"}]},
+  "system": {"hostname": "usw-office-01", "timezone": "Europe/Amsterdam", "name_servers": "10.10.0.10, 1.1.1.1",
+             "ntp_servers": [{"address": "10.10.0.1", "prefer": true}],
+             "mgmt_address": "10.10.10.8/24", "mgmt_gateway": "10.10.10.1"},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "snmp": {"communities": [{"name": "s3cret-ro", "access": "read-only"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10"},
+            {"name": "USERS", "id": "20", "snooping": true},
+            {"name": "VOICE", "id": "30"},
+            {"name": "WIFI", "id": "40"},
+            {"name": "CAMERAS", "id": "50"}],
+  "ports": [{"name": "DESKS", "ports": "1-16", "mode": "access", "vlan": "USERS", "voice": "VOICE", "description": "Desk ports"},
+            {"name": "APS", "ports": "17-20", "mode": "trunk", "vlans": "WIFI, USERS", "native": "MGMT", "description": "Wi-Fi access points"},
+            {"name": "CAMERAS", "ports": "21-24", "mode": "access", "vlan": "CAMERAS", "description": "Cameras"}],
+  "lags": [{"name": "UPLINK", "members": "25-26", "lacp": "active", "mode": "trunk", "vlans": "all", "native": "MGMT", "description": "To core"}],
+  "services": {"storm_control": true}
+}

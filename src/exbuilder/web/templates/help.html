@@ -146,6 +146,14 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>Check with <code>show</code>. To undo: <code>execute restore config tftp before.conf &lt;server&gt;</code> (the
       switch reboots).</li>
   </ol>
+  <h3>Ubiquiti UniFi</h3>
+  <ol>
+    <li>UniFi switches take no commands: the builder makes a <b>settings sheet</b> for the UniFi Network app.</li>
+    <li>Make a backup first (Settings &gt; System &gt; Backups) and adopt the switch.</li>
+    <li>Work through the sheet from top to bottom: networks, global switch settings, port profiles, the switch itself,
+      aggregates and then the ports. Type passwords and secrets in the app; the sheet never prints them.</li>
+    <li>Click <b>Apply Changes</b>. The switch provisions itself, which takes about a minute.</li>
+  </ol>
   <h3>MikroTik (RouterOS v7)</h3>
   <ol>
     <li>Back up first: <code>/export file=before</code>.</li>
@@ -243,6 +251,17 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>Not written yet: the time zone, login banner, SNMPv3, storm control, PoE power limits, the LLDP-MED voice profile,
       VLAN translation, EVPN, policies, QoS and the Tools.</li>
   </ul>
+  <h3>Ubiquiti UniFi: USW Lite, Standard, Pro, Pro Max and Aggregation</h3>
+  <ul>
+    <li>The output is a settings sheet for the UniFi Network app (menu names from version 9), not a config to paste.</li>
+    <li>Ports are numbered <code>1-24</code>. Each port group becomes an <b>Ethernet port profile</b>; groups with the same
+      settings share one profile. Aggregates (LAGs) must be neighbouring ports and always run LACP.</li>
+    <li>A VLAN address needs a Layer 3 model (Pro, Pro Max, Pro Aggregation): the switch then routes that network. On the
+      others, leave VLAN addresses empty and let the gateway route.</li>
+    <li>The devices have one SSH login, made from the first super-user. People who manage the network get UniFi OS accounts.</li>
+    <li>Not available on UniFi: stacking, routed ports, OSPF, BGP, MAC limits, PoE priority, ARP inspection,
+      VLAN translation and EVPN.</li>
+  </ul>
   <h3>MikroTik (RouterOS v7): CRS326, CRS328, CRS354, CRS310, CRS317 and CHR</h3>
   <ul>
     <li>Ports keep their RouterOS names: <code>ether1</code>, <code>sfp-sfpplus1</code>. LAGs are bonds (<code>bond1</code>).
@@ -331,6 +350,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Extreme EXOS: not written.</li>
   <li>FortiSwitch: not written.</li>
   <li>MikroTik: not written.</li>
+  <li>UniFi: not available.</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
   <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
@@ -340,7 +360,7 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
     Cisco (type 5 on the 2960-X), SHA-256 on Nexus, SHA-512 on Dell, MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX, AOS-S, Extreme EXOS, FortiSwitch and MikroTik, which
-    only take plain-text passwords in a pasted config.</li>
+    only take plain-text passwords in a pasted config. The UniFi settings sheet never prints passwords: you type them in the app.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>
   <li>SNMP communities, RADIUS secrets and BGP/OSPF keys are in the config as you typed them. Keep downloaded

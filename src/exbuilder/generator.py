@@ -1078,6 +1078,9 @@ def build(project: dict) -> Result:
     if vendor.key == "mikrotik":
         from . import routeros
         return routeros.build(project)
+    if vendor.key == "unifi":
+        from . import unifi
+        return unifi.build(project)
     if vendor.key == "extreme":
         from . import exos
         return exos.build(project)
