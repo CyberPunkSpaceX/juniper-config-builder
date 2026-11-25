@@ -26,9 +26,9 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, redact, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, backups, clients, converter, eve, promote, push
+from . import auth, backups, clients, converter, eve, promote, push, toolkit
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -131,6 +131,7 @@ def create_app() -> Flask:
     promote.init_app(app)
     push.init_app(app)
     converter.init_app(app)
+    toolkit.init_app(app)
     zones = _timezones()
 
     @app.after_request
@@ -384,7 +385,10 @@ def create_app() -> Flask:
                                 (pid, c["id"], c["space"])).fetchone()
         if row is None:
             abort(404)
-        return {"id": row["id"], "name": row["name"], "data": json.loads(row["data"])}
+        data = json.loads(row["data"])
+        if not clients.can_see_secrets(c):
+            data = redact.project(data)
+        return {"id": row["id"], "name": row["name"], "data": data, "redacted": not clients.can_see_secrets(c)}
 
     @app.post("/projects")
     def projects_save():

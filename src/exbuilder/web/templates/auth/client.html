@@ -6,14 +6,15 @@
 
 <section class="panel">
   <h2>People</h2>
-  <p class="hint"><b>Viewer</b> opens projects and maps. <b>Editor</b> also saves and deletes them.
-    <b>Admin</b> also manages people and SSH settings, and fetches configs from switches.
-    Server admins can open every client without being listed here.</p>
+  <p class="hint"><b>Read-only</b> opens projects, maps and config backups, with passwords, keys and SNMP
+    communities hidden. <b>Configurator</b> also builds, saves and deletes them, and sees the secrets.
+    <b>Admin</b> also manages people, SSH and EVE-NG settings, approves Lab work and fetches configs from switches.
+    Super Admins, and people given a level in all clients on the Users page, can open every client without being listed here.</p>
   <form method="post" class="row" style="grid-template-columns: 2fr 1fr auto; margin-bottom: 14px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="member_add">
     <div><label for="mu">Username</label><input id="mu" type="text" name="username" required autocomplete="off"></div>
-    <div><label for="mr">Role</label><select id="mr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+    <div><label for="mr">Role</label><select id="mr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r|role_label }}</option>{% endfor %}</select></div>
     <div><button type="submit">Add</button></div>
   </form>
   <div class="scroll"><table>
@@ -27,7 +28,7 @@
           <input type="hidden" name="action" value="member_role">
           <input type="hidden" name="user_id" value="{{ m['id'] }}">
           <select name="role" onchange="this.form.submit()" aria-label="Role for {{ m['username'] }}">
-            {% for r in roles %}<option value="{{ r }}" {% if r == m['role'] %}selected{% endif %}>{{ r }}</option>{% endfor %}
+            {% for r in roles %}<option value="{{ r }}" {% if r == m['role'] %}selected{% endif %}>{{ r|role_label }}</option>{% endfor %}
           </select>
           <noscript><button class="small secondary">Save</button></noscript>
         </form>
@@ -42,7 +43,11 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="3" class="muted">Nobody yet (server admins can always open it).</td></tr>
+    <tr><td colspan="3" class="muted">Nobody listed yet.</td></tr>
+    {% endfor %}
+    {% for e in everywhere %}
+    <tr><td><b>{{ e['username'] }}</b>{% if not e['active'] %} <span class="badge off">disabled</span>{% endif %}</td>
+      <td>{{ e['level'] }} <span class="muted">(all clients, set on the Users page)</span></td><td></td></tr>
     {% endfor %}
   </table></div>
 </section>
@@ -61,7 +66,7 @@
     </div>
     <div class="field" style="max-width: 320px">
       <label for="su">Switch username for the SSH key</label>
-      <input id="su" type="text" name="ssh_user" value="{{ c['ssh_user'] }}" placeholder="exbuilder-ro" autocomplete="off">
+      <input id="su" type="text" name="ssh_user" value="{{ c['ssh_user'] }}" placeholder="switchbuilder-ro" autocomplete="off">
     </div>
     <button type="submit">Save SSH settings</button>
   </form>
@@ -73,9 +78,9 @@
   <label for="pub">Public key</label>
   <textarea id="pub" readonly rows="2" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 12px ui-monospace, Menlo, Consolas, monospace">{{ c['ssh_key_pub'] }}</textarea>
   <p class="hint">On each switch (in configure mode), make a read-only account with this key:</p>
-  <pre style="white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px">set system login class exbuilder-ro permissions view-configuration
-set system login class exbuilder-ro permissions view
-set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro authentication {{ c['ssh_key_pub'].split(' ')[0] }} "{{ c['ssh_key_pub'].split(' ')[:2]|join(' ') }}"</pre>
+  <pre style="white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px">set system login class switchbuilder-ro permissions view-configuration
+set system login class switchbuilder-ro permissions view
+set system login user {{ c['ssh_user'] or 'switchbuilder-ro' }} class switchbuilder-ro authentication {{ c['ssh_key_pub'].split(' ')[0] }} "{{ c['ssh_key_pub'].split(' ')[:2]|join(' ') }}"</pre>
   <form class="inline" method="post" onsubmit="return confirm('Make a new key? The old key stops working, so every switch needs the new public key.')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="key_generate">

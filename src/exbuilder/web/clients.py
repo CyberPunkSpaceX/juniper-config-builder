@@ -5,11 +5,15 @@ clients they are members of, and switch between them at the top of the page.
 
 Roles:
 
-* Server admins (users with the ``admin`` role) see and manage every client,
+* Super Admins (users with the ``admin`` role) see and manage every client,
   and create, rename and delete clients.
-* In a client, a member is a ``viewer`` (opens projects and maps), an
-  ``editor`` (also saves and deletes them) or an ``admin`` (also manages the
-  client's members and SSH settings, and fetches configs over SSH).
+* In a client, a member is Read-only (``viewer``: opens projects, maps and
+  config backups with passwords and keys hidden), Configurator (``editor``:
+  also builds, saves and deletes, and sees secrets) or Admin (``admin``: also
+  manages the client's members, SSH and EVE-NG settings, approves Lab work and
+  fetches configs over SSH).
+* A user with ``users.all_clients`` set has that role in every client, also
+  in clients made later. A membership with a higher role wins.
 
 SSH settings per client: the networks its switches are in, an optional SSH key
 the server makes for it, the username for that key, and the known switch host
@@ -33,7 +37,7 @@ from pathlib import Path
 
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from .. import sshfetch
+from .. import redact, sshfetch
 from . import auth
 
 bp = Blueprint("clients", __name__, template_folder="templates")
@@ -44,6 +48,7 @@ ROLES = ("viewer", "editor", "admin")
 # Lab also has the EVE-NG lab tools; Production never talks to EVE-NG.
 SPACES = {"production": "Production", "lab": "Lab"}
 RANK = {r: i for i, r in enumerate(ROLES)}
+LABELS = {"viewer": "Read-only", "editor": "Configurator", "admin": "Admin"}
 NAME_RE = re.compile(r"^[^<>\"'`\\]{1,80}$")
 FIRST_CLIENT = "Default"
 MAX_MAP_BYTES = 20 * 1024 * 1024
@@ -164,11 +169,24 @@ def my_clients() -> list[dict]:
         return []
     if _is_server_admin(user):
         rows = auth.db().execute("SELECT id, name, 'admin' AS role FROM clients ORDER BY name COLLATE NOCASE")
-    else:
-        rows = auth.db().execute("SELECT c.id, c.name, m.role FROM clients c JOIN client_members m ON m.client_id = c.id "
-                                 "WHERE m.user_id = ? ORDER BY c.name COLLATE NOCASE", (user["id"],))
-    g.my_clients = [dict(r) for r in rows]
+        g.my_clients = [dict(r) for r in rows]
+        return g.my_clients
+    everywhere = user["all_clients"] if "all_clients" in user.keys() and user["all_clients"] in RANK else None
+    rows = auth.db().execute(
+        "SELECT c.id, c.name, m.role FROM clients c LEFT JOIN client_members m ON m.client_id = c.id AND m.user_id = ? "
+        "WHERE m.user_id IS NOT NULL OR ? ORDER BY c.name COLLATE NOCASE", (user["id"], everywhere is not None))
+    out = []
+    for r in rows:
+        roles = [x for x in (r["role"], everywhere) if x in RANK]
+        out.append({"id": r["id"], "name": r["name"], "role": max(roles, key=RANK.get)})
+    g.my_clients = out
     return g.my_clients
+
+
+def can_see_secrets(c: dict | None = None) -> bool:
+    """Read-only people see projects, maps and configs with passwords and keys hidden."""
+    c = c if c is not None else current()
+    return bool(c) and RANK.get(c["role"], 0) >= RANK["editor"]
 
 
 def space() -> str:
@@ -374,7 +392,10 @@ def client_page(cid: int):
     from . import eve
     n_backups = auth.db().execute("SELECT COUNT(*), COUNT(DISTINCT host) FROM config_backups WHERE client_id = ?",
                                   (cid,)).fetchone()
-    return render_template("auth/client.html", c=r, n_backups=n_backups, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
+    everywhere = [dict(u, level="Super Admin" if u["role"] == "admin" else LABELS[u["all_clients"]])
+                  for u in auth.db().execute("SELECT username, active, role, all_clients FROM users WHERE role = 'admin' "
+                                             "OR all_clients IN ('viewer', 'editor', 'admin') ORDER BY username COLLATE NOCASE")]
+    return render_template("auth/client.html", c=r, everywhere=everywhere, n_backups=n_backups, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
                            problems=problems, ceiling=[str(n) for n in sshfetch.ceiling()],
                            ssh_off=sshfetch.disabled(), server_key=bool(sshfetch.key_file()),
                            known=sshfetch.known_hosts(client_folder(cid)))
@@ -461,7 +482,7 @@ def client_update(cid: int):
             flash("SSH settings saved." if nets else "SSH settings saved. SSH fetch is off for this client "
                   "until you add the switch networks.", "ok")
     elif action == "key_generate":
-        private, public = sshfetch.generate_key(f"exbuilder-{re.sub(r'[^A-Za-z0-9]+', '-', r['name']).strip('-')}")
+        private, public = sshfetch.generate_key(f"switchbuilder-{re.sub(r'[^A-Za-z0-9]+', '-', r['name']).strip('-')}")
         db.execute("UPDATE clients SET ssh_key = ?, ssh_key_pub = ? WHERE id = ?",
                    (_fernet().encrypt(private.encode()).decode(), public, cid))
         del private
@@ -518,7 +539,10 @@ def maps_get(mid: int):
                           (mid, c["id"], c["space"])).fetchone()
     if r is None:
         abort(404)
-    return {"id": r["id"], "name": r["name"], "data": json.loads(r["data"])}
+    data = json.loads(r["data"])
+    if not can_see_secrets(c):
+        data = redact.map_data(data)
+    return {"id": r["id"], "name": r["name"], "data": data, "redacted": not can_see_secrets(c)}
 
 
 @bp.post("/maps")
@@ -556,6 +580,7 @@ def maps_delete(mid: int):
 # ------------------------------------------------------------------ setup
 def init_app(app) -> None:
     app.register_blueprint(bp)
+    app.jinja_env.filters["role_label"] = lambda r: LABELS.get(r, r)
 
     @app.context_processor
     def inject_clients():

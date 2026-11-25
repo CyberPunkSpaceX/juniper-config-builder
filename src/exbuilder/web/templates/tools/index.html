@@ -1,0 +1,17 @@
+{% extends "auth/base.html" %}
+{% block title %}Toolkit · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "_cards.html" %}
+<h1>Toolkit</h1>
+<p class="muted">Tools for working on many switches at once. They use the client and the Production or Lab space picked
+at the top of the page.</p>
+<div class="cards three">
+  {% for endpoint, icon, title, blurb in tools %}
+  <a class="card" href="{{ url_for(endpoint) }}">
+    <span class="icon" aria-hidden="true">{{ icon|safe }}</span>
+    <h2>{{ title }}</h2>
+    <span class="muted">{{ blurb }}</span>
+  </a>
+  {% endfor %}
+</div>
+{% endblock %}

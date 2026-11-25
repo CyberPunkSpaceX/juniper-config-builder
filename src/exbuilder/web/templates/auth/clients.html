@@ -35,7 +35,7 @@
     {% set n = counts.get(c.id, {}) %}
     <tr>
       <td><b>{{ c.name }}</b>{% if current_client and c.id == current_client.id %} <span class="badge on">current</span>{% endif %}</td>
-      <td>{{ c.role }}{% if server_admin %} <span class="muted">(server admin)</span>{% endif %}</td>
+      <td>{{ c.role|role_label }}{% if server_admin %} <span class="muted">(Super Admin)</span>{% endif %}</td>
       <td>{{ n.get('projects', 0) }}</td><td>{{ n.get('maps', 0) }}</td><td>{{ n.get('config_backups', 0) }}</td><td>{{ n.get('client_members', 0) }}</td>
       <td>{% if c.role == 'admin' %}<a href="{{ url_for('clients.client_page', cid=c.id) }}">Settings</a>{% endif %}</td>
     </tr>

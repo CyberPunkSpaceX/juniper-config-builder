@@ -24,6 +24,7 @@ import sqlite3
 
 from flask import Blueprint, abort, request
 
+from .. import redact
 from . import auth, clients
 
 bp = Blueprint("promote", __name__)
@@ -76,7 +77,7 @@ def _review(c: dict, rid: int) -> sqlite3.Row:
 def _admins(cid: int) -> int:
     """People who can approve in this client: its admins and the server admins (who manage every client)."""
     return auth.db().execute(
-        "SELECT COUNT(*) FROM users u WHERE u.active = 1 AND (u.role = 'admin' OR EXISTS (SELECT 1 FROM "
+        "SELECT COUNT(*) FROM users u WHERE u.active = 1 AND (u.role = 'admin' OR u.all_clients = 'admin' OR EXISTS (SELECT 1 FROM "
         "client_members m WHERE m.user_id = u.id AND m.client_id = ? AND m.role = 'admin'))", (cid,)).fetchone()[0]
 
 
@@ -220,7 +221,10 @@ def snapshot(rid: int):
     """The reviewed snapshot, so a reviewer can open exactly what is being approved."""
     c = clients.need("viewer")
     r = _review(c, rid)
-    return {"name": r["name"], "data": json.loads(r["data"])}
+    data = json.loads(r["data"])
+    if not clients.can_see_secrets(c):
+        data = redact.project(data)
+    return {"name": r["name"], "data": data, "redacted": not clients.can_see_secrets(c)}
 
 
 def init_app(app) -> None:

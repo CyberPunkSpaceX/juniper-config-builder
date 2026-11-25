@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, flash, redirect, request, url_for
 
 from .. import compare as cmp
-from .. import importer, sshfetch
+from .. import importer, redact, sshfetch
 from . import auth, clients
 
 bp = Blueprint("backups", __name__)
@@ -54,7 +54,8 @@ SOURCES = {"ssh": "SSH fetch", "eve": "EVE-NG lab", "upload": "uploaded", "map":
            "builder": "builder output", "restore": "restored"}
 MAX_TEXT = 2_000_000
 KEEP = 50            # versions kept per switch and source
-FORMAT = "exbuilder-client-backup"
+FORMAT = "switchbuilder-client-backup"
+FORMATS = (FORMAT, "exbuilder-client-backup")   # files exported before the rename still import
 HOST_RE = re.compile(r"host-name\s+\"?([\w.-]+)")
 
 
@@ -162,10 +163,12 @@ def backups_list():
 def backups_get(bid: int):
     c = clients.need("viewer")
     r = _get(c["id"], bid)
+    text = r["text"] if clients.can_see_secrets(c) else redact.config(r["text"])
     if request.args.get("download"):
-        return Response(r["text"], mimetype="text/plain",
+        return Response(text, mimetype="text/plain",
                         headers={"Content-Disposition": f"attachment; filename={_filename(r)}"})
-    return {k: r[k] for k in ("id", "host", "address", "source", "note", "lines", "created_at", "created_by", "text")}
+    out = {k: r[k] for k in ("id", "host", "address", "source", "note", "lines", "created_at", "created_by")}
+    return {**out, "text": text, "redacted": not clients.can_see_secrets(c)}
 
 
 @bp.post("/backups")
@@ -217,7 +220,7 @@ def backups_export():
             while name in used:
                 name = "x-" + name
             used.add(name)
-            zf.writestr(name, r["text"])
+            zf.writestr(name, r["text"] if clients.can_see_secrets(c) else redact.config(r["text"]))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     return Response(buf.getvalue(), mimetype="application/zip", headers={
         "Content-Disposition": f"attachment; filename={_safe(c['name'])}-configs-{stamp}.zip"})
@@ -285,7 +288,7 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
     """Load a client backup into client ``cid``. Returns [(level, message)]."""
     from .. import eveng
     from . import eve
-    if not isinstance(data, dict) or data.get("format") != FORMAT:
+    if not isinstance(data, dict) or data.get("format") not in FORMATS:
         return [("error", "That is not a client backup from Multi-Vendor Switch Config Builder.")]
     db, who, notes, now = auth.db(), auth.current_user()["username"], [], _now()
     counts = {"projects": [0, 0], "maps": [0, 0]}
@@ -437,7 +440,7 @@ def client_import(cid: int):
 def client_restore_new():
     """Server admins: make a new client from a backup file."""
     data, problem = _read_backup_file()
-    if problem is None and (not isinstance(data, dict) or data.get("format") != FORMAT):
+    if problem is None and (not isinstance(data, dict) or data.get("format") not in FORMATS):
         problem = "That is not a client backup from Multi-Vendor Switch Config Builder."
     name = (request.form.get("name") or "").strip() or str(((data or {}).get("client") or {}).get("name") or "").strip()
     if problem is None and not clients.NAME_RE.match(name):

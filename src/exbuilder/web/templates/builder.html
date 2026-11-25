@@ -1875,7 +1875,7 @@ document.getElementById("promote-box") && document.getElementById("reviews").add
 });
 document.getElementById("plist").addEventListener("click", async ev => {
   const b = ev.target.closest("button"); if (!b) return;
-  if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); showTab("Switch"); setStatus(`Opened ${p.name}.`, "ok"); }
+  if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); showTab("Switch"); setStatus(p.redacted ? `Opened ${p.name}. You have Read-only access, so passwords, keys and SNMP communities are hidden.` : `Opened ${p.name}.`, "ok"); }
   if (b.dataset.ask) {
     const note = window.prompt(`Ask for approval to put "${b.dataset.name}" into Production. What was tested? (optional)`, "");
     if (note === null) return;

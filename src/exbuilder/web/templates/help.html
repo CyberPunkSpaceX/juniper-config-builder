@@ -34,6 +34,7 @@ switch configuration appears live on the right, ready to copy or download and pa
   <li><a href="#eve">Testing in EVE-NG</a></li>
   <li><a href="#convert">Converting a config to another vendor</a></li>
   <li><a href="#terms">Words you'll see</a></li>
+  <li><a href="#toolkit">The Toolkit (many switches at once)</a></li>
 </ol>
 
 <h2 id="start">1. Getting started</h2>
@@ -400,8 +401,11 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     Every step is listed with who did it and when.</li>
   <li>Your unsaved work is kept in the browser per client, space and vendor, so it never follows you into another
     client, and Arista work doesn't overwrite Juniper work.</li>
-  <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>viewer</b>
-    (look), <b>editor</b> (save and delete) or <b>admin</b> (also manage people, SSH and EVE-NG settings).</li>
+  <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>Read-only</b>
+    (look, with passwords, keys and SNMP communities hidden), <b>Configurator</b> (build, save and delete) or
+    <b>Admin</b> (also manage people, SSH and EVE-NG settings, approve Lab work). A <b>Super Admin</b> manages every
+    client and the users. A Super Admin can give someone a level in <b>all clients</b>, which includes clients
+    added later, or in chosen clients only.</li>
   <li>A client admin can <b>Download a backup</b> of a client (projects, maps, config backups) on the client's page.</li>
 </ul>
 
@@ -497,5 +501,24 @@ or open it from a file.</p>
     port lets them on.</li>
   <li><b>DHCP snooping</b>: only trusted ports (uplinks) may answer DHCP, which stops rogue DHCP servers.</li>
 </ul>
+
+<h2 id="toolkit">14. The Toolkit (many switches at once)</h2>
+<p>Open <b>Toolkit</b> in the top bar. Its tools use the client and the Production or Lab space picked at the top.</p>
+<h3>Bulk build</h3>
+<ol>
+  <li>Build one switch the way you want every switch to look and save it as a project. Where a value changes per
+    switch, you can write a placeholder such as <code>{{ '{{' }}site{{ '}}' }}</code>, for example an SVI address of
+    <code>10.{{ '{{' }}site{{ '}}' }}.20.1/24</code>.</li>
+  <li>On <b>Bulk build</b>, pick that project as the template (or open a project .json file).</li>
+  <li>Paste a spreadsheet with one line per switch, or open a .csv file. <b>Download a starting spreadsheet</b> gives you
+    the right column names. Usual columns: <code>hostname</code> (required), <code>mgmt_address</code>,
+    <code>mgmt_gateway</code>, <code>model</code>, <code>serial</code>, <code>location</code>, <code>contact</code>,
+    <code>domain</code>. A column named like a placeholder fills it. A column such as <code>vlans.MGMT.irb</code> or
+    <code>system.banner</code> sets that field directly.</li>
+  <li><b>Build all</b>. Each line shows whether it built, with its problems: a hostname or management IP used twice, an
+    empty placeholder, or the builder's own errors.</li>
+  <li><b>Download zip</b> gives every config, every project and a summary sheet. <b>Save all as projects</b> saves each
+    switch as its own project (editor role needed).</li>
+</ol>
 </div>
 {% endblock %}
