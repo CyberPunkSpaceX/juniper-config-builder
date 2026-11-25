@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, aoscx_models, aoss_models, eos_models, fabric, fastiron_models, ios_models, nxos_models, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, aoscx_models, aoss_models, eos_models, fabric, fastiron_models, ios_models, nxos_models, os10_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -48,7 +48,7 @@ def _project_from_request() -> dict:
 
 
 _VENDOR_MODELS = {"arista": eos_models, "cisco": ios_models, "ruckus": fastiron_models, "aruba": aoscx_models, "procurve": aoss_models,
-                  "nexus": nxos_models}
+                  "nexus": nxos_models, "dell": os10_models}
 
 
 def _catalog(vendor: str) -> list[dict]:
@@ -69,6 +69,9 @@ def _defaults(vendor: str) -> dict:
         d["system"]["mgmt_interface"] = ""
     elif vendor == "cisco":
         d["switch"]["members"] = [{"fpc": 1, "model": "C9300-48P", "serial": "", "role": "routing-engine"}]
+    elif vendor == "dell":
+        d["switch"]["members"] = [{"fpc": 1, "model": "N3248TE-ON", "serial": "", "role": "routing-engine"}]
+        d["system"]["mgmt_interface"] = ""
     elif vendor == "nexus":
         d["switch"]["members"] = [{"fpc": 1, "model": "N9K-C93180YC-FX", "serial": "", "role": "routing-engine"}]
         d["system"]["mgmt_interface"] = ""

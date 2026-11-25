@@ -62,6 +62,12 @@ VENDORS: dict[str, Vendor] = {
         # are two projects); EVPN, policies, QoS and the tools come later.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "vlan_translation"}),
         ready=True),
+    "dell": Vendor(
+        "dell", "Dell", "SmartFabric OS10", "N3200, N2200, S5200 and the OS10 virtual lab",
+        # What the OS10 builder writes today. No stacking (VLT pairs are two projects) and no VLAN
+        # translation; PoE, port security, EVPN, policies, QoS and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port
