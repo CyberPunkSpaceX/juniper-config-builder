@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS config_pushes (
     pushed_at TEXT NOT NULL DEFAULT '',
     checked_at TEXT NOT NULL DEFAULT '',
     decided_by TEXT NOT NULL DEFAULT '',
-    decided_at TEXT NOT NULL DEFAULT ''
+    decided_at TEXT NOT NULL DEFAULT '',
+    request TEXT NOT NULL DEFAULT '',            -- held sessions (MikroTik): confirm / rollback asked, and the answer
+    heartbeat REAL                               -- held sessions: last sign of life of the held session
 );
 CREATE INDEX IF NOT EXISTS config_pushes_client ON config_pushes (client_id, id);
 """
@@ -82,6 +84,11 @@ _busy_lock = threading.Lock()
 
 def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(config_pushes)")}
+    for col, kind in (("request", "TEXT NOT NULL DEFAULT ''"), ("heartbeat", "REAL")):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE config_pushes ADD COLUMN {col} {kind}")
+    conn.commit()
 
 
 def disabled() -> bool:
@@ -176,6 +183,7 @@ class _Session:
         self.username, self.password, self.pkey, p = _creds(self.row, body)
         self.port = port or p
         self.key = (c["id"], host.lower())
+        self.keep = False   # True: the session is handed to a holder thread and stays open
 
     def __enter__(self):
         try:
@@ -198,7 +206,8 @@ class _Session:
 
     def __exit__(self, *exc):
         try:
-            self.shell.close()
+            if not self.keep:
+                self.shell.close()
         finally:
             self.password = ""
             with _busy_lock:
@@ -230,13 +239,17 @@ def _expire(cid: int) -> None:
     db.execute("UPDATE config_pushes SET status = 'expired', message = 'The timer ran out without a confirmation, "
                "so the switch put the old config back by itself.' WHERE client_id = ? AND status = 'waiting' AND "
                "deadline < ?", (cid, time.time()))
+    db.execute("UPDATE config_pushes SET status = 'rolled_back', message = 'The server lost the session it held, so "
+               "the switch undid the change by itself (Safe Mode).' WHERE client_id = ? AND status = 'waiting' AND "
+               "heartbeat IS NOT NULL AND heartbeat < ? AND request = ''", (cid, time.time() - 30))
     db.execute("UPDATE config_pushes SET status = 'cancelled' WHERE client_id = ? AND status = 'previewed' AND "
                "created_ts < ?", (cid, time.time() - PREVIEW_TTL))
     db.commit()
 
 
 def _out(r: sqlite3.Row, show_diff: bool) -> dict:
-    d = {k: r[k] for k in r.keys() if k not in ("diff", "created_ts", "deadline", "running_sha", "project_sha")}
+    d = {k: r[k] for k in r.keys() if k not in ("diff", "created_ts", "deadline", "running_sha", "project_sha",
+                                                "request", "heartbeat")}
     d["label"] = LABEL.get(r["status"], r["status"])
     d["deadline_at"] = _when(r["deadline"])
     d["seconds_left"] = max(0, int(r["deadline"] - time.time())) if r["status"] == "waiting" and r["deadline"] else 0
@@ -253,6 +266,91 @@ def _fail(c: dict, push_id: int | None, what: str, exc: Exception):
         auth.db().commit()
     _audit(c, f"{what} failed: {msg}")
     return {"error": msg}, 502
+
+
+def _keep_backup(cid: int, host: str, text: str, source: str, who: str, note: str) -> dict:
+    """Keep a config as a client backup. backups.store() reads Junos only for now; other vendors are kept as they are."""
+    saved = backups.store(auth.db(), cid, [{"name": host, "address": host, "text": text}], source, who, note=note,
+                          space="production")
+    if saved and saved[0].get("id"):
+        return saved[0]
+    db = auth.db()
+    digest = engine.sha(text)
+    last = db.execute("SELECT id, sha, created_at FROM config_backups WHERE client_id = ? AND space = 'production' AND "
+                      "host = ? AND source = ? ORDER BY id DESC LIMIT 1", (cid, host, source)).fetchone()
+    if last and last[1] == digest:
+        return {"id": last[0], "host": host, "unchanged": True, "since": last[2]}
+    bid = db.execute("INSERT INTO config_backups (client_id, space, host, address, source, note, text, sha, lines, "
+                     "created_at, created_by) VALUES (?, 'production', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                     (cid, host, host, source, note[:200], text, digest, text.count("\n") + 1, auth._now(), who)).lastrowid
+    db.commit()
+    return {"id": bid, "host": host, "unchanged": False}
+
+
+# ---------------------------------------------------- held sessions (MikroTik Safe Mode)
+def _start_holder(push_id: int, shell, drv, deadline: float) -> None:
+    path = auth.data_dir() / "users.db"
+    try:
+        shell.transport.set_keepalive(15)
+    except Exception:  # noqa: BLE001
+        pass
+    threading.Thread(target=_hold, args=(path, push_id, shell, drv, deadline), daemon=True,
+                     name=f"push-hold-{push_id}").start()
+
+
+def _hold(path, push_id: int, shell, drv, deadline: float) -> None:
+    """Keep the Safe Mode session open; act on confirm / rollback asked through the database (any worker can ask)."""
+    conn = sqlite3.connect(path, timeout=10)
+    try:
+        while True:
+            if time.time() >= deadline:
+                drv.drop()
+                log.warning("audit: push: timer of push %s ran out; Safe Mode session closed, the switch undid it",
+                            push_id)
+                return
+            req = conn.execute("SELECT request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()
+            req = req[0] if req else "rollback"
+            if req in ("confirm", "rollback"):
+                try:
+                    drv.confirm() if req == "confirm" else drv.rollback()
+                    answer = f"{req}:done"
+                except Exception as exc:  # noqa: BLE001
+                    drv.drop()  # when keeping fails, undo: never leave it half-done
+                    answer = f"{req}:failed: {exc}"[:500]
+                conn.execute("UPDATE config_pushes SET request = ? WHERE id = ?", (answer, push_id))
+                conn.commit()
+                return
+            if shell.transport is None or not shell.transport.is_active():
+                conn.execute("UPDATE config_pushes SET request = 'lost' WHERE id = ?", (push_id,))
+                conn.commit()
+                return
+            conn.execute("UPDATE config_pushes SET heartbeat = ? WHERE id = ?", (time.time(), push_id))
+            conn.commit()
+            time.sleep(1)
+    finally:
+        conn.close()
+        shell.close()
+
+
+def _ask_holder(push_id: int, action: str, wait: float = 45) -> None:
+    """Ask the thread holding the session to confirm or roll back, and wait for its answer."""
+    db = auth.db()
+    row = db.execute("SELECT heartbeat, request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()
+    if not row["heartbeat"] or time.time() - row["heartbeat"] > 15 or row["request"]:
+        raise engine.PushError("The server no longer holds the Safe Mode session, so the switch has undone the change "
+                               "by itself.")
+    db.execute("UPDATE config_pushes SET request = ? WHERE id = ?", (action, push_id))
+    db.commit()
+    end = time.time() + wait
+    while time.time() < end:
+        time.sleep(0.5)
+        answer = db.execute("SELECT request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()[0]
+        if answer.startswith(action + ":"):
+            if answer == f"{action}:done":
+                return
+            raise engine.PushError(answer.split(":", 2)[-1].strip() + " The session was closed, so Safe Mode undid "
+                                   "the change.")
+    raise engine.PushError("The session holder did not answer; if it is gone, the switch undoes the change by itself.")
 
 
 # ----------------------------------------------------------------- routes
@@ -272,6 +370,7 @@ def pushes():
             sup = engine.support(vendor)
             projects.append({"id": p["id"], "name": p["name"], "vendor": vendor, "approved": _approved(c, p) is not None,
                              "ready": sup.ready, "method": sup.method,
+                             "modes": list(engine.DRIVERS[vendor].modes) if vendor in engine.DRIVERS else [],
                              "hostname": str((data.get("system") or {}).get("hostname") or "")})
     return {"pushes": [_out(r, show) for r in rows], "projects": projects, "role": c["role"], "space": c["space"],
             "off": disabled() or sshfetch.disabled(),
@@ -292,6 +391,8 @@ def preview():
     if not engine.support(vendor).ready:
         return {"error": f"Pushing to {vendor} switches is not available yet."}, 400
     mode = "replace" if body.get("mode") == "replace" else "merge"
+    if mode not in engine.DRIVERS[vendor].modes:
+        return {"error": f"Replacing the whole config is not offered for {vendor}; use the builder's commands."}, 400
     host = str(body.get("host") or "").strip()
     if not host:
         return {"error": "Enter the switch address."}, 400
@@ -301,15 +402,14 @@ def preview():
     try:
         with sess as drv:
             running = drv.running()
-            result = drv.preview(res.set_text, res.hier_text, mode)
+            result = drv.preview(res, mode)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001 - every failure goes back to the page and the audit log
         return _fail(c, None, f"preview of {p['name']!r} on {host}", _friendly(host, exc))
-    saved = backups.store(auth.db(), c["id"], [{"name": host, "address": host, "text": running}], "prepush", me,
-                          note=f"before pushing {p['name']}", space="production")
+    saved = [_keep_backup(c["id"], host, running, "prepush", me, f"before pushing {p['name']}")]
     want = str((data.get("system") or {}).get("hostname") or "").strip()
-    found = backups.host_of(running, "")
+    found = engine.DRIVERS[vendor].hostname(running)
     warnings = []
     if want and found and want.lower() != found.lower():
         warnings.append(f"The switch is called {found}, but the project is for {want}. Check you have the right "
@@ -322,12 +422,13 @@ def preview():
         "mode, status, diff, check_ok, running_sha, backup_id, message, created_by, created_at, created_ts) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'previewed', ?, ?, ?, ?, ?, ?, ?, ?)",
         (c["id"], p["id"], p["name"], engine.sha(p["data"]), review["id"], vendor, host, sess.port, mode,
-         result["diff"][:500_000], int(result["check_ok"]), engine.sha(running), (saved[0] or {}).get("id"),
+         result["diff"][:500_000], int(result["check_ok"]), engine.config_sha(running), (saved[0] or {}).get("id"),
          " ".join(warnings) if result["check_ok"] else "commit check failed: " + result["check"][-500:],
          me, now, time.time())).lastrowid
     auth.db().commit()
     _audit(c, f"previewed {p['name']!r} on {host} ({mode}, push {pid}, check {'ok' if result['check_ok'] else 'FAILED'})")
     return {"id": pid, "diff": result["diff"], "check_ok": result["check_ok"], "check": result["check"],
+            "note": result.get("note", "From the switch itself (show | compare and commit check)."),
             "warnings": warnings, "hostname_mismatch": bool(want and found and want.lower() != found.lower()),
             "backup": saved[0] if saved else None, "preview_seconds": PREVIEW_TTL}
 
@@ -361,19 +462,23 @@ def apply(push_id: int):
     res = _build(data)
     me = auth.current_user()["username"]
     note = engine.comment(f"switchbuilder push {push_id} by {me}")
+    sess = _Session(c, r["vendor"], r["host"], body, port=r["port"])
     try:
-        with _Session(c, r["vendor"], r["host"], body, port=r["port"]) as drv:
+        with sess as drv:
             running = drv.running()
-            if engine.sha(running) != r["running_sha"]:
+            if engine.config_sha(running) != r["running_sha"]:
                 db.execute("UPDATE config_pushes SET status = 'cancelled', message = 'The switch config changed after "
                            "the preview.' WHERE id = ?", (push_id,))
                 db.commit()
                 return {"error": "The switch's running config changed after the preview. Preview again."}, 409
-            found = backups.host_of(running, "")
+            found = drv.hostname(running)
             if want and found and want.lower() != found.lower() and not body.get("hostname_ok"):
                 return {"error": f"The switch is called {found}, not {want}. Tick 'push anyway' if this is right."}, 409
             started = time.time()
-            out = drv.apply(res.set_text, res.hier_text, r["mode"], mins, note)
+            out = drv.apply(res, r["mode"], mins, str(push_id), note)
+            if drv.held:  # MikroTik: the session stays open in Safe Mode until confirm, rollback or the timer
+                sess.keep = True
+                _start_holder(push_id, sess.shell, drv, started + mins * 60)
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -384,6 +489,8 @@ def apply(push_id: int):
     deadline = started + mins * 60
     db.execute("UPDATE config_pushes SET status = 'waiting', minutes = ?, deadline = ?, pushed_by = ?, pushed_at = ?, "
                "message = ? WHERE id = ?", (mins, deadline, me, auth._now(), out[-500:], push_id))
+    if engine.DRIVERS[r["vendor"]].held:
+        db.execute("UPDATE config_pushes SET heartbeat = ? WHERE id = ? AND heartbeat IS NULL", (time.time(), push_id))
     db.commit()
     _audit(c, f"pushed {r['project_name']!r} to {r['host']} with a {mins} minute rollback timer (push {push_id}, "
               f"backup {r['backup_id']})")
@@ -401,7 +508,13 @@ def check(push_id: int):
         return {"error": f"This push is {LABEL.get(r['status'], r['status']).lower()}, nothing to check."}, 409
     try:
         with _Session(c, r["vendor"], r["host"], body, port=r["port"]) as drv:
-            pending = drv.pending_confirm()
+            if drv.held:  # a second session shows the switch is reachable; the held one carries the change
+                drv.running()
+                beat = auth.db().execute("SELECT heartbeat FROM config_pushes WHERE id = ?", (push_id,)).fetchone()[0]
+                pending = ("Safe Mode is on in the session the server holds" if beat and time.time() - beat < 15
+                           else "")
+            else:
+                pending = drv.pending_confirm(str(push_id))
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -435,18 +548,20 @@ def decide(push_id: int, action: str):
         return {"error": "Too late: the timer is about to run out and the switch will roll back."}, 409
     note = engine.comment(f"switchbuilder push {push_id} {'confirmed' if action == 'confirm' else 'rolled back'} by {me}")
     try:
+        if engine.DRIVERS[r["vendor"]].held:
+            _ask_holder(push_id, action)
         with _Session(c, r["vendor"], r["host"], body, port=r["port"]) as drv:
-            drv.confirm(note) if action == "confirm" else drv.rollback(note)
+            if not drv.held:
+                drv.confirm(str(push_id), note) if action == "confirm" else drv.rollback(str(push_id), note)
             after = drv.running()
     except HTTPException:
         raise
     except Exception as exc:  # noqa: BLE001
         return _fail(c, push_id, f"{action} of push {push_id}", _friendly(r["host"], exc))
-    saved = backups.store(db, c["id"], [{"name": r["host"], "address": r["host"], "text": after}], "postpush", me,
-                          note=f"after push {push_id} ({action})", space="production")
+    saved = _keep_backup(c["id"], r["host"], after, "postpush", me, f"after push {push_id} ({action})")
     status = "confirmed" if action == "confirm" else "rolled_back"
     db.execute("UPDATE config_pushes SET status = ?, decided_by = ?, decided_at = ?, after_backup_id = ?, message = ? "
-               "WHERE id = ?", (status, me, auth._now(), (saved[0] or {}).get("id") if saved else None,
+               "WHERE id = ?", (status, me, auth._now(), saved.get("id"),
                                 "Kept on the switch." if status == "confirmed" else "Rolled back on request.",
                                 push_id))
     db.commit()

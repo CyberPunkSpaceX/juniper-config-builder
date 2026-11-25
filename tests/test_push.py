@@ -25,6 +25,11 @@ for u in PROJECT["access"]["users"]:
 HOST = PROJECT["system"]["hostname"]
 
 
+class Res:
+    def __init__(self, set_text, hier_text=""):
+        self.set_text, self.hier_text = set_text, hier_text
+
+
 class Cli:
     """Just enough of the Junos CLI: operational and private configuration mode, load set, commit confirmed."""
 
@@ -362,11 +367,11 @@ def test_load_errors_stop_the_push(switch, tmp_path):
     shell, drv = engine.connect("juniper", "127.0.0.1", "netops", "Secret-123", tmp_path, switch["port"], nets)
     try:
         with pytest.raises(engine.PushError, match="did not accept"):
-            drv.apply("set vlans X vlan-id 5\nbogus line here\n", "", "merge", 5, "t")
+            drv.apply(Res("set vlans X vlan-id 5\nbogus line here\n"), "merge", 5, "1", "t")
         assert switch["cli"].pending == 0 and switch["cli"].candidate is None
         with pytest.raises(engine.PushError, match="no commit waiting"):
-            drv.confirm("t")
+            drv.confirm("1", "t")
     finally:
         shell.close()
     with pytest.raises(engine.PushError, match="not available yet"):
-        engine.connect("arista", "127.0.0.1", "netops", "x", tmp_path, switch["port"], nets)
+        engine.connect("unifi", "127.0.0.1", "netops", "x", tmp_path, switch["port"], nets)

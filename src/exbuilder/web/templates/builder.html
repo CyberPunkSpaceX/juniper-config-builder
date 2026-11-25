@@ -975,12 +975,12 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <p class="hint">Configs are pushed to switches from the <b>Production</b> space, after they are approved and promoted from here.</p>
       {% else %}
       <ol class="hint howto">
-        <li><b>Preview.</b> The server signs in to the switch, keeps its running config as a backup (Backups &amp; compare tab), loads the approved config into a private candidate and shows what the switch says would change. Nothing changes yet.</li>
-        <li><b>Push.</b> The switch commits with its own safe-revert timer (Junos <code>commit confirmed</code>), 10 minutes unless you pick another time.</li>
+        <li><b>Preview.</b> The server signs in to the switch, keeps its running config as a backup (Backups &amp; compare tab), and shows what would change (from the switch itself where it can: Juniper and Arista load it into a candidate that is thrown away). Nothing changes yet.</li>
+        <li><b>Push.</b> The switch commits with its own safe-revert timer (Junos <code>commit confirmed</code>, Arista commit timer, Cisco revert timer, Aruba CX checkpoint auto, a Nexus rollback job, MikroTik Safe Mode), 10 minutes unless you pick another time.</li>
         <li><b>Check.</b> A new SSH session makes sure the switch is still reachable after the change.</li>
         <li><b>Keep it</b> (confirm) before the timer runs out, or <b>roll back now</b>. If you do nothing, or the change cuts the switch off, it puts the old config back by itself.</li>
       </ol>
-      <p class="hint">Only projects approved and promoted from the Lab can be pushed, exactly as they were approved. Only admins of {{ client.name }} can push. Juniper works today; the other vendors' methods are listed below.</p>
+      <p class="hint">Only projects approved and promoted from the Lab can be pushed, exactly as they were approved. Only admins of {{ client.name }} can push. Juniper, Arista, Cisco, Nexus, Aruba CX and MikroTik can be pushed; the method each one uses is listed below.</p>
       {% if client.role == 'admin' and ssh.enabled %}
       <div class="grid" id="push-form">
         <div class="field"><label>Project</label><select id="push-project"></select></div>
@@ -999,7 +999,8 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="toolbar"><button type="button" id="push-preview">Preview changes</button><span class="status" id="push-status"></span></div>
       <div id="push-result" class="hide">
         <ul class="msgs" id="push-warn"></ul>
-        <h3>What the switch says would change</h3>
+        <h3>What would change</h3>
+        <p class="hint" id="push-note"></p>
         <pre class="cfg" id="push-diff" style="max-height:340px;overflow:auto"></pre>
         <label class="check hide" id="push-anyway-row"><input type="checkbox" id="push-anyway"> Push anyway: this is the right switch</label>
         <div class="toolbar"><button type="button" id="push-go" class="danger">Push with auto-rollback</button><button type="button" class="secondary small" id="push-discard">Discard preview</button></div>
@@ -1581,7 +1582,7 @@ function showTab(t, fromHistory) {
   activeTab = t; updateTabs(); renderFabric();
   if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
-  if (t === "Projects") { refreshProjects(); refreshPushes(); }
+  if (t === "Projects") refreshProjects();
   if (t === "Backups & compare") openBackups();
 }
 
@@ -1823,6 +1824,7 @@ async function refreshProjects() {
       || `<tr><td colspan="3" class="note">No saved projects yet.</td></tr>`;
   } catch (e) { document.getElementById("plist-status").textContent = "Could not load projects: " + e.message; }
   refreshReviews();
+  refreshPushes();
 }
 const REVIEW_LABEL = {pending: ["Waiting for approval", "warn"], approved: ["Approved", "ok"], rejected: ["Rejected", "bad"],
                       promoted: ["In Production", "ok"], undone: ["Promotion undone", "note"], replaced: ["Replaced or cancelled", "note"]};
@@ -2765,7 +2767,7 @@ async function refreshPushes() {
       ${p.status === "waiting" && pushData.role === "admin" ? `<button class="small" type="button" data-push-open="${p.id}">Open</button>` : ""}</td></tr>`;
   }).join("") || `<tr><td colspan="3" class="note">Nothing pushed yet.</td></tr>`;
   document.getElementById("push-support").innerHTML = Object.entries(pushData.support).map(([k, v]) =>
-    `<tr><td><b>${esc(k)}</b></td><td>${v.ready ? `<span class="status ok">Ready</span>` : `<span class="status note">Not yet</span>`} ${esc(v.method)}${v.auto_revert ? "" : " <span class='status bad'>no automatic rollback</span>"}<div class="note">${esc(v.note)}</div></td></tr>`).join("");
+    `<tr><td><b>${esc(k)}</b></td><td>${v.ready ? `<span class="status ok">Ready</span> ${esc(v.method)}` : v.auto_revert ? `<span class="status note">Not yet</span> ${esc(v.method)}` : `<span class="status bad">Not pushable: no automatic rollback</span>`}<div class="note">${esc(v.note)}</div></td></tr>`).join("");
   const waiting = pushData.pushes.find(p => p.status === "waiting");
   if (waiting && pushData.role === "admin" && (!pushLive || pushLive.id !== waiting.id)) showLive(waiting);
   if (!waiting && pushLive) hideLive();
@@ -2799,6 +2801,8 @@ if (document.getElementById("push-form")) {
   }));
   document.getElementById("push-project").addEventListener("change", () => {
     const p = (pushData?.projects || []).find(x => String(x.id) === document.getElementById("push-project").value);
+    const rep = document.querySelector('#push-mode option[value="replace"]');
+    if (p && rep) { rep.disabled = !p.modes.includes("replace"); if (rep.disabled) document.getElementById("push-mode").value = "merge"; }
     if (p && p.hostname && !document.getElementById("push-host").value) document.getElementById("push-host").value = p.hostname;
   });
   document.getElementById("push-preview").onclick = async () => {
@@ -2813,6 +2817,7 @@ if (document.getElementById("push-form")) {
     if (pushPrev.backup) w.push(pushPrev.backup.unchanged ? "Backup: the running config is the same as the last backup." : "Backup: the running config was kept.");
     document.getElementById("push-warn").innerHTML = w.map(x => `<li class="${/FAILED|called/.test(x) ? "err" : "low"}">${esc(x)}</li>`).join("");
     document.getElementById("push-diff").textContent = pushPrev.diff || "(no changes)";
+    document.getElementById("push-note").textContent = pushPrev.note || "";
     document.getElementById("push-anyway-row").classList.toggle("hide", !pushPrev.hostname_mismatch);
     document.getElementById("push-anyway").checked = false;
     document.getElementById("push-go").disabled = !pushPrev.check_ok || !pushPrev.diff.trim();

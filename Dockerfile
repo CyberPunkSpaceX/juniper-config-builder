@@ -21,4 +21,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
   CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz').status==200 else 1)"
 # Access logs are off on purpose: requests carry passwords and SNMP secrets.
 # --preload runs first-start setup once, before the workers fork.
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "60", "--preload", "exbuilder.web:create_app()"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--workers", "2", "--timeout", "300", "--preload", "exbuilder.web:create_app()"]
