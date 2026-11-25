@@ -137,9 +137,14 @@ class Eve:
 
     def juniper_images(self) -> list[dict]:
         """Juniper node types installed on the EVE-NG server, with their images."""
+        return self.images(JUNIPER)
+
+    def images(self, pattern) -> list[dict]:
+        """Node types whose template name or label matches ``pattern``, with their installed images."""
+        rx = re.compile(pattern, re.I) if isinstance(pattern, str) else pattern
         out = []
         for tpl, label in sorted((self.call("GET", "/api/list/templates/") or {}).items()):
-            if not JUNIPER.search(f"{tpl} {label}") or "missing" in str(label).lower():
+            if not rx.search(f"{tpl} {label}") or "missing" in str(label).lower():
                 continue
             info = self.call("GET", f"/api/list/templates/{urllib.parse.quote(tpl)}") or {}
             images = sorted(((info.get("options") or {}).get("image") or {}).get("list") or {})

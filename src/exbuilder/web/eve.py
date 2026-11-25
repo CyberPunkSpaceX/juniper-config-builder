@@ -17,7 +17,7 @@ import time
 
 from flask import Blueprint, abort, request
 
-from .. import cryptpw, eveng
+from .. import cryptpw, eveng, evelab
 from . import auth, clients
 
 bp = Blueprint("eve", __name__)
@@ -125,13 +125,22 @@ def test(row) -> str:
     try:
         st = eve.status()
         images = eve.juniper_images()
+        images_cache = eve.images(r".")
     finally:
         eve.logout()
     usable = [f"{i['label']}: {len(i['images'])} image(s)" for i in images if i["supported"]]
-    other = [i["label"] for i in images if not i["supported"]]
+    found = []
+    for lab in evelab.LABS.values():
+        if lab.vendor != "juniper" and eve_has(row, lab, images_cache):
+            found.append(lab.label)
     return (f"Connected to EVE-NG {st.get('version', '')}. "
-            + (f"Lab images: {'; '.join(usable)}." if usable else "No vJunos-switch or vJunos-router images found.")
-            + (f" Also installed (not used for labs yet): {', '.join(other)}." if other else ""))
+            + (f"Juniper lab images: {'; '.join(usable)}." if usable else "No vJunos-switch or vJunos-router images found.")
+            + (f" Other vendors with a lab image: {', '.join(found)}." if found else
+               " No other vendors' lab images found (vEOS, Cat9kv, Nexus 9000v, OS10, EXOS, AOS-CX, CHR)."))
+
+
+def eve_has(row, lab, cache: list) -> bool:
+    return any(re.search(lab.match, f"{i['template']} {i['label']}", re.I) for i in cache)
 
 
 # ----------------------------------------------------------------- jobs
@@ -243,21 +252,93 @@ def _build(job: Job, row: dict, name: str, template: str, image: str, items: lis
         eve.logout()
 
 
+def _build_one(job: Job, row: dict, name: str, template: str, image: str, project: dict, replace: bool,
+               start: bool, who: str) -> dict:
+    """A one-switch lab from the project open in the builder (any vendor with a lab image)."""
+    vendor = str(project.get("vendor") or "juniper")
+    lab_def = evelab.LABS[vendor]
+    lab_pw = secrets.token_urlsafe(12)
+    lines, mapping, notes = evelab.lab_text(project, lab_pw, cryptpw.sha512_crypt(lab_pw))
+    for n in notes:
+        job.step(n, "warn" if "left out" in n else "info")
+    hostname = str((project.get("system") or {}).get("hostname") or project.get("name") or "switch")
+    node_name = re.sub(r"[^A-Za-z0-9_-]", "-", hostname)[:30] or "switch"
+    eve = connect(row)
+    try:
+        folder = row["eve_folder"] or "/exbuilder"
+        job.step(f"Signed in to EVE-NG. Making the lab {folder}/{name}.")
+        eve.ensure_folder(folder)
+        lab = f"{folder}/{name}.unl"
+        if eve.lab_exists(lab):
+            if not replace:
+                raise eveng.EveError(f"A lab called {name} already exists in {folder}. Pick another name, "
+                                     "or tick 'Replace it'.")
+            try:
+                eve.stop(lab)
+            except eveng.EveError:
+                pass
+            eve.delete_lab(lab)
+            job.step("Deleted the old lab with the same name.")
+        lab = eve.create_lab(folder, name, f"{lab_def.label} lab of {hostname}, built by Multi-Vendor Switch "
+                                           f"Config Builder for {row['name']} by {who}.")
+        eve_id = eve.add_node(lab, {
+            "type": "qemu", "template": template, "image": image, "name": node_name,
+            "cpu": lab_def.cpu, "ram": lab_def.ram, "ethernet": lab_def.ports + 1,
+            "console": "telnet", "icon": lab_def.icon, "left": 300, "top": 200, "delay": 0})
+        job.step(f"Added a {lab_def.label} node ({lab_def.cpu} CPU, {lab_def.ram // 1024 or 1} GB RAM). "
+                 "Connect its ports to EVE-NG networks or other nodes to test traffic.")
+        nodes = [{"name": node_name, "hostname": hostname, "eve_id": eve_id, "ports": mapping,
+                  "vendor": vendor, "dialect": lab_def.dialect, "boot": lab_def.boot}]
+        db = sqlite3.connect(job.path, timeout=10)
+        with db:
+            lab_id = db.execute(
+                "INSERT INTO eve_labs (client_id, name, path, template, image, nodes, lab_password, created_at, "
+                "created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (row["id"], name, lab, template, image, json.dumps(nodes),
+                 clients._fernet().encrypt(lab_pw.encode()).decode(), auth._now(), who)).lastrowid
+        db.close()
+        log.warning("audit: %r built EVE-NG %s lab %s for client %r", who, vendor, lab, row["name"])
+        result = {"lab_id": lab_id, "lab": lab, "nodes": nodes, "loaded": []}
+        if not start:
+            job.step("The lab is ready. Start it and load the config from the lab list when you want.", "ok")
+            return result
+        result["loaded"] = _start_and_load(job, eve, lab, nodes, {node_name: lines}, lab_pw)
+        return result
+    finally:
+        eve.logout()
+
+
 def _start_and_load(job: Job, eve: eveng.Eve, lab: str, nodes: list, configs: dict, lab_pw: str) -> list:
     eve.start(lab)
-    job.step("Started the lab. vJunos takes about 5 to 10 minutes to boot; the configs go in as each node is ready.")
+    boot = nodes[0].get("boot") if nodes else ""
+    job.step(f"Started the lab. It takes about {boot or '5 to 10 minutes'} to boot; the config goes in as each "
+             "node is ready.")
     results: dict[str, str] = {}
 
     def load(node):
         con = None
         try:
             host, port = eve.console(lab, node["eve_id"])
-            con = eveng.Console(host, port)
-            con.login([("root", ""), (eveng.LAB_USER, lab_pw)])
             lines = configs[node["name"]]
-            con.push(lines, eveng.top_levels(lines))
-            results[node["name"]] = "ok"
-            job.step(f"{node['name']}: config loaded and committed.", "ok")
+            if node.get("dialect", "junos") == "junos":
+                con = eveng.Console(host, port)
+                con.login([("root", ""), (eveng.LAB_USER, lab_pw)])
+                con.push(lines, eveng.top_levels(lines))
+                results[node["name"]] = "ok"
+                job.step(f"{node['name']}: config loaded and committed.", "ok")
+            else:
+                con = evelab.LabConsole(host, port, node["dialect"], lab_pw)
+                con.login()
+                job.step(f"{node['name']}: signed in on the console, typing {len(lines)} lines.")
+                refused = con.push(lines)
+                results[node["name"]] = "ok"
+                for r in refused[:20]:
+                    job.step(f"{node['name']}: refused: {r}"[:400], "warn")
+                if len(refused) > 20:
+                    job.step(f"{node['name']}: {len(refused) - 20} more lines refused.", "warn")
+                job.step(f"{node['name']}: config typed in and saved"
+                         + (f" ({len(refused)} line(s) refused, see above)." if refused else "."),
+                         "warn" if refused else "ok")
         except (eveng.EveError, OSError) as exc:
             results[node["name"]] = str(exc)
             job.step(f"{node['name']}: {exc}", "error")
@@ -290,23 +371,31 @@ def _pull(job: Job, row: dict, lab_row: dict) -> dict:
             con = None
             try:
                 host, port = eve.console(lab_row["path"], node["eve_id"])
-                con = eveng.Console(host, port)
-                con.login([(eveng.LAB_USER, lab_pw), ("root", "")], boot_timeout=120)
-                text = con.pull()
-                back = {v: k for k, v in node["ports"].items()}   # lab port -> real port
-                text = eveng.rename_ports(text, back)
-                text = "\n".join(ln for ln in text.split("\n") if f"login user {eveng.LAB_USER} " not in ln)
-                out.append({"name": node["hostname"], "text": text, "lldp": ""})
+                if node.get("dialect", "junos") == "junos":
+                    con = eveng.Console(host, port)
+                    con.login([(eveng.LAB_USER, lab_pw), ("root", "")], boot_timeout=120)
+                    text = con.pull()
+                    back = {v: k for k, v in node["ports"].items()}   # lab port -> real port
+                    text = eveng.rename_ports(text, back)
+                    text = "\n".join(ln for ln in text.split("\n") if f"login user {eveng.LAB_USER} " not in ln)
+                else:
+                    con = evelab.LabConsole(host, port, node["dialect"], lab_pw)
+                    con.login(boot_timeout=120)
+                    text = evelab.strip_lab_user(evelab.rename_back(con.pull(), node["ports"]))
+                out.append({"name": node["hostname"], "text": text, "lldp": "",
+                            "vendor": node.get("vendor", "juniper")})
                 job.step(f"{node['name']}: read {text.count(chr(10))} lines.", "ok")
             except (eveng.EveError, OSError) as exc:
                 job.step(f"{node['name']}: {exc}", "error")
             finally:
                 if con:
                     con.close()
-        if out:   # keep them as config backups too
+        junos = [o for o in out if o["vendor"] == "juniper"]
+        if junos:   # keep them as config backups too (backups and compare are Junos only for now)
             from . import backups
             with job._db() as conn:
-                backups.store(conn, lab_row["client_id"], out, "eve", job.who, note=f"lab {lab_row['name']}", space="lab")
+                backups.store(conn, lab_row["client_id"], junos, "eve", job.who, note=f"lab {lab_row['name']}",
+                              space="lab")
         return {"items": out}
     finally:
         eve.logout()
@@ -414,6 +503,57 @@ def lab_action(lid: int, action: str):
         return {"error": str(exc)}, 400
     log.warning("audit: %r %s EVE-NG lab %s (client %r)", who, action, lab["path"], c["name"])
     return {"ok": True}
+
+
+@bp.get("/eve/vendor")
+def vendor_lab():
+    """What a vendor's lab runs on, and the matching images on this client's EVE-NG."""
+    vendor = request.args.get("vendor", "juniper")
+    info = evelab.catalog().get(vendor) or {"vendor": vendor, "possible": False,
+                                            "why": "This vendor has no EVE-NG lab image."}
+    if not info["possible"]:
+        return {"lab": info, "images": []}
+    c, row = _client_row("editor")
+    lab_def = evelab.LABS[vendor]
+    try:
+        eve = connect(row)
+        try:
+            found = eve.images(lab_def.match)
+        finally:
+            eve.logout()
+    except eveng.EveError as exc:
+        return {"lab": info, "images": [], "error": str(exc), "settings": settings(row)}, 400
+    return {"lab": info, "images": found, "settings": settings(row)}
+
+
+@bp.post("/eve/project-labs")
+def build_one():
+    body = request.get_json(silent=True) or {}
+    c, row = _client_row("admin")
+    project = body.get("project")
+    if not isinstance(project, dict):
+        return {"error": "Send the project."}, 400
+    vendor = str(project.get("vendor") or "juniper")
+    if vendor not in evelab.LABS:
+        return {"error": evelab.NO_LAB.get(vendor, "This vendor has no EVE-NG lab image.")}, 400
+    name = str(body.get("name") or "").strip()
+    if not eveng.NAME_RE.match(name):
+        return {"error": "Lab names are letters, digits, - and _ (up to 48), starting with a letter or digit."}, 400
+    template = str(body.get("template") or "").strip()
+    image = str(body.get("image") or "").strip()
+    if not re.match(r"^[A-Za-z0-9_.-]{1,60}$", template) or not re.match(r"^[A-Za-z0-9_.+-]{1,200}$", image):
+        return {"error": f"Pick the {evelab.LABS[vendor].label} image first."}, 400
+    if not settings(row)["configured"]:
+        return {"error": "EVE-NG is not set up for this client yet."}, 400
+    try:
+        evelab.lab_project(project, "check-only")
+    except eveng.EveError as exc:
+        return {"error": str(exc)}, 400
+    who = auth.current_user()["username"]
+    job = Job(c["id"], "build", who)
+    _run(job, _build_one, row, name, template, image, project, bool(body.get("replace")),
+         bool(body.get("start", True)), who)
+    return {"job": job.id}
 
 
 @bp.get("/eve/jobs/<int:jid>")

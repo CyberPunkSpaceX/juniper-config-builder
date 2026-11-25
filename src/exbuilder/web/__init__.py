@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -166,7 +166,8 @@ def create_app() -> Flask:
                                defaults=_defaults(v.key), port_aliases=_aliases(v.key), examples=_examples(v.key), timezones=zones, fabric_templates=fabric.TEMPLATES,
                                fabric_flavors=fabric.FLAVORS, fabric_defaults=fabric.DEFAULTS,
                                ssh=clients.ssh_settings(), client=clients.current(),
-                               eve=eve.page_settings())
+                               eve=eve.page_settings(), eve_lab=evelab.catalog().get(v.key),
+                               eve_labs_all=evelab.catalog())
 
     @app.get("/healthz")
     def healthz():

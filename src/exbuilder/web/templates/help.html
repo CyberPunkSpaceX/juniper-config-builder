@@ -12,6 +12,8 @@
 .toc a, .help a { color: var(--accent); }
 .vendor-help { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 4px 16px 10px; margin: 12px 0; }
 .vendor-help h3 { margin-top: 12px; }
+table.vt { border-collapse: collapse; margin: 8px 0 12px; font-size: 14px; }
+table.vt th, table.vt td { border: 1px solid var(--border, #cbd5e1); padding: 5px 9px; text-align: left; }
 </style>
 <div class="help">
 <h1>How to use it</h1>
@@ -29,6 +31,7 @@ switch configuration appears live on the right, ready to copy or download and pa
   <li><a href="#passwords">Passwords and secrets</a></li>
   <li><a href="#projects">Projects and clients</a></li>
   <li><a href="#tools">Tools (Juniper)</a></li>
+  <li><a href="#eve">Testing in EVE-NG</a></li>
   <li><a href="#terms">Words you'll see</a></li>
 </ol>
 
@@ -394,14 +397,59 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li><b>Network map</b>: drop several switch configs (or a .zip) to draw the switches and the links between them,
     and check that both ends of each link agree. Client admins can fetch configs straight from the switches over SSH
     (read-only commands only, inside the client's allowed networks).</li>
-  <li><b>EVE-NG lab</b> (Lab space only): build a virtual lab from the map, push the configs, test, and pull them back.</li>
+  <li><b>EVE-NG lab</b> (Lab space only, every vendor that has a lab image): see <a href="#eve">Testing in EVE-NG</a>.</li>
   <li><b>Backups &amp; compare</b>: keeps every fetched config, and compares any two configs (live, backup, builder,
     lab or pasted), with the commands that make one like the other.</li>
   <li><b>EVPN-VXLAN fabric wizard</b> (Advanced): pick a fabric type and the number of switches; it works out every
     address and writes one config per switch.</li>
 </ul>
 
-<h2 id="terms">11. Words you'll see</h2>
+<h2 id="eve">11. Testing in EVE-NG</h2>
+<p>With an <a href="https://www.eve-ng.net/" target="_blank" rel="noopener">EVE-NG</a> server you can try a config on a
+virtual switch before it goes near a real one. Labs live in the <b>Lab</b> space, so test configs never mix with
+production ones.</p>
+<table class="vt">
+  <tr><th>Vendor</th><th>Lab node in EVE-NG</th><th>Lab ports</th><th>Needs about</th></tr>
+  <tr><td>Juniper</td><td>vJunos-switch</td><td>ge-0/0/0 to 9</td><td>4 CPU, 5 GB</td></tr>
+  <tr><td>Arista</td><td>vEOS-lab</td><td>Ethernet1 to 12</td><td>2 CPU, 4 GB</td></tr>
+  <tr><td>Cisco Catalyst</td><td>Catalyst 9000v (Cat9kv)</td><td>Gi1/0/1 to 8</td><td>4 CPU, 18 GB</td></tr>
+  <tr><td>Cisco Nexus</td><td>Nexus 9000v</td><td>Ethernet1/1 to 16</td><td>2 CPU, 10 GB</td></tr>
+  <tr><td>Dell</td><td>OS10 virtual</td><td>ethernet1/1/1 to 16</td><td>2 CPU, 4 GB</td></tr>
+  <tr><td>Extreme</td><td>EXOS VM</td><td>1 to 8</td><td>1 CPU, 1 GB</td></tr>
+  <tr><td>HPE Aruba CX</td><td>AOS-CX simulator</td><td>1/1/1 to 8</td><td>2 CPU, 4 GB</td></tr>
+  <tr><td>MikroTik</td><td>Cloud Hosted Router (CHR)</td><td>ether1 to 8</td><td>1 CPU, 0.5 GB</td></tr>
+</table>
+<p><b>Not possible:</b> FortiSwitch, Brocade / Ruckus ICX, HPE ProCurve / AOS-S and UniFi have no virtual switch image,
+so they can't run in EVE-NG. Test those on a spare switch. (For UniFi you can run the UniFi Network app in a VM to try
+the settings.)</p>
+<h3>Set it up once</h3>
+<ol>
+  <li>Install the images on the EVE-NG server the usual EVE-NG way (copy the image to
+    <code>/opt/unetlab/addons/qemu/&lt;type&gt;-&lt;version&gt;/</code> and run
+    <code>/opt/unetlab/wrappers/unl_wrapper -a fixpermissions</code>). The images come from each vendor's
+    download site with your account.</li>
+  <li>A client admin opens <b>Clients → (client) → EVE-NG lab server</b>, enters the EVE-NG address, an EVE-NG account
+    made for the builder and the lab folder, then clicks <b>Test the connection</b>. It lists the lab images it found.</li>
+</ol>
+<h3>Build a lab</h3>
+<ol>
+  <li>Click <b>Lab</b> at the top, open the client and the vendor, and build the switch as usual (no errors left).</li>
+  <li>Open the <b>EVE-NG lab</b> tab (under Tools), pick the image, name the lab and click <b>Build this switch in
+    EVE-NG</b>.</li>
+  <li>The builder moves the ports the project uses onto the lab switch's ports, in order (every port group and LAG
+    gets at least one; the mapping is listed under the lab). It leaves out other stack members, the management address
+    and the banner, and adds a lab login <code>exb-lab</code> with a random password.</li>
+  <li>With <b>Start the lab and load the config</b> ticked, the lab starts, the builder answers the switch's first-boot
+    questions on its console, types the config in line by line and saves it. Lines the switch refuses are listed in
+    the progress. Booting takes from 1 minute (CHR) to 15 minutes (Cat9kv); you can leave the page.</li>
+  <li>In EVE-NG, connect the node's ports to other nodes or networks and test.</li>
+  <li><b>Pull configs</b> reads the config back over the console, with the project's port names again and without
+    the lab login, so you can compare it or download it.</li>
+</ol>
+<p>For Juniper there is also <b>Build lab from the map</b>: every switch on the network map becomes a vJunos node,
+cabled like the map.</p>
+
+<h2 id="terms">12. Words you'll see</h2>
 <ul>
   <li><b>VLAN</b>: a separate network on the same switch. <b>Tagged</b> frames carry the VLAN number; <b>untagged</b>
     don't.</li>
