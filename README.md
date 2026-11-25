@@ -361,7 +361,32 @@ client's page; where both apply, the higher level wins. Internally the client
 roles are still called `viewer`, `editor` and `admin`, and Super Admin is the
 `admin` user role, so existing users keep exactly the access they had.
 
-Super Admins create, rename and delete clients under **Clients**. Deleting a client asks you to type
+Super Admins create, rename and delete clients under **Clients**.
+
+### Sign in with a company account (LDAP, Entra ID, Google, Okta, SAML)
+
+A Super Admin sets this up under **Sign-in** in the top bar:
+
+- **LDAP / Active Directory**: people type their directory username and
+  password on the normal sign-in page. Use `ldaps://` (or StartTLS) and a
+  read-only service account. Groups inside groups work on AD.
+- **OpenID Connect**: Microsoft Entra ID (Azure AD), Google Workspace, Okta,
+  Authentik, Keycloak. Register the app with the redirect URI shown on the
+  page; a "Sign in with ..." button appears on the sign-in page.
+- **SAML 2.0**: Entra ID, ADFS, Okta, Google, Authentik, JumpCloud. Give the
+  provider the entity ID and reply (ACS) URL shown, or paste its metadata.
+  Sign the assertion, leave assertion encryption off.
+
+Each provider has group rules, one per line: `group = level @ clients`, for
+example `Network Engineers = configurator @ all` or
+`Helpdesk = readonly @ Acme, Default`. Access is set from the person's groups
+at every sign-in. Without a matching group the sign-in is refused (unless you
+tick "Let people in without a matching group"). Local accounts always keep
+working, so a local Super Admin can sign in if the directory is down.
+OIDC and SAML users use the provider's MFA instead of this app's codes;
+LDAP users follow this app's 2FA rules. Set **App address** to the https
+address people use so the links back from the provider are right behind
+Nginx Proxy Manager. Deleting a client asks you to type
 its name, and removes its projects, maps, config backups and settings. On the first start after
 upgrading, everything saved before moves into a client called **Default**
 (rename it to suit), and people who had saved projects become its editors.
