@@ -28,7 +28,7 @@ from flask import Flask, Response, abort, flash, redirect, render_template, requ
 
 from .. import __version__, redact, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, backups, clients, converter, eve, promote, toolkit
+from . import auth, backups, clients, converter, eve, promote, saml, sso, toolkit
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -125,6 +125,8 @@ def create_app() -> Flask:
                 request.path.startswith("/clients/") and request.path.endswith("/import")):
             request.max_content_length = 25 * 1024 * 1024
     auth.init_app(app)
+    sso.init_app(app)
+    saml.init_app(app)
     clients.init_app(app)
     eve.init_app(app)
     backups.init_app(app)

@@ -12,4 +12,11 @@
     <input id="p" type="password" name="password" autocomplete="current-password" required></div>
   <button type="submit">Sign in</button>
 </form>
+{% if providers %}
+<div class="panel sso">
+  <p class="muted" style="margin-top:0">Or sign in with your company account:</p>
+  {% for p in providers %}<a class="button sso-btn" href="{{ p.url }}{% if request.args.get('next') %}?next={{ request.args.get('next')|urlencode }}{% endif %}">Sign in with {{ p.label }}</a>{% endfor %}
+</div>
+<style>.sso-btn { display: block; text-align: center; margin: 6px 0; padding: 9px 12px; border: 1px solid var(--border); border-radius: 6px; text-decoration: none; font-weight: 600; }</style>
+{% endif %}
 {% endblock %}
