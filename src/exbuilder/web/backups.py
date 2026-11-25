@@ -27,7 +27,7 @@ from datetime import datetime, timezone
 from flask import Blueprint, Response, abort, flash, redirect, request, url_for
 
 from .. import compare as cmp
-from .. import importer, sshfetch
+from .. import importer, redact, sshfetch
 from . import auth, clients
 
 bp = Blueprint("backups", __name__)
@@ -162,10 +162,12 @@ def backups_list():
 def backups_get(bid: int):
     c = clients.need("viewer")
     r = _get(c["id"], bid)
+    text = r["text"] if clients.can_see_secrets(c) else redact.config(r["text"])
     if request.args.get("download"):
-        return Response(r["text"], mimetype="text/plain",
+        return Response(text, mimetype="text/plain",
                         headers={"Content-Disposition": f"attachment; filename={_filename(r)}"})
-    return {k: r[k] for k in ("id", "host", "address", "source", "note", "lines", "created_at", "created_by", "text")}
+    out = {k: r[k] for k in ("id", "host", "address", "source", "note", "lines", "created_at", "created_by")}
+    return {**out, "text": text, "redacted": not clients.can_see_secrets(c)}
 
 
 @bp.post("/backups")
@@ -217,7 +219,7 @@ def backups_export():
             while name in used:
                 name = "x-" + name
             used.add(name)
-            zf.writestr(name, r["text"])
+            zf.writestr(name, r["text"] if clients.can_see_secrets(c) else redact.config(r["text"]))
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     return Response(buf.getvalue(), mimetype="application/zip", headers={
         "Content-Disposition": f"attachment; filename={_safe(c['name'])}-configs-{stamp}.zip"})

@@ -8,12 +8,15 @@ On first start with an empty database, an admin is created from
 those aren't set, the first admin is ``admin`` with password ``admin``, and it
 must choose a new password at its first sign-in.
 
-Roles:
+Access levels (shown on the Users page):
 
-* ``admin``: server admin. Builds configs, manages users, and sees and manages
-  every client (see clients.py).
-* ``user``: builds configs and changes their own password; sees the clients
-  they are a member of, with the role they have there.
+* **Super Admin** (``role = 'admin'``): manages users, sign-in settings and
+  every client, including new ones.
+* **Admin**, **Configurator**, **Read-only** (``role = 'user'``): their level
+  in a client is the client role ``admin``, ``editor`` or ``viewer`` (see
+  clients.py). A user gets that level either in chosen clients
+  (``client_members``) or in all clients, also ones made later
+  (``users.all_clients``). Where both apply, the higher one wins.
 
 Two-factor sign-in: each user can turn on authenticator-app codes (TOTP) on
 "My account". Server admins must use it (``EXB_REQUIRE_2FA_ADMINS``, default
@@ -66,6 +69,8 @@ from . import twofactor
 bp = Blueprint("auth", __name__, template_folder="templates")
 
 ROLES = ("user", "admin")  # first one is the default for new users
+# Access levels on the Users page: a client role, or "super" (server admin).
+LEVELS = {"viewer": "Read-only", "editor": "Configurator", "admin": "Admin", "super": "Super Admin"}
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.@-]{2,64}$")
 MIN_PASSWORD = 10
 DEFAULT_ADMIN = "admin"  # first-start username and password when none is configured
@@ -96,6 +101,7 @@ NEW_COLUMNS = {
     "totp_last": "INTEGER",      # last accepted time step, so a code works once
     "recovery": "TEXT",          # JSON list of sha256 hashes of unused recovery codes
     "api_token": "TEXT",         # scrypt hash of the user's API token
+    "all_clients": "TEXT",       # client role in every client (also new ones); NULL = only chosen clients
 }
 
 
@@ -623,11 +629,66 @@ def api_token():
     return render_template("auth/token.html", token=token)
 
 
+def access_of(user_id: int) -> dict:
+    """A user's access: level and clients, for the Users page."""
+    u = db().execute("SELECT role, all_clients FROM users WHERE id = ?", (user_id,)).fetchone()
+    rows = db().execute("SELECT c.id, c.name, m.role FROM client_members m JOIN clients c ON c.id = m.client_id "
+                        "WHERE m.user_id = ? ORDER BY c.name COLLATE NOCASE", (user_id,)).fetchall()
+    if u["role"] == "admin":
+        return {"level": "super", "scope": "all", "clients": [], "text": "Super Admin, all clients"}
+    if u["all_clients"] in LEVELS:
+        extra = [f"{r['name']}: {LEVELS[r['role']]}" for r in rows
+                 if _rank(r["role"]) > _rank(u["all_clients"])]
+        text = f"{LEVELS[u['all_clients']]}, all clients" + (f" ({', '.join(extra)})" if extra else "")
+        return {"level": u["all_clients"], "scope": "all", "clients": [r["id"] for r in rows], "text": text}
+    levels = {r["role"] for r in rows}
+    level = max(levels, key=_rank) if levels else "viewer"
+    text = ", ".join(f"{r['name']}: {LEVELS[r['role']]}" for r in rows) or "No clients yet"
+    return {"level": level, "scope": "some", "clients": [r["id"] for r in rows], "text": text}
+
+
+def _rank(role: str | None) -> int:
+    return ("viewer", "editor", "admin").index(role) if role in ("viewer", "editor", "admin") else -1
+
+
+def _read_access(form) -> tuple[str, str, list[int]] | str:
+    """(level, scope, client ids) from the Users page form, or an error message."""
+    level = form.get("level", "viewer")
+    scope = form.get("scope", "some")
+    if level not in LEVELS:
+        return "Unknown access level."
+    if scope not in ("all", "some"):
+        return "Pick all clients or the chosen clients."
+    try:
+        ids = sorted({int(x) for x in form.getlist("clients")})
+    except ValueError:
+        return "Unknown client."
+    known = {r[0] for r in db().execute("SELECT id FROM clients")}
+    if any(i not in known for i in ids):
+        return "Unknown client."
+    return level, scope, ids
+
+
+def set_access(uid: int, level: str, scope: str, ids: list[int]) -> None:
+    """Give a user a level in all clients (also future ones) or in the chosen clients only."""
+    if level == "super":
+        db().execute("UPDATE users SET role = 'admin', all_clients = NULL WHERE id = ?", (uid,))
+        return
+    db().execute("UPDATE users SET role = 'user', all_clients = ? WHERE id = ?",
+                 (level if scope == "all" else None, uid))
+    db().execute("DELETE FROM client_members WHERE user_id = ?", (uid,))
+    if scope == "some":
+        db().executemany("INSERT INTO client_members (client_id, user_id, role) VALUES (?, ?, ?)",
+                         [(cid, uid, level) for cid in ids])
+
+
 @bp.get("/users")
 @admin_required
 def users():
     rows = db().execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
-    return render_template("auth/users.html", users=rows, roles=ROLES, min_password=MIN_PASSWORD)
+    all_clients = db().execute("SELECT id, name FROM clients ORDER BY name COLLATE NOCASE").fetchall()
+    return render_template("auth/users.html", users=rows, levels=LEVELS, min_password=MIN_PASSWORD,
+                           clients=all_clients, access={u["id"]: access_of(u["id"]) for u in rows})
 
 
 @bp.post("/users")
@@ -635,18 +696,22 @@ def users():
 def users_create():
     username = request.form.get("username", "").strip()
     password = request.form.get("password", "")
-    role = request.form.get("role", "user")
+    access = _read_access(request.form)
     if not USERNAME_RE.match(username):
         flash("Usernames are 2 to 64 letters, digits, dots, dashes, underscores or @.", "error")
-    elif role not in ROLES:
-        flash("Unknown role.", "error")
+    elif isinstance(access, str):
+        flash(access, "error")
     elif problem := password_problem(password):
         flash(problem, "error")
     elif db().execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
         flash(f"User {username} already exists.", "error")
     else:
-        create_user(username, password, role, must_change=bool(request.form.get("must_change")))
-        flash(f"User {username} created.", "ok")
+        create_user(username, password, "user", must_change=bool(request.form.get("must_change")))
+        uid = db().execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()[0]
+        set_access(uid, *access)
+        db().commit()
+        log.warning("audit: %r created user %r (%s)", current_user()["username"], username, access_of(uid)["text"])
+        flash(f"User {username} created: {access_of(uid)['text']}.", "ok")
     return redirect(url_for("auth.users"))
 
 
@@ -664,25 +729,27 @@ def users_update(uid: int):
         if uid == me["id"]:
             flash("You can't delete your own account.", "error")
         elif target["role"] == "admin" and count_admins(exclude_id=uid) == 0:
-            flash("You can't delete the last active admin.", "error")
+            flash("You can't delete the last active Super Admin.", "error")
         else:
             db().execute("DELETE FROM client_members WHERE user_id = ?", (uid,))
             db().execute("DELETE FROM users WHERE id = ?", (uid,))
             flash(f"User {name} deleted.", "ok")
-    elif action == "role":
-        role = request.form.get("role")
-        if role not in ROLES:
-            flash("Unknown role.", "error")
-        elif role != "admin" and target["role"] == "admin" and count_admins(exclude_id=uid) == 0:
-            flash("You can't remove the last active admin.", "error")
+    elif action == "access":
+        access = _read_access(request.form)
+        if isinstance(access, str):
+            flash(access, "error")
+        elif access[0] != "super" and target["role"] == "admin" and count_admins(exclude_id=uid) == 0:
+            flash("You can't remove the last active Super Admin.", "error")
         else:
-            db().execute("UPDATE users SET role = ? WHERE id = ?", (role, uid))
-            flash(f"{name} is now {role}.", "ok")
+            set_access(uid, *access)
+            text = access_of(uid)["text"]
+            log.warning("audit: %r set the access of %r to %s", me["username"], name, text)
+            flash(f"{name}: {text}.", "ok")
     elif action == "toggle":
         if uid == me["id"]:
             flash("You can't disable your own account.", "error")
         elif target["active"] and target["role"] == "admin" and count_admins(exclude_id=uid) == 0:
-            flash("You can't disable the last active admin.", "error")
+            flash("You can't disable the last active Super Admin.", "error")
         else:
             db().execute("UPDATE users SET active = ? WHERE id = ?", (0 if target["active"] else 1, uid))
             flash(f"{name} {'disabled' if target['active'] else 'enabled'}.", "ok")

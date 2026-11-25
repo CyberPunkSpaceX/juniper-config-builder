@@ -314,16 +314,24 @@ audit log.
 
 Every saved project and network map belongs to a **client**. Pick the client at
 the top of the page; **Save to (client)** and the **Projects** tab use it.
-People only see the clients they are added to:
+People only see the clients they are added to. Each person has one of four
+access levels:
 
-| Role | Can |
+| Level | Can |
 | --- | --- |
-| viewer | open the client's projects and maps |
-| editor | also save and delete them |
-| admin | also add people, set the SSH networks and key, and fetch configs over SSH |
+| Read-only | open the client's projects, maps and config backups; passwords, password hashes, keys and SNMP communities are hidden |
+| Configurator | also build, save and delete them, run the converter and ask for approval; sees the secrets |
+| Admin | also add people, set the SSH and EVE-NG settings, approve Lab work and fetch configs over SSH |
+| Super Admin | everything in every client, plus the Users page and creating, renaming and deleting clients; must use 2FA |
 
-Server admins (the `admin` role on the Users page) see every client and create,
-rename and delete clients under **Clients**. Deleting a client asks you to type
+When a Super Admin adds a user on the **Users** page, they pick the level and
+either **All clients, also ones added later** or **Only these clients**. A
+client's Admin can still add a person to that client with another level on the
+client's page; where both apply, the higher level wins. Internally the client
+roles are still called `viewer`, `editor` and `admin`, and Super Admin is the
+`admin` user role, so existing users keep exactly the access they had.
+
+Super Admins create, rename and delete clients under **Clients**. Deleting a client asks you to type
 its name, and removes its projects, maps, config backups and settings. On the first start after
 upgrading, everything saved before moves into a client called **Default**
 (rename it to suit), and people who had saved projects become its editors.
