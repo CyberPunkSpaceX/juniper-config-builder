@@ -56,6 +56,12 @@ VENDORS: dict[str, Vendor] = {
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
                    "vlan_translation", "virtual_chassis"}),
         ready=True),
+    "nexus": Vendor(
+        "nexus", "Cisco Nexus", "NX-OS", "Nexus 9200, 9300, older 3000, and the Nexus 9000v lab",
+        # What the NX-OS builder writes today. Nexus has no PoE, no voice VLAN and no stacking (vPC pairs
+        # are two projects); EVPN, policies, QoS and the tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "vlan_translation"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port
