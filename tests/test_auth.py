@@ -288,6 +288,60 @@ def test_lockout_after_failed_logins(app, admin):
     assert login(app.test_client(), *ADMIN).status_code == 302
 
 
+def test_admins_must_use_2fa(monkeypatch, app, admin):
+    add_user(admin)
+    monkeypatch.setenv("EXB_REQUIRE_2FA_ADMINS", "true")
+    # A plain user is not asked.
+    bob = app.test_client()
+    login(bob, "bob", "bob-password-1")
+    assert bob.get("/help").status_code == 200
+    # The server admin is sent to set it up, and the API refuses them until then.
+    assert "/account/2fa" in admin.get("/").location
+    assert app.test_client().get("/api/models", headers=basic(*ADMIN)).status_code == 403
+    _setup_2fa(admin)
+    assert admin.get("/help").status_code == 200
+    # And it can't be turned off again.
+    page = admin.post("/account/2fa/off", data={"csrf_token": csrf(admin, "/account"), "current": ADMIN[1]},
+                      follow_redirects=True).get_data(as_text=True)
+    assert "can&#39;t be turned off" in page or "can't be turned off" in page
+
+
+def test_lockout_is_per_address(app, admin):
+    add_user(admin)
+    attacker = {"REMOTE_ADDR": "203.0.113.9"}
+    for _ in range(5):
+        c = app.test_client()
+        assert c.post("/login", data={"username": "bob", "password": "nope"}, environ_base=attacker).status_code == 200
+    c = app.test_client()
+    assert c.post("/login", data={"username": "bob", "password": "bob-password-1"},
+                  environ_base=attacker).status_code == 429
+    # Bob, from his own address, still gets in.
+    assert app.test_client().post("/login", data={"username": "bob", "password": "bob-password-1"},
+                                  environ_base={"REMOTE_ADDR": "10.1.1.5"}).status_code == 302
+
+
+def test_lockout_across_usernames(monkeypatch, app, admin):
+    monkeypatch.setenv("EXB_LOCKOUT_IP_ATTEMPTS", "6")
+    add_user(admin)
+    sprayer = {"REMOTE_ADDR": "198.51.100.7"}
+    for i in range(6):
+        app.test_client().post("/login", data={"username": f"guess{i}", "password": "Winter2026!"}, environ_base=sprayer)
+    resp = app.test_client().post("/login", data={"username": "bob", "password": "bob-password-1"},
+                                  environ_base=sprayer)
+    assert resp.status_code == 429
+
+
+def test_forwarded_for_only_from_a_proxy(app):
+    from exbuilder.web import auth
+
+    with app.test_request_context(environ_base={"REMOTE_ADDR": "10.40.45.202"},
+                                  headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.9"}):
+        assert auth.client_ip() == "203.0.113.9"  # the entry the proxy added, not the browser's
+    with app.test_request_context(environ_base={"REMOTE_ADDR": "8.8.8.8"},
+                                  headers={"X-Forwarded-For": "10.0.0.1"}):
+        assert auth.client_ip() == "8.8.8.8"  # a public client can't claim another address
+
+
 def test_api_token_and_2fa(app, admin):
     add_user(admin)
     bob = app.test_client()

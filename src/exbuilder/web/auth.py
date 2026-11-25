@@ -16,12 +16,16 @@ Roles:
   they are a member of, with the role they have there.
 
 Two-factor sign-in: each user can turn on authenticator-app codes (TOTP) on
-"My account". ``EXB_REQUIRE_2FA=true`` makes it compulsory. Admins can
+"My account". Server admins must use it (``EXB_REQUIRE_2FA_ADMINS``, default
+true); ``EXB_REQUIRE_2FA=true`` makes it compulsory for everyone. Admins can
 reset a user's 2FA when a phone is lost.
 
-Failed sign-ins are counted per username: after ``EXB_LOCKOUT_ATTEMPTS``
-(default 5) failures in ``EXB_LOCKOUT_MINUTES`` (default 15) minutes, that
-username is locked for the rest of the window. Failures are logged.
+Failed sign-ins are counted per address (see ``client_ip``). After
+``EXB_LOCKOUT_ATTEMPTS`` (default 5) failures for one username from one
+address, or ``EXB_LOCKOUT_IP_ATTEMPTS`` (default 20) failures for any
+usernames from one address, in ``EXB_LOCKOUT_MINUTES`` (default 15) minutes,
+that address can't sign in for the rest of the window. Someone else's wrong
+guesses therefore never lock you out. Failures are logged.
 
 Scripts call ``/api/*`` with HTTP basic auth: the username plus either the
 password or an API token from "My account". Accounts with 2FA need the token.
@@ -33,6 +37,7 @@ import fcntl
 import logging
 import functools
 import hmac
+import ipaddress
 import os
 import re
 import secrets
@@ -80,9 +85,9 @@ CREATE TABLE IF NOT EXISTS users (
 );
 CREATE TABLE IF NOT EXISTS login_failures (
     username TEXT NOT NULL COLLATE NOCASE,
-    at REAL NOT NULL
+    at REAL NOT NULL,
+    ip TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS login_failures_user ON login_failures (username, at);
 """
 # Projects, maps and clients: see clients.py.
 # Columns added after the first release, added to existing databases on start.
@@ -99,11 +104,18 @@ def _flag(name: str, default: str = "") -> bool:
 
 
 def require_2fa() -> bool:
+    """2FA is compulsory for everyone."""
     return _flag("EXB_REQUIRE_2FA")
 
 
-def _lockout() -> tuple[int, int]:
-    return (int(os.environ.get("EXB_LOCKOUT_ATTEMPTS", "5")),
+def needs_2fa(user) -> bool:
+    """This user must have 2FA: everyone when EXB_REQUIRE_2FA is on, server admins unless turned off."""
+    return require_2fa() or (bool(user) and user["role"] == "admin" and _flag("EXB_REQUIRE_2FA_ADMINS", "true"))
+
+
+def _lockout() -> tuple[int, int, int]:
+    """(failures per username and address, failures per address, window in seconds)."""
+    return (int(os.environ.get("EXB_LOCKOUT_ATTEMPTS", "5")), int(os.environ.get("EXB_LOCKOUT_IP_ATTEMPTS", "20")),
             int(os.environ.get("EXB_LOCKOUT_MINUTES", "15")) * 60)
 
 
@@ -181,33 +193,64 @@ def verify_api(username: str, secret: str) -> sqlite3.Row | None:
 
 
 # ----------------------------------------------------------------- lockout
-def _client() -> str:
-    forwarded = request.headers.get("X-Forwarded-For", "")
-    return forwarded.split(",")[0].strip() or request.remote_addr or "?"
+def client_ip() -> str:
+    """The address the request came from.
+
+    X-Forwarded-For is only believed from a proxy on a private network (Nginx
+    Proxy Manager, the swarm ingress), and only its last ``EXB_TRUSTED_PROXIES``
+    (default 1) entries, which those proxies added. Entries further left were
+    sent by the browser and can say anything.
+    """
+    remote = request.remote_addr or "?"
+    try:
+        hops = max(0, int(os.environ.get("EXB_TRUSTED_PROXIES", "1")))
+    except ValueError:
+        hops = 1
+    forwarded = [f.strip() for f in request.headers.get("X-Forwarded-For", "").split(",") if f.strip()]
+    if not hops or not forwarded or not _private(remote):
+        return remote
+    return forwarded[-min(hops, len(forwarded))]
 
 
-def locked_minutes(username: str) -> int:
-    """Minutes left on a lockout for this username, or 0."""
-    attempts, window = _lockout()
-    if attempts <= 0:
-        return 0
-    rows = db().execute("SELECT at FROM login_failures WHERE username = ? AND at > ? ORDER BY at",
-                        (username, time.time() - window)).fetchall()
-    if len(rows) < attempts:
+def _private(addr: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    return ip.is_private or ip.is_loopback
+
+
+_client = client_ip
+
+
+def _minutes_left(rows: list, attempts: int, window: int) -> int:
+    if attempts <= 0 or len(rows) < attempts:
         return 0
     return max(1, int((rows[-attempts]["at"] + window - time.time()) // 60) + 1)
 
 
+def locked_minutes(username: str) -> int:
+    """Minutes left before this address may try this username again, or 0."""
+    per_user, per_ip, window = _lockout()
+    ip, since = client_ip(), time.time() - window
+    mine = db().execute("SELECT at FROM login_failures WHERE username = ? AND ip = ? AND at > ? ORDER BY at",
+                        (username, ip, since)).fetchall()
+    every = db().execute("SELECT at FROM login_failures WHERE ip = ? AND at > ? ORDER BY at", (ip, since)).fetchall()
+    return max(_minutes_left(mine, per_user, window), _minutes_left(every, per_ip, window))
+
+
 def record_failure(username: str, what: str) -> None:
-    _attempts, window = _lockout()
-    db().execute("INSERT INTO login_failures (username, at) VALUES (?, ?)", (username[:64], time.time()))
+    window = _lockout()[2]
+    db().execute("INSERT INTO login_failures (username, at, ip) VALUES (?, ?, ?)",
+                 (username[:64], time.time(), client_ip()[:64]))
     db().execute("DELETE FROM login_failures WHERE at < ?", (time.time() - 2 * window,))
     db().commit()
-    log.warning("failed %s for user %r from %s", what, username[:64], _client())
+    log.warning("failed %s for user %r from %s", what, username[:64], client_ip())
 
 
 def clear_failures(username: str) -> None:
-    db().execute("DELETE FROM login_failures WHERE username = ?", (username,))
+    """A good sign-in clears that username's failures from this address."""
+    db().execute("DELETE FROM login_failures WHERE username = ? AND ip = ?", (username, client_ip()))
     db().commit()
 
 
@@ -234,6 +277,9 @@ def _init_db(folder: Path) -> None:
         for column, kind in NEW_COLUMNS.items():
             if column not in have:
                 conn.execute(f"ALTER TABLE users ADD COLUMN {column} {kind}")
+        if "ip" not in {row[1] for row in conn.execute("PRAGMA table_info(login_failures)")}:
+            conn.execute("ALTER TABLE login_failures ADD COLUMN ip TEXT NOT NULL DEFAULT ''")
+        conn.execute("CREATE INDEX IF NOT EXISTS login_failures_ip ON login_failures (ip, at)")
         empty = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
         username = os.environ.get("EXB_USERNAME")
         password = _env_password()
@@ -314,6 +360,8 @@ def _load_user() -> Response | None:
             return Response("Login required", 401, {"WWW-Authenticate": 'Basic realm="exbuilder"'})
         if user["must_change"]:
             return Response("Sign in to the web UI and change your password first", 403)
+        if needs_2fa(user) and not user["totp_secret"]:
+            return Response("Sign in to the web UI and set up two-factor sign-in first", 403)
         g.user = user
         return None
 
@@ -328,9 +376,10 @@ def _load_user() -> Response | None:
     if user["must_change"] and request.endpoint not in ("auth.account", "auth.logout"):
         flash("Please choose a new password before continuing.", "info")
         return redirect(url_for("auth.account"))
-    if require_2fa() and not user["totp_secret"] and request.endpoint not in (
+    if needs_2fa(user) and not user["totp_secret"] and request.endpoint not in (
             "auth.account", "auth.twofa_setup", "auth.logout"):
-        flash("Two-factor sign-in is required here. Set it up to continue.", "info")
+        flash("Two-factor sign-in is required for your account. Set it up to continue." if user["role"] == "admin"
+              and not require_2fa() else "Two-factor sign-in is required here. Set it up to continue.", "info")
         return redirect(url_for("auth.twofa_setup"))
     if request.method == "POST":
         token = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token", "")
@@ -488,7 +537,7 @@ def account():
             flash("Password changed.", "ok")
             return redirect(url_for("auth.account"))
     return render_template("auth/account.html", recovery_left=twofactor.recovery_left(user["recovery"]),
-                           require_2fa=require_2fa())
+                           require_2fa=needs_2fa(user))
 
 
 def _issuer() -> str:
@@ -532,8 +581,8 @@ def _check_code(user: sqlite3.Row) -> bool:
 @bp.post("/account/2fa/off")
 def twofa_off():
     user = current_user()
-    if require_2fa():
-        flash("Two-factor sign-in is required on this server, so it can't be turned off.", "error")
+    if needs_2fa(user):
+        flash("Two-factor sign-in is required for your account, so it can't be turned off.", "error")
     elif not check_password_hash(user["password_hash"], request.form.get("current", "")):
         flash("Your current password is wrong.", "error")
     elif not _check_code(user):

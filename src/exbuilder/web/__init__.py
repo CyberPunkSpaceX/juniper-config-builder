@@ -13,6 +13,7 @@ Settings (environment variables):
   first sign-in is admin / admin with a forced password change. See auth.py.
 * ``EXB_SECURE_COOKIES``: set to true once the UI is served over HTTPS.
 * ``EXB_REQUIRE_2FA``: make two-factor sign-in compulsory.
+* ``EXB_REQUIRE_2FA_ADMINS``: server admins must use it (default true).
 """
 
 from __future__ import annotations

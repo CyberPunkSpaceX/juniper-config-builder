@@ -277,3 +277,35 @@ def test_dot1x_settings_reported_once():
     p["security"] = {"radius_servers": [{"address": "10.0.0.5", "secret": "s3cret"}], "guest_vlan": "NOPE"}
     errs = [e for e in build(p).errors if "Guest VLAN" in e["message"]]
     assert len(errs) == 1 and errs[0]["field"] == "security.guest_vlan"
+
+
+# ------------------------------------------------ hidden lines in text fields
+INJECT = "x\nusername evil privilege 15 secret pwned"
+
+
+@pytest.mark.parametrize("vendor", ["juniper", "cisco", "arista", "aruba", "procurve", "nexus", "dell", "ruckus",
+                                    "extreme", "fortiswitch", "mikrotik", "unifi"])
+def test_line_breaks_in_text_fields_are_refused(vendor):
+    from exbuilder.web import _defaults
+
+    p = _defaults(vendor)
+    p["system"]["hostname"] = "sw1"
+    p["snmp"]["location"] = INJECT
+    p["snmp"]["contact"] = "ops\r\x1b[2Jteam"
+    res = build(p)
+    text = res.set_text + "\n" + res.hier_text
+    assert not any(ln.strip().startswith("username evil") for ln in text.splitlines())
+    fields = {e.get("field") for e in res.errors}
+    assert {"snmp.location", "snmp.contact"} <= fields
+    assert "\x1b" not in text
+
+
+def test_multiline_fields_still_allowed():
+    from exbuilder.web import _defaults
+
+    p = _defaults("cisco")
+    p["system"]["hostname"] = "sw1"
+    p["system"]["banner"] = "Authorised use only.\r\nAll access is logged."
+    res = build(p)
+    assert not any(e.get("field") == "system.banner" for e in res.errors)
+    assert "All access is logged." in res.set_text + res.hier_text

@@ -16,6 +16,7 @@ services:
       # Set to "true" once users only reach the UI over HTTPS.
       EXB_SECURE_COOKIES: ${EXB_SECURE_COOKIES:-false}
       EXB_REQUIRE_2FA: ${EXB_REQUIRE_2FA:-false}
+      EXB_REQUIRE_2FA_ADMINS: ${EXB_REQUIRE_2FA_ADMINS:-true}
       # Fetch configs from switches over SSH (Network map tab). Each client sets
       # its own switch networks and SSH key on its client page. These are only
       # server-wide limits:
