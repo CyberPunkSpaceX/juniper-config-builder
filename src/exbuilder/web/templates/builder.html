@@ -969,6 +969,56 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <table class="plist"><thead><tr><th>Project</th><th>Status</th><th></th></tr></thead><tbody id="reviews"></tbody></table>
       <p class="status" id="reviews-status"></p>
     </div>
+    <div class="panel" id="push-box">
+      <h2>Push to a switch</h2>
+      {% if client.space != 'production' %}
+      <p class="hint">Configs are pushed to switches from the <b>Production</b> space, after they are approved and promoted from here.</p>
+      {% else %}
+      <ol class="hint howto">
+        <li><b>Preview.</b> The server signs in to the switch, keeps its running config as a backup (Backups &amp; compare tab), loads the approved config into a private candidate and shows what the switch says would change. Nothing changes yet.</li>
+        <li><b>Push.</b> The switch commits with its own safe-revert timer (Junos <code>commit confirmed</code>), 10 minutes unless you pick another time.</li>
+        <li><b>Check.</b> A new SSH session makes sure the switch is still reachable after the change.</li>
+        <li><b>Keep it</b> (confirm) before the timer runs out, or <b>roll back now</b>. If you do nothing, or the change cuts the switch off, it puts the old config back by itself.</li>
+      </ol>
+      <p class="hint">Only projects approved and promoted from the Lab can be pushed, exactly as they were approved. Only admins of {{ client.name }} can push. Juniper works today; the other vendors' methods are listed below.</p>
+      {% if client.role == 'admin' and ssh.enabled %}
+      <div class="grid" id="push-form">
+        <div class="field"><label>Project</label><select id="push-project"></select></div>
+        <div class="field"><label>Switch (address or name)</label><input type="text" id="push-host" autocomplete="off" spellcheck="false" placeholder="10.40.45.21"></div>
+        <div class="field"><label>Rollback timer (minutes)</label><input type="number" id="push-minutes" min="1" max="60" value="10"></div>
+        <div class="field"><label>How to load</label><select id="push-mode"><option value="merge">The builder's set commands (as you would paste them)</option><option value="replace">Replace the whole config (load override)</option></select></div>
+        <div class="field wide">
+          <label class="check"><input type="radio" name="push-auth" value="key"{% if ssh.key %} checked{% else %} disabled{% endif %}> SSH key <span class="tag ok">Recommended</span></label>
+          <label class="check"><input type="radio" name="push-auth" value="password"{% if not ssh.key %} checked{% endif %}> Password</label>
+          <p class="hint">The account needs to be allowed to configure the switch. A password is kept only in this page while the push is open (for the check and the confirm), never on the server.</p>
+        </div>
+        <div class="field"><label>Username</label><input type="text" id="push-user" autocomplete="off" spellcheck="false" value="{{ ssh.key_user }}"></div>
+        <div class="field" id="push-pass-field"{% if ssh.key %} hidden{% endif %}><label>Password</label><input type="password" id="push-pass" autocomplete="new-password"></div>
+        <div class="field"><label>SSH port</label><input type="text" id="push-port" value="22"></div>
+      </div>
+      <div class="toolbar"><button type="button" id="push-preview">Preview changes</button><span class="status" id="push-status"></span></div>
+      <div id="push-result" class="hide">
+        <ul class="msgs" id="push-warn"></ul>
+        <h3>What the switch says would change</h3>
+        <pre class="cfg" id="push-diff" style="max-height:340px;overflow:auto"></pre>
+        <label class="check hide" id="push-anyway-row"><input type="checkbox" id="push-anyway"> Push anyway: this is the right switch</label>
+        <div class="toolbar"><button type="button" id="push-go" class="danger">Push with auto-rollback</button><button type="button" class="secondary small" id="push-discard">Discard preview</button></div>
+      </div>
+      <div id="push-live" class="hide panel" style="border:2px solid var(--warn, #d97706)">
+        <h3 id="push-live-h">Waiting for confirmation</h3>
+        <p class="hint" id="push-live-text"></p>
+        <div class="toolbar"><button type="button" id="push-confirm">Keep the change</button><button type="button" class="danger" id="push-rollback">Roll back now</button><button type="button" class="secondary small" id="push-check">Check again</button></div>
+      </div>
+      {% elif client.role == 'admin' %}
+      <p class="hint">SSH is off for {{ client.name }}: add the switch networks under <a href="{{ url_for('clients.client_page', cid=client.id) }}#ssh">Clients → {{ client.name }}</a> first.</p>
+      {% else %}
+      <p class="hint">Only admins of {{ client.name }} can push. You can see what was pushed below.</p>
+      {% endif %}
+      {% endif %}
+      <h3>Pushes</h3>
+      <table class="plist"><thead><tr><th>Push</th><th>Status</th><th></th></tr></thead><tbody id="push-list"></tbody></table>
+      <details class="explain"><summary>How each vendor is made safe</summary><table class="plist"><tbody id="push-support"></tbody></table></details>
+    </div>
     {% endif %}
   </section>
   </div>
@@ -1531,7 +1581,7 @@ function showTab(t, fromHistory) {
   activeTab = t; updateTabs(); renderFabric();
   if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
-  if (t === "Projects") refreshProjects();
+  if (t === "Projects") { refreshProjects(); refreshPushes(); }
   if (t === "Backups & compare") openBackups();
 }
 
@@ -2681,6 +2731,140 @@ if (SSH.enabled && SSH.can_fetch) {
     showKnown();
   });
 }
+
+// ------------------------------------------------- push to a switch (admins, Production)
+let pushData = null, pushPrev = null, pushLive = null, pushPw = "", pushTick = null;
+const PUSH_CLS = {previewed: "note", waiting: "warn", confirmed: "ok", rolled_back: "note", expired: "warn", failed: "bad", cancelled: "note"};
+const pushStatus = (t, c) => { const el = document.getElementById("push-status"); if (el) { el.textContent = t || ""; el.className = "status " + (c || ""); } };
+function pushCreds() {
+  const useKey = (document.querySelector('input[name="push-auth"]:checked') || {}).value === "key";
+  const pass = document.getElementById("push-pass");
+  if (!useKey && pass.value) { pushPw = pass.value; pass.value = ""; }   // kept in this page only while the push is open
+  return {use_key: useKey, username: document.getElementById("push-user").value, password: useKey ? "" : pushPw,
+          port: document.getElementById("push-port").value};
+}
+async function refreshPushes() {
+  const tb = document.getElementById("push-list"); if (!tb) return;
+  try { pushData = await api("push"); } catch (e) { tb.innerHTML = `<tr><td colspan="3" class="note">${esc(e.message)}</td></tr>`; return; }
+  const sel = document.getElementById("push-project");
+  if (sel) {
+    const keep = sel.value;
+    sel.innerHTML = pushData.projects.map(p => `<option value="${p.id}"${p.approved && p.ready ? "" : " disabled"}>${esc(p.name)} (${esc(p.vendor)}${p.hostname ? ", " + esc(p.hostname) : ""})${!p.approved ? " - not approved" : !p.ready ? " - push not available yet" : ""}</option>`).join("")
+      || `<option value="" disabled>No Production projects yet</option>`;
+    if (keep) sel.value = keep;
+    if (!sel.value || sel.selectedOptions[0]?.disabled) { const ok = pushData.projects.find(p => p.approved && p.ready); if (ok) sel.value = ok.id; }
+  }
+  tb.innerHTML = pushData.pushes.map(p => {
+    const who = [`previewed by ${esc(p.created_by)} ${esc(p.created_at)}`, p.pushed_by ? `pushed by ${esc(p.pushed_by)} ${esc(p.pushed_at)} (${p.minutes} min timer)` : "",
+      p.decided_by && p.status !== "cancelled" ? `${p.status === "confirmed" ? "kept" : "rolled back"} by ${esc(p.decided_by)} ${esc(p.decided_at)}` : ""].filter(Boolean).join(" · ");
+    const left = p.status === "waiting" ? ` · reverts at ${esc(p.deadline_at)}` : "";
+    return `<tr><td><b>#${p.id} ${esc(p.project_name)}</b> → <code>${esc(p.host)}</code> <span class="note">${esc(p.vendor)}, ${p.mode === "replace" ? "replace" : "set commands"}</span></td>
+      <td><span class="status ${PUSH_CLS[p.status] || "note"}">${esc(p.label)}</span>${left}<div class="note">${who}</div>${p.message ? `<div class="note">${esc(p.message)}</div>` : ""}</td>
+      <td style="text-align:right;white-space:nowrap">${p.diff !== undefined ? `<button class="secondary small" type="button" data-push-diff="${p.id}">Changes</button>` : ""}
+      ${p.backup_id ? `<button class="secondary small" type="button" data-push-bk="${p.backup_id}">Backup before</button>` : ""}
+      ${p.status === "waiting" && pushData.role === "admin" ? `<button class="small" type="button" data-push-open="${p.id}">Open</button>` : ""}</td></tr>`;
+  }).join("") || `<tr><td colspan="3" class="note">Nothing pushed yet.</td></tr>`;
+  document.getElementById("push-support").innerHTML = Object.entries(pushData.support).map(([k, v]) =>
+    `<tr><td><b>${esc(k)}</b></td><td>${v.ready ? `<span class="status ok">Ready</span>` : `<span class="status note">Not yet</span>`} ${esc(v.method)}${v.auto_revert ? "" : " <span class='status bad'>no automatic rollback</span>"}<div class="note">${esc(v.note)}</div></td></tr>`).join("");
+  const waiting = pushData.pushes.find(p => p.status === "waiting");
+  if (waiting && pushData.role === "admin" && (!pushLive || pushLive.id !== waiting.id)) showLive(waiting);
+  if (!waiting && pushLive) hideLive();
+}
+function hideLive() { pushLive = null; clearInterval(pushTick); pushPw = ""; document.getElementById("push-live")?.classList.add("hide"); }
+function showLive(p) {
+  pushLive = {id: p.id, until: Date.now() + p.seconds_left * 1000, host: p.host, checked: ""};
+  document.getElementById("push-live").classList.remove("hide");
+  clearInterval(pushTick);
+  const draw = () => {
+    const s = Math.max(0, Math.round((pushLive.until - Date.now()) / 1000));
+    document.getElementById("push-live-h").textContent = `Push #${pushLive.id} to ${pushLive.host}: ${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} left to confirm`;
+    document.getElementById("push-live-text").textContent = pushLive.checked || "Checking the switch is still reachable…";
+    if (s <= 0) { hideLive(); refreshPushes(); }
+  };
+  draw(); pushTick = setInterval(draw, 1000);
+}
+async function pushCheck() {
+  if (!pushLive) return;
+  try {
+    const r = await api(`push/${pushLive.id}/check`, pushCreds());
+    pushLive.until = Date.now() + r.seconds_left * 1000;
+    pushLive.checked = r.pending ? `The switch is reachable over a new SSH session and its rollback timer is running (${r.pending}). If everything works, keep the change.`
+      : "The switch is reachable, but it shows no commit waiting for confirmation. It may already have rolled back.";
+  } catch (e) { if (pushLive) pushLive.checked = `Could not reach the switch: ${e.message}. If it stays unreachable, it rolls back by itself when the timer runs out.`; }
+}
+if (document.getElementById("push-form")) {
+  document.querySelectorAll('input[name="push-auth"]').forEach(r => r.addEventListener("change", () => {
+    if (!r.checked) return; const key = r.value === "key";
+    document.getElementById("push-pass-field").hidden = key; if (key) { document.getElementById("push-pass").value = ""; pushPw = ""; }
+  }));
+  document.getElementById("push-project").addEventListener("change", () => {
+    const p = (pushData?.projects || []).find(x => String(x.id) === document.getElementById("push-project").value);
+    if (p && p.hostname && !document.getElementById("push-host").value) document.getElementById("push-host").value = p.hostname;
+  });
+  document.getElementById("push-preview").onclick = async () => {
+    document.getElementById("push-result").classList.add("hide");
+    pushStatus("Signing in, keeping a backup and asking the switch what would change…");
+    try {
+      pushPrev = await api("push/preview", {...pushCreds(), project_id: Number(document.getElementById("push-project").value),
+                                             host: document.getElementById("push-host").value, mode: document.getElementById("push-mode").value});
+    } catch (e) { pushStatus(e.message, "bad"); refreshPushes(); return; }
+    const w = [...pushPrev.warnings];
+    if (!pushPrev.check_ok) w.unshift("The switch's commit check FAILED, so this can't be pushed: " + pushPrev.check);
+    if (pushPrev.backup) w.push(pushPrev.backup.unchanged ? "Backup: the running config is the same as the last backup." : "Backup: the running config was kept.");
+    document.getElementById("push-warn").innerHTML = w.map(x => `<li class="${/FAILED|called/.test(x) ? "err" : "low"}">${esc(x)}</li>`).join("");
+    document.getElementById("push-diff").textContent = pushPrev.diff || "(no changes)";
+    document.getElementById("push-anyway-row").classList.toggle("hide", !pushPrev.hostname_mismatch);
+    document.getElementById("push-anyway").checked = false;
+    document.getElementById("push-go").disabled = !pushPrev.check_ok || !pushPrev.diff.trim();
+    document.getElementById("push-result").classList.remove("hide");
+    pushStatus(`Preview #${pushPrev.id} ready. Push within ${Math.round(pushPrev.preview_seconds / 60)} minutes or preview again.`, "ok");
+    refreshPushes();
+  };
+  document.getElementById("push-discard").onclick = async () => {
+    if (pushPrev) { try { await api(`push/${pushPrev.id}/discard`, {}); } catch (e) {} }
+    pushPrev = null; pushPw = ""; document.getElementById("push-result").classList.add("hide"); pushStatus(""); refreshPushes();
+  };
+  document.getElementById("push-go").onclick = async () => {
+    if (!pushPrev) return;
+    const mins = Number(document.getElementById("push-minutes").value || 10);
+    if (!window.confirm(`Push to ${document.getElementById("push-host").value} now? The switch puts the old config back by itself after ${mins} minute(s) unless you click "Keep the change".`)) return;
+    pushStatus("Pushing…");
+    try {
+      const r = await api(`push/${pushPrev.id}/apply`, {...pushCreds(), minutes: mins, hostname_ok: document.getElementById("push-anyway").checked});
+      pushStatus(`Committed with a ${mins} minute rollback timer. Checking the switch…`, "ok");
+      document.getElementById("push-result").classList.add("hide");
+      showLive({id: pushPrev.id, seconds_left: r.seconds_left, host: document.getElementById("push-host").value});
+      pushPrev = null;
+      setTimeout(pushCheck, 10000);   // give the switch a moment, then sign in again
+    } catch (e) { pushStatus(e.message, "bad"); }
+    refreshPushes();
+  };
+  document.getElementById("push-check").onclick = pushCheck;
+  for (const [btn, action, ask] of [["push-confirm", "confirm", "Keep the change on the switch? This stops the rollback timer."],
+                                    ["push-rollback", "rollback", "Put the old config back on the switch now?"]]) {
+    document.getElementById(btn).onclick = async () => {
+      if (!pushLive || !window.confirm(ask)) return;
+      pushLive.checked = action === "confirm" ? "Confirming…" : "Rolling back…";
+      try {
+        await api(`push/${pushLive.id}/${action}`, pushCreds());
+        pushStatus(action === "confirm" ? "Kept: the change is now permanent on the switch. The new config was kept as a backup." : "Rolled back: the switch has its old config again.", "ok");
+        hideLive();
+      } catch (e) { if (pushLive) pushLive.checked = e.message; }
+      refreshPushes();
+    };
+  }
+}
+document.getElementById("push-list")?.addEventListener("click", async ev => {
+  const b = ev.target.closest("button"); if (!b) return;
+  if (b.dataset.pushDiff) {
+    const p = pushData.pushes.find(x => String(x.id) === b.dataset.pushDiff);
+    const pre = document.getElementById("push-diff");
+    if (pre) { pre.textContent = p.diff || "(no changes)"; document.getElementById("push-result").classList.remove("hide"); document.getElementById("push-warn").innerHTML = `<li class="low">Changes of push #${p.id} (${esc(p.label)}).</li>`; document.getElementById("push-go").disabled = true; }
+    else window.alert(p.diff || "(no changes)");
+  }
+  if (b.dataset.pushBk) { showTab("Backups & compare"); }
+  if (b.dataset.pushOpen) { const p = pushData.pushes.find(x => String(x.id) === b.dataset.pushOpen); showLive(p); pushCheck(); }
+});
 
 // ------------------------------------------------- config backups and compare
 let bkRows = [];

@@ -397,6 +397,8 @@ the client picked at the top of the page (see **Clients**).
 
 ## Applying the config on a switch
 
+**Push from the builder (Juniper today).** Client admins push an approved Production project from the Projects tab: preview (running config kept as a backup, the switch's own `show | compare` and `commit check`), then `commit confirmed N` (1-60 minutes, default 10), a reachability check over a new SSH session, and Keep or Roll back. Without a confirmation the switch reverts by itself. Every step is audited (`audit: push`) and listed per client. Planned per vendor: Arista commit timer, IOS-XE revert timer, NX-OS commit-timeout, AOS-CX checkpoint auto, MikroTik Safe Mode; vendors without one are marked "no automatic rollback". `EXB_PUSH_DISABLE=true` turns it off.
+
 1. Connect to the console or SSH, type `cli`, then `configure`.
 2. Paste the **set** commands.
 3. `show | compare` to see the change, `commit check` to test it.
