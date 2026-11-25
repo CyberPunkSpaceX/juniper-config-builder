@@ -76,6 +76,9 @@ class Reader:
         self.vendor = vendor
         self.p = blank()
         self.p["vendor"] = vendor
+        # No model yet: the port names decide (convert/portmap.py guesses it).
+        self.p["switch"]["members"] = [{"fpc": portmap.first_member(vendor), "model": "", "serial": "",
+                                        "role": "routing-engine"}]
         self.vlans: dict[int, dict] = {}
         self.ifs: dict[str, dict] = {}       # physical ports, by the vendor's full name
         self.lags: dict[int, dict] = {}      # LAG number (from 1) -> settings
@@ -86,6 +89,9 @@ class Reader:
         self.members: dict[int, str] = {}    # member number -> model
         self.used = 0
         self.vlan1_used = False
+        self.ospf_if: dict[str, str] = {}    # interface -> OSPF area, from 'ip ospf 1 area 0'
+        self.ospf_p2p: set[str] = set()
+        self.later: list[str] = []           # notes for things read but not carried over
 
     def vlan(self, vid: int, name: str = "") -> dict:
         v = self.vlans.get(vid)
