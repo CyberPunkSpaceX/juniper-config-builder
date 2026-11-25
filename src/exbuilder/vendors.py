@@ -69,6 +69,12 @@ VENDORS: dict[str, Vendor] = {
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe",
                    "virtual_chassis"}),
         ready=True),
+    "procurve": Vendor(
+        "procurve", "HPE Aruba / ProCurve", "AOS-S", "2530, 2540, 2920, 2930F, 2930M, 3810M, 5400R and older ProCurve",
+        # What the AOS-S builder writes today. AOS-S has no routed ports, no VLAN translation and no EVPN;
+        # BGP, policies, QoS and the tools are not written.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "dot1x", "poe", "virtual_chassis"}),
+        ready=True),
 }
 
 DEFAULT = "juniper"

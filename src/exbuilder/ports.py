@@ -174,3 +174,21 @@ def named_runs(ports: list[str]) -> list[tuple[str, str]]:
 
 def named_compact(ports: list[str]) -> str:
     return ", ".join(a if a == b else f"{a}-{named_key(b)[1][-1]}" for a, b in named_runs(ports))
+
+
+def iface_list(text) -> list[str]:
+    """Interface names from a list where a name may hold a space ('ve 20, loopback 1, 1/2/1').
+
+    Commas, semicolons and new lines separate names; 'word number' stays one name, and
+    anything else is split on spaces too ('irb.20 lo0').
+    """
+    out: list[str] = []
+    for part in re.split(r"[,;\n]+", str(text or "")):
+        part = part.strip()
+        if not part:
+            continue
+        if re.fullmatch(r"[A-Za-z][A-Za-z-]*\s+[\d/.]+", part):
+            out.append(re.sub(r"\s+", " ", part))
+        else:
+            out.extend(part.split())
+    return out

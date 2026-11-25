@@ -99,3 +99,11 @@ def test_routing_and_dot1x():
     assert "radius-server host 10.0.0.5 key plaintext s3cr3t" in t
     assert "aaa authentication port-access dot1x authenticator\n    radius server-group radius\n    enable" in t
     assert block(t, "interface 1/1/1").count("enable") == 2
+
+
+def test_ospf_names_with_spaces():
+    res = build(base(vlans=[{"name": "USERS", "id": "20", "irb": "10.0.20.1/24"}],
+                     routing={"loopback": "10.255.255.2", "ospf": {"enabled": True, "areas": [
+                         {"area": "0", "interfaces": "vlan 20, loopback 0", "passive": "vlan 20"}]}}))
+    assert not res.errors, msgs(res.errors)
+    assert "ip ospf 1 area 0.0.0.0\n    ip ospf passive" in res.set_text.split("interface vlan 20\n")[1]

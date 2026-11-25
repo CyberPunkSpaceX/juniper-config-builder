@@ -748,9 +748,9 @@ def _ospf(ctx: CxCtx) -> None:
         kind = a.get("type") or "normal"
         body.append(f"area {dotted}" + (f" {kind}" if kind in ("stub", "nssa") else ""))
         key = _s(a.get("md5_key"))
-        p2p = {_iface_name(x) for x in _list(a.get("p2p"))}
-        passive = _list(a.get("passive"))
-        for raw in _list(a.get("interfaces")) + passive:
+        p2p = {_iface_name(x) for x in P.iface_list(a.get("p2p"))}
+        passive = P.iface_list(a.get("passive"))
+        for raw in P.iface_list(a.get("interfaces")) + passive:
             name = _iface_name(raw)
             if not name:
                 ctx.error("OSPF", f"Area {area}: '{raw}' is not an AOS-CX interface (1/1/49, vlan 20, loopback 0).", "interfaces")

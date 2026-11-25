@@ -138,6 +138,13 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li><code>configure terminal</code>, paste, <code>end</code>, check with <code>show running-config</code>.</li>
     <li><code>reload cancel</code>, then <code>write memory</code>.</li>
   </ol>
+  <h3>HPE Aruba / ProCurve (AOS-S)</h3>
+  <ol>
+    <li>Back up first: <code>copy running-config tftp &lt;server&gt; before.cfg</code>.</li>
+    <li>On a remote switch: <code>reload after 10</code> (reboots to the saved config after 10 minutes).</li>
+    <li><code>configure terminal</code>, paste, check with <code>show running-config</code>.</li>
+    <li><code>no reload</code>, then <code>write memory</code>.</li>
+  </ol>
   <h3>HPE Aruba CX (AOS-CX)</h3>
   <ol>
     <li>Save a restore point: <code>copy running-config checkpoint before-change</code>.</li>
@@ -195,6 +202,18 @@ if you lose the connection. The steps for each vendor are below the config in th
     <li>Phone ports become "native VLAN + voice VLAN" trunks, which is how AOS-CX hands a voice VLAN to phones.</li>
     <li>Not written yet: storm control, VLAN translation, EVPN, policies, QoS and the Tools.</li>
   </ul>
+  <h3>HPE Aruba / ProCurve (AOS-S): 2530, 2540, 2920, 2930F, 2930M, 3810M, 5400R and older ProCurve 2610, 2810, 2910al</h3>
+  <ul>
+    <li>Ports: <code>1</code> to <code>48</code>, module ports <code>A1</code>; the 2930M and 3810M use <code>1/1</code> (member/port)
+      and stack (members 1-10). LAGs are trunks: <code>Trk1</code>.</li>
+    <li>Like FastIron, AOS-S lists the ports inside each VLAN (<code>untagged 1-40</code>, <code>tagged Trk1</code>), and the
+      VLAN holds its IP address. There are no routed ports: OSPF runs on VLANs.</li>
+    <li>A switch with one VLAN address and only a default route stays layer 2 and gets <code>ip default-gateway</code>;
+      more VLAN addresses, other routes or OSPF turn on <code>ip routing</code>.</li>
+    <li>AOS-S has one <b>manager</b> and one <b>operator</b> account. Passwords go in as plain text and the switch hashes them.</li>
+    <li>The output has no comment lines, because the AOS-S command line doesn't accept them.</li>
+    <li>Not written: BGP, SNMPv3, storm control, VLAN translation, policies, QoS and the Tools.</li>
+  </ul>
 </div>
 
 <h2 id="translation">7. VLAN translation</h2>
@@ -207,13 +226,14 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>Cisco: <code>switchport vlan mapping</code> on the 9300, 9500, 3650 and 3850 (not the 9200 or 2960-X).</li>
   <li>Brocade / Ruckus: not available.</li>
   <li>HPE Aruba CX: not written yet.</li>
+  <li>HPE Aruba / ProCurve (AOS-S): not available.</li>
 </ul>
 
 <h2 id="passwords">8. Passwords and secrets</h2>
 <ul>
   <li>Passwords are turned into hashes as soon as the config is made (SHA-512 on Juniper and Arista, type 8 on
-    Cisco (type 5 on the 2960-X), MD5-crypt on Ruckus), so plain text is never saved in a project. The exception is Aruba CX, which only takes
-    plain-text passwords in a pasted config.</li>
+    Cisco (type 5 on the 2960-X), MD5-crypt on Ruckus), so plain text is never saved in a project. The exceptions are Aruba CX and AOS-S, which
+    only take plain-text passwords in a pasted config.</li>
   <li>A hash only works for the vendor it was made for. Copy a project to another vendor and you'll be asked to
     type the passwords again.</li>
   <li>SNMP communities, RADIUS secrets and BGP/OSPF keys are in the config as you typed them. Keep downloaded
