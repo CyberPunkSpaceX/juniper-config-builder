@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 
 from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, ios_models, nxos_models, os10_models, importer, models, sshfetch, topology, vendors, xlsx
+from .. import __version__, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
 from . import auth, backups, clients, eve
 
@@ -49,7 +49,7 @@ def _project_from_request() -> dict:
 
 _VENDOR_MODELS = {"arista": eos_models, "cisco": ios_models, "ruckus": fastiron_models, "aruba": aoscx_models, "procurve": aoss_models,
                   "nexus": nxos_models, "dell": os10_models,
-                  "extreme": exos_models}
+                  "extreme": exos_models, "fortiswitch": fortiswitch_models}
 
 
 def _catalog(vendor: str) -> list[dict]:
@@ -70,6 +70,9 @@ def _defaults(vendor: str) -> dict:
         d["system"]["mgmt_interface"] = ""
     elif vendor == "cisco":
         d["switch"]["members"] = [{"fpc": 1, "model": "C9300-48P", "serial": "", "role": "routing-engine"}]
+    elif vendor == "fortiswitch":
+        d["switch"]["members"] = [{"fpc": 1, "model": "FS-448E-FPOE", "serial": "", "role": "routing-engine"}]
+        d["system"]["mgmt_interface"] = ""
     elif vendor == "extreme":
         d["switch"]["members"] = [{"fpc": 1, "model": "X440-G2-48p-10GE4", "serial": "", "role": "routing-engine"}]
         d["system"]["mgmt_interface"] = ""

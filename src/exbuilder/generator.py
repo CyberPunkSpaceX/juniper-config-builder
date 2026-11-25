@@ -1072,6 +1072,9 @@ def build(project: dict) -> Result:
     if vendor.key == "cisco":
         from . import ios
         return ios.build(project)
+    if vendor.key == "fortiswitch":
+        from . import fortiswitch
+        return fortiswitch.build(project)
     if vendor.key == "extreme":
         from . import exos
         return exos.build(project)

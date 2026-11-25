@@ -74,6 +74,13 @@ VENDORS: dict[str, Vendor] = {
         # EVPN, policies, QoS and the tools come later.
         frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "poe", "virtual_chassis"}),
         ready=True),
+    "fortiswitch": Vendor(
+        "fortiswitch", "Fortinet FortiSwitch", "FortiSwitchOS (standalone)", "FS-100F, 200E, 400E, 1000E",
+        # What the FortiSwitchOS builder writes today. Standalone switches only (FortiLink-managed ones are set
+        # up on the FortiGate). No routed ports, stacking or VLAN translation; EVPN, policies, QoS and the
+        # tools come later.
+        frozenset({"basics", "vlans", "ports", "lags", "static_routes", "ospf", "bgp", "dot1x", "poe"}),
+        ready=True),
     "ruckus": Vendor(
         "ruckus", "Brocade / Ruckus", "FastIron", "ICX 7000 and 6000, and older FCX, FGS and FLS",
         # What the FastIron builder writes today. FastIron has no EVPN-VXLAN and no per-port
