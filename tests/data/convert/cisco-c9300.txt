@@ -1,0 +1,179 @@
+Building configuration...
+
+Current configuration : 9120 bytes
+!
+! Last configuration change at 14:02:11 MST Tue Nov 18 2026
+!
+version 17.9
+service timestamps debug datetime msec
+service timestamps log datetime msec
+service password-encryption
+platform punt-keepalive disable-kernel-core
+!
+hostname acc-sw-01
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+!
+enable secret 9 $9$nhEmQVczB7dqsO$X.HsgL6x1il0RxkOSSvyQYwucySCt7qFm4v7pqCxkKM
+!
+aaa new-model
+aaa authentication login default local
+!
+clock timezone MST -7 0
+switch 1 provision c9300-48p
+switch 2 provision c9300-48p
+!
+ip routing
+!
+ip domain name corp.example
+ip name-server 10.1.0.10 10.1.0.11
+ip dhcp snooping vlan 20,30
+ip dhcp snooping
+!
+login on-failure log
+!
+username netops privilege 15 secret 9 $9$abcdefghijklmn$abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQ
+username helpdesk privilege 1 password 7 0822455D0A16
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+spanning-tree vlan 1-4094 priority 24576
+!
+vlan 10
+ name MGMT
+!
+vlan 20
+ name STAFF
+!
+vlan 30
+ name VOIP
+!
+vlan 40
+ name Guest WiFi
+!
+lldp run
+!
+interface Port-channel1
+ description Uplink to core
+ switchport trunk allowed vlan 10,20,30,40
+ switchport mode trunk
+!
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ ip address 192.168.50.11 255.255.255.0
+ negotiation auto
+!
+interface GigabitEthernet1/0/1
+ description Desk
+ switchport access vlan 20
+ switchport mode access
+ switchport voice vlan 30
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+!
+interface GigabitEthernet1/0/2
+ description Desk
+ switchport access vlan 20
+ switchport mode access
+ switchport voice vlan 30
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+!
+interface GigabitEthernet1/0/3
+ description Desk
+ switchport access vlan 20
+ switchport mode access
+ switchport voice vlan 30
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+!
+interface GigabitEthernet1/0/4
+ description Printer
+ switchport access vlan 20
+ switchport mode access
+ power inline never
+!
+interface GigabitEthernet1/0/5
+ switchport access vlan 40
+ switchport mode access
+ authentication port-control auto
+ mab
+ dot1x pae authenticator
+!
+interface GigabitEthernet1/0/6
+!
+interface GigabitEthernet1/0/48
+ description AP
+ switchport trunk native vlan 10
+ switchport trunk allowed vlan 10,40
+ switchport mode trunk
+ power inline port priority high
+!
+interface GigabitEthernet2/0/1
+ description Desk
+ switchport access vlan 20
+ switchport mode access
+ switchport voice vlan 30
+ spanning-tree portfast
+!
+interface GigabitEthernet2/0/10
+ shutdown
+!
+interface TenGigabitEthernet1/1/1
+ description Uplink to core
+ switchport trunk allowed vlan 10,20,30,40
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface TenGigabitEthernet2/1/1
+ description Uplink to core
+ switchport trunk allowed vlan 10,20,30,40
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan10
+ ip address 10.10.10.2 255.255.255.0
+!
+interface Vlan20
+ ip address 10.10.20.1 255.255.255.0
+ ip helper-address 10.1.0.20
+!
+ip default-gateway 10.10.10.1
+ip route 0.0.0.0 0.0.0.0 10.10.10.1
+ip route vrf Mgmt-vrf 0.0.0.0 0.0.0.0 192.168.50.1
+!
+ip access-list extended BLOCK-GUEST
+ deny ip any 10.0.0.0 0.255.255.255
+ permit ip any any
+!
+snmp-server community public RO
+snmp-server location Calgary office
+snmp-server contact noc@corp.example
+!
+logging host 10.1.0.30
+logging trap warnings
+!
+radius server ISE
+ address ipv4 10.1.0.40 auth-port 1812 acct-port 1813
+ key 7 0822455D0A16
+!
+banner motd ^C
+Authorized access only.
+^C
+!
+line con 0
+ stopbits 1
+line vty 0 4
+ transport input ssh
+!
+ntp server 10.1.0.1 prefer
+ntp server 10.1.0.2
+!
+end

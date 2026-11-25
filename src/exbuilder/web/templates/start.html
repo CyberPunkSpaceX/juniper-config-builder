@@ -4,8 +4,9 @@
 {% include "_cards.html" %}
 <h1>What are you working on?</h1>
 <p class="muted">Each client has two separate spaces. Projects, network maps and config backups you save in one are not
-shown in the other. You can switch at any time with the Production / Lab button at the top.</p>
-<div class="cards two">
+shown in the other. You can switch at any time with the Production / Lab button at the top. The Converter turns a
+config from one switch brand into another and saves it in a client's Lab.</p>
+<div class="cards three">
   {% for key, label in spaces.items() %}
   <form method="post" action="{{ url_for('clients.set_space') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -24,5 +25,11 @@ shown in the other. You can switch at any time with the Production / Lab button 
     </button>
   </form>
   {% endfor %}
+  <a class="card space-convert" href="{{ url_for('converter.page') }}" data-space="convert">
+    <span class="icon" aria-hidden="true">&#8644;</span>
+    <h2>Converter</h2>
+    <span class="muted">Paste a config from one vendor (Cisco to Juniper, for example) and get the same setup for
+      another. Save it to a client's Lab, test it, then promote it to Production.</span>
+  </a>
 </div>
 {% endblock %}
