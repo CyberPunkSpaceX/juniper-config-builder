@@ -1,0 +1,22 @@
+{
+  "vendor": "extreme",
+  "name": "Office access switch (Extreme EXOS)",
+  "switch": {"members": [{"fpc": 1, "model": "X440-G2-48p-10GE4"}]},
+  "system": {"hostname": "x440-office-01", "domain": "example.lan", "timezone": "America/Edmonton",
+             "name_servers": "10.10.0.10, 1.1.1.1", "ntp_servers": [{"address": "10.10.0.1", "prefer": true}],
+             "mgmt_address": "192.168.100.51/24", "mgmt_gateway": "192.168.100.1", "mgmt_vrf": true},
+  "access": {"users": [{"name": "netadmin", "class": "super-user", "password": "Change-me-2026"}]},
+  "snmp": {"location": "Office", "communities": [{"name": "s3cret-ro", "access": "read-only"}]},
+  "syslog": {"hosts": [{"address": "10.10.0.60", "level": "info"}]},
+  "vlans": [{"name": "MGMT", "id": "10", "irb": "10.10.10.5/24"},
+            {"name": "USERS", "id": "20", "snooping": true},
+            {"name": "VOICE", "id": "30", "voice": true},
+            {"name": "WIFI", "id": "40"},
+            {"name": "CAMERAS", "id": "50"}],
+  "ports": [{"name": "DESKS", "ports": "1-40", "mode": "access", "vlan": "USERS", "description": "Desk ports", "edge": true},
+            {"name": "APS", "ports": "41-46", "mode": "trunk", "vlans": "WIFI, USERS", "native": "MGMT", "description": "Wi-Fi access points", "poe": "high"},
+            {"name": "CAMERAS", "ports": "47-48", "mode": "access", "vlan": "CAMERAS", "voice": "", "description": "Cameras", "edge": true}],
+  "lags": [{"name": "lag1", "members": "49-50", "lacp": "active", "lacp_fast": true, "mode": "trunk", "vlans": "MGMT, USERS, VOICE, WIFI, CAMERAS", "description": "To core"}],
+  "services": {"storm_control": false},
+  "routing": {"static": [{"prefix": "0.0.0.0/0", "next_hop": "10.10.10.1"}]}
+}
