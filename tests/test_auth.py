@@ -107,7 +107,8 @@ def test_password_is_hashed(app, tmp_path):
 
 # ----------------------------------------------------------- user management
 def add_user(admin, username="bob", password="bob-password-1", role="user", must_change=False):
-    data = {"username": username, "password": password, "role": role, "csrf_token": csrf(admin, "/users")}
+    data = {"username": username, "password": password, "level": "super" if role == "admin" else "viewer",
+            "csrf_token": csrf(admin, "/users")}
     if must_change:
         data["must_change"] = "1"
     return admin.post("/users", data=data, follow_redirects=True)
@@ -159,7 +160,7 @@ def test_disable_role_reset_and_delete(app, admin):
     assert b"bob disabled" in act(action="toggle").data
     assert login(app.test_client(), "bob", "bob-password-1").status_code == 200  # refused
     act(action="toggle")
-    assert b"bob is now admin" in act(action="role", role="admin").data
+    assert b"bob: Super Admin, all clients" in act(action="access", level="super").data
     assert b"Password for bob reset" in act(action="reset", password="reset-password-1").data
     assert login(app.test_client(), "bob", "reset-password-1").status_code == 302
     assert b"User bob deleted" in act(action="delete").data
@@ -179,9 +180,9 @@ def test_password_reset_signs_out_existing_sessions(app, admin):
 def test_last_admin_is_protected(app, admin):
     uid = user_id(app, "admin")
     token = csrf(admin, "/users")
-    resp = admin.post(f"/users/{uid}", data={"action": "role", "role": "user", "csrf_token": token},
+    resp = admin.post(f"/users/{uid}", data={"action": "access", "level": "admin", "scope": "all", "csrf_token": token},
                       follow_redirects=True)
-    assert b"last active admin" in resp.data
+    assert b"last active Super Admin" in resp.data
     resp = admin.post(f"/users/{uid}", data={"action": "delete", "csrf_token": token}, follow_redirects=True)
     assert b"can&#39;t delete your own account" in resp.data
 

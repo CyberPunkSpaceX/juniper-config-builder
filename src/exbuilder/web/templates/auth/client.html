@@ -6,14 +6,15 @@
 
 <section class="panel">
   <h2>People</h2>
-  <p class="hint"><b>Viewer</b> opens projects and maps. <b>Editor</b> also saves and deletes them.
-    <b>Admin</b> also manages people and SSH settings, and fetches configs from switches.
-    Server admins can open every client without being listed here.</p>
+  <p class="hint"><b>Read-only</b> opens projects, maps and config backups, with passwords, keys and SNMP
+    communities hidden. <b>Configurator</b> also builds, saves and deletes them, and sees the secrets.
+    <b>Admin</b> also manages people, SSH and EVE-NG settings, approves Lab work and fetches configs from switches.
+    Super Admins, and people given a level in all clients on the Users page, can open every client without being listed here.</p>
   <form method="post" class="row" style="grid-template-columns: 2fr 1fr auto; margin-bottom: 14px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="member_add">
     <div><label for="mu">Username</label><input id="mu" type="text" name="username" required autocomplete="off"></div>
-    <div><label for="mr">Role</label><select id="mr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r }}</option>{% endfor %}</select></div>
+    <div><label for="mr">Role</label><select id="mr" name="role">{% for r in roles %}<option value="{{ r }}">{{ r|role_label }}</option>{% endfor %}</select></div>
     <div><button type="submit">Add</button></div>
   </form>
   <div class="scroll"><table>
@@ -27,7 +28,7 @@
           <input type="hidden" name="action" value="member_role">
           <input type="hidden" name="user_id" value="{{ m['id'] }}">
           <select name="role" onchange="this.form.submit()" aria-label="Role for {{ m['username'] }}">
-            {% for r in roles %}<option value="{{ r }}" {% if r == m['role'] %}selected{% endif %}>{{ r }}</option>{% endfor %}
+            {% for r in roles %}<option value="{{ r }}" {% if r == m['role'] %}selected{% endif %}>{{ r|role_label }}</option>{% endfor %}
           </select>
           <noscript><button class="small secondary">Save</button></noscript>
         </form>
@@ -42,7 +43,11 @@
       </td>
     </tr>
     {% else %}
-    <tr><td colspan="3" class="muted">Nobody yet (server admins can always open it).</td></tr>
+    <tr><td colspan="3" class="muted">Nobody listed yet.</td></tr>
+    {% endfor %}
+    {% for e in everywhere %}
+    <tr><td><b>{{ e['username'] }}</b>{% if not e['active'] %} <span class="badge off">disabled</span>{% endif %}</td>
+      <td>{{ e['level'] }} <span class="muted">(all clients, set on the Users page)</span></td><td></td></tr>
     {% endfor %}
   </table></div>
 </section>
