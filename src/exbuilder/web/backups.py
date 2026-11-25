@@ -50,12 +50,19 @@ CREATE TABLE IF NOT EXISTS config_backups (
 );
 CREATE INDEX IF NOT EXISTS config_backups_host ON config_backups (client_id, host, source);
 """
-SOURCES = {"ssh": "SSH fetch", "eve": "EVE-NG lab", "upload": "uploaded", "map": "network map",
-           "builder": "builder output", "restore": "restored"}
+SOURCES = {"ssh": "SSH fetch", "nightly": "nightly backup", "eve": "EVE-NG lab", "upload": "uploaded",
+           "map": "network map", "builder": "builder output", "restore": "restored",
+           "prepush": "before a push", "postpush": "after a push"}
+# Sources read from the switch itself: their versions form one history per switch.
+LIVE_SOURCES = ("ssh", "nightly", "prepush", "postpush")
 MAX_TEXT = 2_000_000
 KEEP = 50            # versions kept per switch and source
 FORMAT = "exbuilder-client-backup"
 HOST_RE = re.compile(r"host-name\s+\"?([\w.-]+)")
+# Other vendors: hostname X (IOS, EOS, NX-OS, OS10, Aruba, ProCurve, FastIron), set hostname X
+# (FortiSwitch), /system identity set name=X (MikroTik), configure snmp sysName X (EXOS).
+HOST_OTHER_RE = re.compile(r'^\s*(?:hostname|set hostname|configure snmp sysName)\s+"?([\w.-]+)|'
+                           r'^/system identity set name="?([\w.-]+)', re.M)
 
 
 def migrate(conn: sqlite3.Connection) -> None:
@@ -71,8 +78,34 @@ def _now() -> str:
 
 def host_of(text: str, fallback: str = "") -> str:
     found = HOST_RE.findall(text or "")
+    if not found:
+        other = HOST_OTHER_RE.search(text or "")
+        found = [other.group(1) or other.group(2)] if other else []
     name = found[-1] if found else fallback   # in set lines the last one wins
     return re.sub(r"[^\w.-]+", "-", name or "switch").strip("-")[:80] or "switch"
+
+
+def is_config(text: str) -> bool:
+    """A switch config of any vendor the builder knows."""
+    from ..convert import detect
+    return bool(importer.to_set_lines(text)) or bool(detect(text)) or sshfetch.looks_like_config(text, "other")
+
+
+def sha_of(text: str) -> str:
+    """Fingerprint of a config, without the lines that change on every fetch (timestamps)."""
+    return hashlib.sha256(cmp.stable_text(text).encode()).hexdigest()
+
+
+def previous(conn: sqlite3.Connection, row) -> sqlite3.Row | None:
+    """The version of the same switch before this one (switch sources together, others by source)."""
+    if row["source"] in LIVE_SOURCES:
+        q = ",".join("?" * len(LIVE_SOURCES))
+        return conn.execute(f"SELECT * FROM config_backups WHERE client_id = ? AND space = ? AND host = ? AND "
+                            f"source IN ({q}) AND id < ? ORDER BY id DESC LIMIT 1",
+                            (row["client_id"], row["space"], row["host"], *LIVE_SOURCES, row["id"])).fetchone()
+    return conn.execute("SELECT * FROM config_backups WHERE client_id = ? AND space = ? AND host = ? AND source = ? "
+                        "AND id < ? ORDER BY id DESC LIMIT 1",
+                        (row["client_id"], row["space"], row["host"], row["source"], row["id"])).fetchone()
 
 
 def store(conn: sqlite3.Connection, cid: int, items: list[dict], source: str, who: str, note: str = "",
@@ -81,13 +114,15 @@ def store(conn: sqlite3.Connection, cid: int, items: list[dict], source: str, wh
     out = []
     for it in items:
         text = str(it.get("text") or "")
-        if not text.strip() or len(text) > MAX_TEXT or not importer.to_set_lines(text):
+        if not text.strip() or len(text) > MAX_TEXT or not is_config(text):
             out.append({"host": str(it.get("name") or ""), "error": "not a switch config"})
             continue
         host = host_of(text, str(it.get("name") or ""))
-        sha = hashlib.sha256(text.encode()).hexdigest()
-        last = conn.execute("SELECT id, sha, created_at FROM config_backups WHERE client_id = ? AND space = ? AND "
-                            "host = ? AND source = ? ORDER BY id DESC LIMIT 1", (cid, space, host, source)).fetchone()
+        sha = sha_of(text)
+        group = LIVE_SOURCES if source in LIVE_SOURCES else (source,)
+        q = ",".join("?" * len(group))
+        last = conn.execute(f"SELECT id, sha, created_at FROM config_backups WHERE client_id = ? AND space = ? AND "
+                            f"host = ? AND source IN ({q}) ORDER BY id DESC LIMIT 1", (cid, space, host, *group)).fetchone()
         if last and last[1] == sha:
             out.append({"id": last[0], "host": host, "unchanged": True, "since": last[2]})
             continue
@@ -166,6 +201,20 @@ def backups_get(bid: int):
         return Response(r["text"], mimetype="text/plain",
                         headers={"Content-Disposition": f"attachment; filename={_filename(r)}"})
     return {k: r[k] for k in ("id", "host", "address", "source", "note", "lines", "created_at", "created_by", "text")}
+
+
+@bp.get("/backups/<int:bid>/changes")
+def backups_changes(bid: int):
+    """What changed in this version since the version of the same switch before it."""
+    c = clients.need("viewer")
+    r = _get(c["id"], bid)
+    before = previous(auth.db(), r)
+    head = {k: r[k] for k in ("id", "host", "source", "created_at", "created_by")}
+    if before is None:
+        return {"backup": head, "previous": None}
+    result = cmp.compare(before["text"], r["text"], ignore_secrets=request.args.get("secrets") != "1")
+    return {"backup": head, "previous": {k: before[k] for k in ("id", "source", "created_at", "created_by")},
+            "result": result}
 
 
 @bp.post("/backups")
@@ -314,8 +363,8 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
         for b in data.get("config_backups") or []:
             if not isinstance(b, dict) or not isinstance(b.get("text"), str) or len(b["text"]) > MAX_TEXT:
                 continue
-            sha = hashlib.sha256(b["text"].encode()).hexdigest()
-            if sha in have or not importer.to_set_lines(b["text"]):
+            sha = sha_of(b["text"])
+            if sha in have or not is_config(b["text"]):
                 continue
             have.add(sha)
             source = b.get("source") if b.get("source") in SOURCES else "restore"

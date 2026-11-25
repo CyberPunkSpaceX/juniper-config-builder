@@ -289,6 +289,36 @@ builder's project), *before a change* (builder against live, then paste the
 "make A like B" commands), and *after a lab test* (lab pull against the
 builder's config).
 
+Other vendors' configs (Cisco, Arista, Nexus, Dell, Aruba, ProCurve, Ruckus,
+Extreme, FortiSwitch, MikroTik) are compared block by block (each interface,
+VLAN or router section, in config order), without "make A like B" commands.
+Lines that change on every fetch without a real change (the "Last configuration
+change" stamp, `ntp clock-period`, the RouterOS export date) are left out, so
+they never count as a new version either. **Changes** on a backup shows what
+changed since the version before it.
+
+### Nightly backups and change alerts
+
+On a client's page, **Set up nightly backups** (client admins): list the
+switches (`address vendor [port]`, one per line), pick the time and time zone,
+and who gets alerts: email addresses and/or webhooks for Microsoft Teams
+(channel > Workflows > "Post to a channel when a webhook request is received"),
+Slack, Discord or any JSON webhook. Every night the **jobs** service signs in
+to each switch with the client's SSH key (never a stored password), runs the
+vendor's read-only command (`show configuration | display set`,
+`show running-config`, `show running-configuration`, `show configuration`,
+`show`, `/export terse`) and keeps the config as a Production backup. The
+alert lists the changed lines of each switch (passwords and keys hidden) and
+every switch that could not be read. **Back up now** and **Send a test alert**
+are on the same page, with the last runs below. Webhook addresses are stored
+encrypted with the master key. UniFi has no SSH config to read.
+
+The jobs service is a second service in the stack (`exbuilder jobs`, same
+image and data volume, same node). Email needs `EXB_SMTP_HOST`, `EXB_SMTP_PORT`,
+`EXB_SMTP_TLS` (`starttls`, `ssl` or `none`), `EXB_SMTP_USER`,
+`EXB_SMTP_PASSWORD_FILE` and `EXB_SMTP_FROM`; `EXB_PUBLIC_URL` adds a link to
+the alerts.
+
 ![Comparing a backup with the builder's config](docs/screenshots/11-backups-compare.png)
 
 ### Back up and restore a client

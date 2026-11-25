@@ -28,7 +28,7 @@ from flask import Flask, Response, abort, flash, redirect, render_template, requ
 
 from .. import __version__, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, backups, clients, converter, eve, promote
+from . import auth, backups, clients, converter, eve, nightly, promote
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -130,6 +130,7 @@ def create_app() -> Flask:
     backups.init_app(app)
     promote.init_app(app)
     converter.init_app(app)
+    nightly.init_app(app)
     zones = _timezones()
 
     @app.after_request

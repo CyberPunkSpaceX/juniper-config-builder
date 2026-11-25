@@ -110,6 +110,11 @@ set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro a
     <tr><td colspan="3" class="muted">None yet.</td></tr>
     {% endfor %}
   </table></div>
+
+  <h2 style="margin-top: 22px">Nightly backups</h2>
+  <p class="hint">Back up every switch of {{ c['name'] }} each night with the SSH key, keep the version history, and
+    get an email or a Teams / Slack message when a config changes or a switch cannot be read.</p>
+  <p><a href="{{ url_for('nightly.nightly_page', cid=c['id']) }}">Set up nightly backups →</a></p>
 </section>
 
 <section class="panel" id="eve">

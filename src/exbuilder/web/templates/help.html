@@ -394,6 +394,10 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
   <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>viewer</b>
     (look), <b>editor</b> (save and delete) or <b>admin</b> (also manage people, SSH and EVE-NG settings).</li>
   <li>A client admin can <b>Download a backup</b> of a client (projects, maps, config backups) on the client's page.</li>
+  <li><b>Nightly backups</b>: on the client's page a client admin lists the switches (address, vendor, port), the time,
+    and who hears about changes (email, Teams, Slack or Discord). Each night every switch is read with the client's SSH
+    key; a changed config is kept as a new version and the alert shows the changed lines. <b>Changes</b> on any backup
+    (Backups &amp; compare tab) shows what changed since the version before.</li>
 </ul>
 
 <h2 id="tools">10. Tools (Juniper for now)</h2>
