@@ -138,7 +138,9 @@ def create_app() -> Flask:
 
     @app.get("/")
     def index():
-        """The vendor screen: the first page after signing in."""
+        """The vendor screen, once Production / Lab and the client are picked."""
+        if (step := clients.start_redirect()) is not None:
+            return step
         return render_template("vendors.html", vendors=vendors.VENDORS.values(), version=__version__,
                                last=session.get("vendor"))
 
@@ -285,7 +287,7 @@ def create_app() -> Flask:
         ok = [r for r in results if r["ok"]]
         if ok:
             saved = backups.store(auth.db(), c["id"], [{"name": r["host"], "address": r["host"], "text": r["text"]}
-                                                       for r in ok], "ssh", me)
+                                                       for r in ok], "ssh", me, space=c["space"])
             for r, s in zip(ok, saved):
                 r["backup"] = s
         return {"results": results}
@@ -366,14 +368,15 @@ def create_app() -> Flask:
     def projects_list():
         c = clients.need("viewer")
         rows = auth.db().execute("SELECT id, name, updated_at, updated_by FROM projects WHERE client_id = ? "
-                                 "ORDER BY name COLLATE NOCASE", (c["id"],))
+                                 "AND space = ? ORDER BY name COLLATE NOCASE", (c["id"], c["space"]))
         return {"projects": [dict(r) for r in rows], "client": c["name"],
                 "can_edit": clients.RANK[c["role"]] >= clients.RANK["editor"]}
 
     @app.get("/projects/<int:pid>")
     def projects_get(pid: int):
         c = clients.need("viewer")
-        row = auth.db().execute("SELECT * FROM projects WHERE id = ? AND client_id = ?", (pid, c["id"])).fetchone()
+        row = auth.db().execute("SELECT * FROM projects WHERE id = ? AND client_id = ? AND space = ?",
+                                (pid, c["id"], c["space"])).fetchone()
         if row is None:
             abort(404)
         return {"id": row["id"], "name": row["name"], "data": json.loads(row["data"])}
@@ -391,19 +394,20 @@ def create_app() -> Flask:
             return {"error": "Project is too large."}, 400
         now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         db = auth.db()
-        db.execute("INSERT INTO projects (client_id, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?) "
-                   "ON CONFLICT (client_id, name) DO UPDATE SET data = excluded.data, "
+        db.execute("INSERT INTO projects (client_id, space, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?) "
+                   "ON CONFLICT (client_id, space, name) DO UPDATE SET data = excluded.data, "
                    "updated_at = excluded.updated_at, updated_by = excluded.updated_by",
-                   (c["id"], name, text, now, auth.current_user()["username"]))
+                   (c["id"], c["space"], name, text, now, auth.current_user()["username"]))
         db.commit()
-        pid = db.execute("SELECT id FROM projects WHERE client_id = ? AND name = ?", (c["id"], name)).fetchone()[0]
+        pid = db.execute("SELECT id FROM projects WHERE client_id = ? AND space = ? AND name = ?",
+                         (c["id"], c["space"], name)).fetchone()[0]
         return {"id": pid, "name": name, "updated_at": now, "client": c["name"]}
 
     @app.post("/projects/<int:pid>/delete")
     def projects_delete(pid: int):
         c = clients.need("editor")
         db = auth.db()
-        cur = db.execute("DELETE FROM projects WHERE id = ? AND client_id = ?", (pid, c["id"]))
+        cur = db.execute("DELETE FROM projects WHERE id = ? AND client_id = ? AND space = ?", (pid, c["id"], c["space"]))
         db.commit()
         if cur.rowcount == 0:
             abort(404)

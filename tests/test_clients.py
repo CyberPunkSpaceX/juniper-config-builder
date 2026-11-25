@@ -6,7 +6,7 @@ import pytest
 flask = pytest.importorskip("flask")
 
 from test_auth import ADMIN, add_user, app, admin, csrf, login  # noqa: F401,E402
-from test_builder_web import token  # noqa: E402
+from test_builder_web import pick_space, token  # noqa: E402
 
 
 def _form(client, path, **data):
@@ -143,3 +143,55 @@ def test_migration_from_before_clients(monkeypatch, tmp_path):
     assert not (tmp_path / "ssh_known_hosts").exists()
     create_app()  # a second start changes nothing
     assert len(bob.get("/projects").json["projects"]) == 3
+
+
+def test_start_flow_space_and_client_pick(app, admin):
+    """After sign-in: Production or Lab, then the client (when there are several), then the vendors."""
+    _form(admin, "/clients", name="Acme")
+    assert admin.get("/").location.endswith("/start")
+    pick_space(admin, "lab")
+    assert admin.get("/").location.endswith("/clients/pick")
+    page = admin.get("/clients/pick").get_data(as_text=True)
+    assert "Which client?" in page and "Acme" in page and "Default" in page and ">Lab<" in page
+    _form(admin, "/clients/select", client_id="2", next="/")
+    assert "Which switches are you configuring?" in admin.get("/").get_data(as_text=True)
+    nav = admin.get("/help").get_data(as_text=True)
+    assert 'class="seg on seg-lab"' in nav and 'value="production"' in nav
+    assert admin.post("/space", data={"csrf_token": csrf(admin, "/help"), "space": "prod!"}).status_code == 400
+
+
+def test_lab_and_production_keep_their_own_projects(app, admin):
+    hdr = {"X-CSRF-Token": token(admin)}
+    pick_space(admin, "production")
+    admin.post("/projects", json={"name": "Core", "data": {"system": {"hostname": "real"}}}, headers=hdr)
+    admin.post("/backups", json={"items": [{"name": "sw1", "text": "set system host-name sw1"}], "source": "upload"},
+               headers=hdr)
+    (prod,) = admin.get("/projects").json["projects"]
+    pick_space(admin, "lab")
+    assert admin.get("/projects").json["projects"] == [] and admin.get("/backups").json["backups"] == []
+    assert admin.get(f"/projects/{prod['id']}").status_code == 404     # not reachable by id from Lab either
+    admin.post("/projects", json={"name": "Core", "data": {"system": {"hostname": "lab"}}}, headers=hdr)
+    (lab,) = admin.get("/projects").json["projects"]
+    assert lab["id"] != prod["id"]
+    pick_space(admin, "production")
+    assert admin.get(f"/projects/{prod['id']}").json["data"]["system"]["hostname"] == "real"
+    assert len(admin.get("/backups").json["backups"]) == 1
+    # EVE-NG is a Lab tool.
+    assert admin.get("/eve/labs").status_code == 409
+    assert "built in the <b>Lab</b> space" in admin.get("/build/juniper").get_data(as_text=True)
+
+
+def test_projects_from_before_spaces_move_to_production(tmp_path):
+    from exbuilder.web import clients
+    conn = sqlite3.connect(tmp_path / "old.db")
+    conn.executescript("""
+        CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, name TEXT NOT NULL,
+            data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '', UNIQUE (client_id, name));
+        CREATE TABLE maps (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, name TEXT NOT NULL,
+            data TEXT NOT NULL, updated_at TEXT NOT NULL, updated_by TEXT NOT NULL DEFAULT '', UNIQUE (client_id, name));
+        INSERT INTO projects (client_id, name, data, updated_at) VALUES (1, 'Old', '{}', 'then');
+    """)
+    clients._add_space(conn)
+    assert conn.execute("SELECT id, space, name FROM projects").fetchall() == [(1, "production", "Old")]
+    conn.execute("INSERT INTO projects (client_id, space, name, data, updated_at) VALUES (1, 'lab', 'Old', '{}', 'now')")
+    assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 2

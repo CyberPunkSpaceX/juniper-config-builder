@@ -124,8 +124,17 @@ def _soon(monkeypatch):
     monkeypatch.setitem(vendors.VENDORS, "nokia", vendors.Vendor("nokia", "Nokia", "SR Linux", "lab", frozenset()))
 
 
+def pick_space(client, space="production"):
+    client.post("/space", data={"csrf_token": csrf(client, "/start"), "space": space})
+
+
 def test_vendor_screen_after_login(admin, monkeypatch):
     _soon(monkeypatch)
+    # First Production or Lab; with one client there is nothing else to pick.
+    assert admin.get("/").location.endswith("/start")
+    start = admin.get("/start").get_data(as_text=True)
+    assert "What are you working on?" in start and 'value="lab"' in start and 'value="production"' in start
+    pick_space(admin)
     page = admin.get("/").get_data(as_text=True)
     assert "Which switches are you configuring?" in page
     for name in ("Juniper", "Arista", "Cisco", "Brocade / Ruckus"):
@@ -135,6 +144,7 @@ def test_vendor_screen_after_login(admin, monkeypatch):
 
 def test_builder_per_vendor(admin, monkeypatch):
     _soon(monkeypatch)
+    pick_space(admin)
     page = admin.get("/build/juniper").get_data(as_text=True)
     assert "Juniper builder" in page and '"vlan_translation"' in page
     assert "Last used" in admin.get("/").get_data(as_text=True)

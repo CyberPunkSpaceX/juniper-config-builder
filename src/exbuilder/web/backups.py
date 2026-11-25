@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS config_backups (
     sha TEXT NOT NULL,
     lines INTEGER NOT NULL,
     created_at TEXT NOT NULL,
-    created_by TEXT NOT NULL DEFAULT ''
+    created_by TEXT NOT NULL DEFAULT '',
+    space TEXT NOT NULL DEFAULT 'production'
 );
 CREATE INDEX IF NOT EXISTS config_backups_host ON config_backups (client_id, host, source);
 """
@@ -59,6 +60,9 @@ HOST_RE = re.compile(r"host-name\s+\"?([\w.-]+)")
 
 def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    if "space" not in {r[1] for r in conn.execute("PRAGMA table_info(config_backups)")}:
+        conn.execute("ALTER TABLE config_backups ADD COLUMN space TEXT NOT NULL DEFAULT 'production'")
+        conn.commit()
 
 
 def _now() -> str:
@@ -71,7 +75,8 @@ def host_of(text: str, fallback: str = "") -> str:
     return re.sub(r"[^\w.-]+", "-", name or "switch").strip("-")[:80] or "switch"
 
 
-def store(conn: sqlite3.Connection, cid: int, items: list[dict], source: str, who: str, note: str = "") -> list[dict]:
+def store(conn: sqlite3.Connection, cid: int, items: list[dict], source: str, who: str, note: str = "",
+          space: str = "production") -> list[dict]:
     """Keep each {name, text, address} as a backup. Returns [{id, host, unchanged}]."""
     out = []
     for it in items:
@@ -81,17 +86,17 @@ def store(conn: sqlite3.Connection, cid: int, items: list[dict], source: str, wh
             continue
         host = host_of(text, str(it.get("name") or ""))
         sha = hashlib.sha256(text.encode()).hexdigest()
-        last = conn.execute("SELECT id, sha, created_at FROM config_backups WHERE client_id = ? AND host = ? AND "
-                            "source = ? ORDER BY id DESC LIMIT 1", (cid, host, source)).fetchone()
+        last = conn.execute("SELECT id, sha, created_at FROM config_backups WHERE client_id = ? AND space = ? AND "
+                            "host = ? AND source = ? ORDER BY id DESC LIMIT 1", (cid, space, host, source)).fetchone()
         if last and last[1] == sha:
             out.append({"id": last[0], "host": host, "unchanged": True, "since": last[2]})
             continue
-        bid = conn.execute("INSERT INTO config_backups (client_id, host, address, source, note, text, sha, lines, "
-                           "created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (cid, host, str(it.get("address") or "")[:200], source, (note or "")[:200], text, sha,
+        bid = conn.execute("INSERT INTO config_backups (client_id, space, host, address, source, note, text, sha, "
+                           "lines, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                           (cid, space, host, str(it.get("address") or "")[:200], source, (note or "")[:200], text, sha,
                             text.count("\n") + 1, str(it.get("created_at") or _now()), who)).lastrowid
-        old = conn.execute("SELECT id FROM config_backups WHERE client_id = ? AND host = ? AND source = ? "
-                           "ORDER BY id DESC LIMIT -1 OFFSET ?", (cid, host, source, KEEP)).fetchall()
+        old = conn.execute("SELECT id FROM config_backups WHERE client_id = ? AND space = ? AND host = ? AND source = ? "
+                           "ORDER BY id DESC LIMIT -1 OFFSET ?", (cid, space, host, source, KEEP)).fetchall()
         if old:
             conn.executemany("DELETE FROM config_backups WHERE id = ?", old)
         out.append({"id": bid, "host": host, "unchanged": False})
@@ -109,7 +114,8 @@ def _filename(r) -> str:
 
 
 def _get(cid: int, bid: int):
-    r = auth.db().execute("SELECT * FROM config_backups WHERE id = ? AND client_id = ?", (bid, cid)).fetchone()
+    r = auth.db().execute("SELECT * FROM config_backups WHERE id = ? AND client_id = ? AND space = ?",
+                          (bid, cid, clients.space())).fetchone()
     if r is None:
         abort(404)
     return r
@@ -146,7 +152,7 @@ def _files_from_upload() -> list[dict]:
 def backups_list():
     c = clients.need("viewer")
     rows = auth.db().execute("SELECT id, host, address, source, note, lines, created_at, created_by FROM config_backups "
-                             "WHERE client_id = ? ORDER BY host COLLATE NOCASE, id DESC", (c["id"],))
+                             "WHERE client_id = ? AND space = ? ORDER BY host COLLATE NOCASE, id DESC", (c["id"], c["space"]))
     return {"backups": [dict(r, source_name=SOURCES.get(r["source"], r["source"])) for r in rows],
             "client": c["name"], "can_edit": clients.RANK[c["role"]] >= clients.RANK["editor"],
             "can_delete": c["role"] == "admin"}
@@ -172,7 +178,8 @@ def backups_save():
         return {"error": "Unknown source."}, 400
     if not items:
         return {"error": "Nothing to keep."}, 400
-    saved = store(auth.db(), c["id"], items, source, auth.current_user()["username"], str(body.get("note") or ""))
+    saved = store(auth.db(), c["id"], items, source, auth.current_user()["username"], str(body.get("note") or ""),
+                  space=c["space"])
     return {"saved": saved}
 
 
@@ -183,7 +190,7 @@ def backups_upload():
     if not files:
         return {"error": "Choose config files (.conf, .txt) or a .zip of them."}, 400
     saved = store(auth.db(), c["id"], files, "upload", auth.current_user()["username"],
-                  str(request.form.get("note") or ""))
+                  str(request.form.get("note") or ""), space=c["space"])
     return {"saved": saved}
 
 
@@ -195,10 +202,11 @@ def backups_export():
     db = auth.db()
     if ids:
         q = ",".join("?" * len(ids))
-        rows = db.execute(f"SELECT * FROM config_backups WHERE client_id = ? AND id IN ({q})", (c["id"], *ids)).fetchall()
+        rows = db.execute(f"SELECT * FROM config_backups WHERE client_id = ? AND space = ? AND id IN ({q})",
+                          (c["id"], c["space"], *ids)).fetchall()
     else:
         rows = db.execute("SELECT * FROM config_backups WHERE id IN (SELECT MAX(id) FROM config_backups "
-                          "WHERE client_id = ? GROUP BY host)", (c["id"],)).fetchall()
+                          "WHERE client_id = ? AND space = ? GROUP BY host)", (c["id"], c["space"])).fetchall()
     if not rows:
         return {"error": "No config backups yet."}, 404
     buf = io.BytesIO()
@@ -258,12 +266,14 @@ def export_client(cid: int, with_secrets: bool = False, with_configs: bool = Tru
                "SELECT u.username, m.role FROM client_members m JOIN users u ON u.id = m.user_id WHERE m.client_id = ? "
                "ORDER BY u.username", (cid,))],
            "projects": [dict(p, data=json.loads(p["data"])) for p in db.execute(
-               "SELECT name, data, updated_at, updated_by FROM projects WHERE client_id = ? ORDER BY name", (cid,))],
+               "SELECT space, name, data, updated_at, updated_by FROM projects WHERE client_id = ? ORDER BY space, name",
+               (cid,))],
            "maps": [dict(m, data=json.loads(m["data"])) for m in db.execute(
-               "SELECT name, data, updated_at, updated_by FROM maps WHERE client_id = ? ORDER BY name", (cid,))]}
+               "SELECT space, name, data, updated_at, updated_by FROM maps WHERE client_id = ? ORDER BY space, name",
+               (cid,))]}
     if with_configs:
         out["config_backups"] = [dict(b) for b in db.execute(
-            "SELECT host, address, source, note, text, created_at, created_by FROM config_backups WHERE client_id = ? "
+            "SELECT space, host, address, source, note, text, created_at, created_by FROM config_backups WHERE client_id = ? "
             "ORDER BY id", (cid,))]
     if with_secrets:
         out["secrets"] = {"encrypted_with": "this server's master key", "ssh_key": r["ssh_key"],
@@ -288,14 +298,16 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
                 text = json.dumps(p["data"])
                 if not name or len(text) > (512 * 1024 if table == "projects" else clients.MAX_MAP_BYTES):
                     continue
-                exists = db.execute(f"SELECT 1 FROM {table} WHERE client_id = ? AND name = ?", (cid, name)).fetchone()
+                space = p.get("space") if p.get("space") in clients.SPACES else "production"
+                exists = db.execute(f"SELECT 1 FROM {table} WHERE client_id = ? AND space = ? AND name = ?",
+                                    (cid, space, name)).fetchone()
                 if exists and not replace:
                     counts[table][1] += 1
                     continue
-                db.execute(f"INSERT INTO {table} (client_id, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?) "
-                           "ON CONFLICT (client_id, name) DO UPDATE SET data = excluded.data, updated_at = "
-                           "excluded.updated_at, updated_by = excluded.updated_by",
-                           (cid, name, text, str(p.get("updated_at") or now)[:40], str(p.get("updated_by") or who)[:80]))
+                db.execute(f"INSERT INTO {table} (client_id, space, name, data, updated_at, updated_by) "
+                           "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (client_id, space, name) DO UPDATE SET data = "
+                           "excluded.data, updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+                           (cid, space, name, text, str(p.get("updated_at") or now)[:40], str(p.get("updated_by") or who)[:80]))
                 counts[table][0] += 1
         n_cfg = 0
         have = {r[0] for r in db.execute("SELECT sha FROM config_backups WHERE client_id = ?", (cid,))}
@@ -307,9 +319,9 @@ def import_client(cid: int, data: dict, replace: bool = True, settings: bool = F
                 continue
             have.add(sha)
             source = b.get("source") if b.get("source") in SOURCES else "restore"
-            db.execute("INSERT INTO config_backups (client_id, host, address, source, note, text, sha, lines, created_at, "
-                       "created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                       (cid, host_of(b["text"], str(b.get("host") or "")), str(b.get("address") or "")[:200], source,
+            db.execute("INSERT INTO config_backups (client_id, space, host, address, source, note, text, sha, lines, "
+                       "created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                       (cid, b.get("space") if b.get("space") in clients.SPACES else "production", host_of(b["text"], str(b.get("host") or "")), str(b.get("address") or "")[:200], source,
                         str(b.get("note") or "")[:200], b["text"], sha, b["text"].count("\n") + 1,
                         str(b.get("created_at") or now)[:40], str(b.get("created_by") or who)[:80]))
             n_cfg += 1

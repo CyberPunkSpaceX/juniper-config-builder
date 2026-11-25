@@ -1,0 +1,36 @@
+{% extends "auth/base.html" %}
+{% block title %}Pick a client · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "_cards.html" %}
+<h1>Which client? <span class="badge space-badge space-{{ space }}">{{ spaces[space] }}</span></h1>
+<p class="muted">Pick the client to work on. You only see the clients you've been added to, and each client's
+projects, maps and backups are kept apart.</p>
+{% if my_clients|length > 8 %}
+<form class="field" method="post" action="{{ url_for('clients.select') }}" style="max-width: 360px">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <input type="hidden" name="next" value="{{ url_for('index') }}">
+  <label for="pick-list">Client</label>
+  <select id="pick-list" name="client_id" onchange="this.form.submit()">
+    <option value="">Choose…</option>
+    {% for c in my_clients %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}
+  </select>
+  <noscript><button type="submit">Open</button></noscript>
+</form>
+{% endif %}
+<div class="cards">
+  {% for c in my_clients %}
+  <form method="post" action="{{ url_for('clients.select') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="client_id" value="{{ c.id }}">
+    <input type="hidden" name="next" value="{{ url_for('index') }}">
+    <button class="card" type="submit" data-client="{{ c.id }}">
+      <span class="icon initials" aria-hidden="true">{{ c.name[:2]|upper }}</span>
+      <h2>{{ c.name }}</h2>
+      <span class="muted">Your role: {{ c.role }}</span>
+      {% if current_client and current_client.id == c.id %}<span class="tag last">Last used</span>{% endif %}
+    </button>
+  </form>
+  {% endfor %}
+</div>
+{% if not my_clients %}<p>You are not in any client yet. Ask an admin to add you to one.</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "auth/base.html" %}
+{% block title %}Production or Lab · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "_cards.html" %}
+<h1>What are you working on?</h1>
+<p class="muted">Each client has two separate spaces. Projects, network maps and config backups you save in one are not
+shown in the other. You can switch at any time with the Production / Lab button at the top.</p>
+<div class="cards two">
+  {% for key, label in spaces.items() %}
+  <form method="post" action="{{ url_for('clients.set_space') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="space" value="{{ key }}">
+    <button class="card space-{{ key }}" type="submit" data-space="{{ key }}">
+      <span class="icon" aria-hidden="true">{% if key == 'lab' %}&#9879;{% else %}&#9881;{% endif %}</span>
+      <h2>{{ label }}</h2>
+      {% if key == 'lab' %}
+      <span class="muted">Test configs before they go live. Build EVE-NG labs from your projects and maps, and try
+        changes on virtual switches.</span>
+      {% else %}
+      <span class="muted">The real network: build configs, fetch and back up running configs over SSH, and keep the
+        projects that go on real switches.</span>
+      {% endif %}
+      {% if space == key %}<span class="tag last">Last used</span>{% endif %}
+    </button>
+  </form>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -4,6 +4,13 @@
   <a class="brand" href="{{ url_for('index') }}"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
   <a href="{{ url_for('index') }}">Vendors</a>
   <a href="{{ url_for('help_page') }}">Help</a>
+  {% if current_space and request.endpoint != 'clients.start_page' %}
+  <form class="space-switch" method="post" action="{{ url_for('clients.set_space') }}" title="Switch between the Production and Lab spaces">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="next" value="{{ request.path if request.endpoint not in ('clients.start_page', 'clients.pick_page') else url_for('index') }}">
+    {% for key, label in spaces.items() %}<button type="submit" name="space" value="{{ key }}" class="seg{% if key == current_space %} on{% endif %} seg-{{ key }}"{% if key == current_space %} aria-pressed="true"{% endif %}>{{ label }}</button>{% endfor %}
+  </form>
+  {% endif %}
   {% if my_clients %}
   <form class="client-pick" method="post" action="{{ url_for('clients.select') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

@@ -363,6 +363,8 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         c = app.test_client()
         assert login(c, *ADMIN).status_code == 302
         hdr = {"X-CSRF-Token": token(c)}
+        assert "built in the <b>Lab</b> space" in c.get("/build/juniper").get_data(as_text=True)
+        c.post("/space", data={"csrf_token": csrf(c, "/start"), "space": "lab"})   # EVE-NG lives in Lab
         page = c.get("/build/juniper").get_data(as_text=True)
         assert "EVE-NG is not set up" in page
         assert c.get("/eve/images").status_code == 400

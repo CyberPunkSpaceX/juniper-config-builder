@@ -742,6 +742,9 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <details class="explain" id="eve-box" style="margin-top:10px"><summary>Test in an EVE-NG lab</summary>
         {% if not client %}
         <p class="hint">You are not in any client yet.</p>
+        {% elif client.space != 'lab' %}
+        <p class="hint">EVE-NG labs are built in the <b>Lab</b> space, so test configs never mix with production ones.
+          Click <b>Lab</b> at the top of the page to switch; your Production projects stay here.</p>
         {% elif not eve.configured %}
         <p class="hint">EVE-NG is not set up for {{ client.name }} yet. {% if client.role == 'admin' %}Add the server under <a href="{{ url_for('clients.client_page', cid=client.id) }}#eve">Clients → {{ client.name }} → EVE-NG</a>.{% else %}Ask an admin of {{ client.name }} to add it.{% endif %}</p>
         {% else %}
@@ -997,7 +1000,8 @@ function applyVendor() {
 const LEVELS = ["emergency","alert","critical","error","warning","notice","info","any"];
 const FACILITIES = ["any","authorization","change-log","daemon","firewall","interactive-commands","kernel","user"];
 const CSRF = document.getElementById("csrf").value;
-const DRAFT_KEY = "exbuilder-draft" + (JUNOS ? "" : "-" + VENDOR.key);
+// The unsaved draft belongs to one client and space, so it never follows you into another client.
+const DRAFT_KEY = "exbuilder-draft" + (JUNOS ? "" : "-" + VENDOR.key) + (CLIENT ? "-" + CLIENT.id + "-" + CLIENT.space : "");
 const MODEL_NAMES = CATALOG.map(m => m.name).concat(["Custom"]);
 
 const EXAMPLE = {
@@ -2120,7 +2124,7 @@ fillModelSelect(document.getElementById("imp-model"), "");
 // ---------------------------------------------------------------- drafts
 function saveDraft() { try { localStorage.setItem(DRAFT_KEY, JSON.stringify(state)); } catch (e) {} }
 // ------------------------------------------------------------- network map
-const MAP_KEY = "exbuilder-map" + (CLIENT ? "-" + CLIENT.id : "");  // each client has its own working map
+const MAP_KEY = "exbuilder-map" + (CLIENT ? "-" + CLIENT.id + "-" + CLIENT.space : "");  // each client and space has its own working map
 let mapItems = [];      // [{name, text, lldp}]
 let mapData = null;     // result of POST /map
 let mapPos = {};        // hostname -> {x, y}
@@ -2725,6 +2729,11 @@ window.addEventListener("popstate", () => {
 });
 (function start() {
   let draft = null;
+  try {  // a draft from before drafts were kept per client moves into the Production space once
+    const old = "exbuilder-draft" + (JUNOS ? "" : "-" + VENDOR.key);
+    if (CLIENT && CLIENT.space === "production" && !localStorage.getItem(DRAFT_KEY) && localStorage.getItem(old)) {
+      localStorage.setItem(DRAFT_KEY, localStorage.getItem(old)); localStorage.removeItem(old); }
+  } catch (e) {}
   try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || "null"); activeTab = localStorage.getItem("exbuilder-tab") || "Switch"; } catch (e) {}
   if (!TAB_SECTION[activeTab] || !tabOk(activeTab)) activeTab = "Switch";
   applyVendor();

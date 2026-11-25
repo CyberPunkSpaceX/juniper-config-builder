@@ -29,7 +29,7 @@ def login(client, username, password):
 
 
 def csrf(client, path="/"):
-    page = client.get(path).get_data(as_text=True)
+    page = client.get(path, follow_redirects=True).get_data(as_text=True)
     return re.search(r'name="csrf_token" value="([^"]+)"', page).group(1)
 
 
@@ -62,7 +62,7 @@ def test_login_page_skipped_when_signed_in(admin):
     resp = admin.get("/login?next=/clients")
     assert resp.status_code == 302 and resp.location.endswith("/clients")
     assert admin.get("/login/code").status_code == 302
-    assert admin.get("/").status_code == 200
+    assert admin.get("/help").status_code == 200
 
 
 def test_login_page_shown_after_sign_out(admin):
@@ -94,7 +94,7 @@ def test_default_admin_must_change_password(monkeypatch, tmp_path):
     assert b"at least 10 characters" in resp.data
     client.post("/account", data={"current": "admin", "password": "new-admin-password", "csrf_token": token,
                                   "confirm": "new-admin-password"})
-    assert client.get("/").status_code == 200
+    assert client.get("/help").status_code == 200
     assert login(create_app().test_client(), "admin", "admin").status_code == 200  # old password refused
 
 
@@ -124,7 +124,7 @@ def test_admin_creates_user_who_can_sign_in(app, admin):
     assert b"User bob created" in add_user(admin).data
     bob = app.test_client()
     assert login(bob, "bob", "bob-password-1").status_code == 302
-    assert bob.get("/").status_code == 200
+    assert bob.get("/help").status_code == 200
     assert bob.get("/users").status_code == 403  # not an admin
 
 
@@ -145,7 +145,7 @@ def test_must_change_password_on_first_login(app, admin):
     token = csrf(bob, "/account")
     bob.post("/account", data={"current": "bob-password-1", "password": "bob-new-password",
                                "confirm": "bob-new-password", "csrf_token": token})
-    assert bob.get("/").status_code == 200
+    assert bob.get("/help").status_code == 200
 
 
 def test_disable_role_reset_and_delete(app, admin):
@@ -169,7 +169,7 @@ def test_password_reset_signs_out_existing_sessions(app, admin):
     add_user(admin)
     bob = app.test_client()
     login(bob, "bob", "bob-password-1")
-    assert bob.get("/").status_code == 200
+    assert bob.get("/help").status_code == 200
     uid = user_id(app, "bob")
     admin.post(f"/users/{uid}", data={"action": "reset", "password": "reset-password-1",
                                       "csrf_token": csrf(admin, "/users")})
@@ -247,7 +247,7 @@ def test_2fa_setup_and_login(app, admin):
     now = int(time.time() // 30)
     code = twofactor.code_at(secret, now + 1)  # the next step, so it wasn't used during setup
     assert fresh.post("/login/code", data={"code": code}).status_code == 302
-    assert fresh.get("/").status_code == 200
+    assert fresh.get("/help").status_code == 200
 
     # The same code can't be used twice.
     again = app.test_client()
@@ -274,7 +274,7 @@ def test_require_2fa(monkeypatch, app, admin):
     monkeypatch.setenv("EXB_REQUIRE_2FA", "true")
     assert "/account/2fa" in admin.get("/").location
     _setup_2fa(admin)
-    assert admin.get("/").status_code == 200
+    assert admin.get("/help").status_code == 200
 
 
 def test_lockout_after_failed_logins(app, admin):
