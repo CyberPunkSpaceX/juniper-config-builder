@@ -1,11 +1,11 @@
 # Docker Swarm stack for the Multi-Vendor Switch Config Builder web UI.
 # Deploy in Portainer (Stacks > Add stack > Web editor) or with:
-#   docker stack deploy -c deploy/exbuilder-stack.yml --with-registry-auth exbuilder
+#   docker stack deploy -c deploy/switchbuilder-stack.yml --with-registry-auth switchbuilder
 #
 # First sign-in: admin / admin. The app makes you choose a new password
 # right away. See INSTALL.md.
 #
-# Users live in the exbuilder_data volume. It's a local volume, so the service
+# Users live in the switchbuilder_data volume. It's a local volume, so the service
 # is pinned to one node: set EXB_NODE to that node's hostname.
 version: "3.8"
 
@@ -27,19 +27,19 @@ services:
       EXB_SSH_DISABLE: ${EXB_SSH_DISABLE:-false}
       # Client SSH keys are stored encrypted with a master key. Without this it is
       # made in /data/master_key, next to the database (and in its backups). Better:
-      #   head -c 32 /dev/urandom | base64 | docker secret create exbuilder_master_key -
+      #   head -c 32 /dev/urandom | base64 | docker secret create switchbuilder_master_key -
       # then uncomment this and the secrets parts below.
-      # EXB_MASTER_KEY_FILE: /run/secrets/exbuilder_master_key
+      # EXB_MASTER_KEY_FILE: /run/secrets/switchbuilder_master_key
     ports:
       # Published on every node through the swarm routing mesh.
-      # The reverse proxy (exbuilder.cyberpunkx.ca) forwards here.
+      # The reverse proxy (switchbuilder.cyberpunkx.ca) forwards here.
       - target: 8080
         published: ${EXB_PORT:-8088}
         protocol: tcp
         mode: ingress
     read_only: true
     volumes:
-      - exbuilder_data:/data
+      - switchbuilder_data:/data
       # Swarm ignores the service-level `tmpfs:` key, so mount it this way.
       - type: tmpfs
         target: /tmp
@@ -60,14 +60,14 @@ services:
         limits:
           memory: 256M
       labels:
-        app: exbuilder
+        app: switchbuilder
 
     # secrets:
-    #   - exbuilder_master_key
+    #   - switchbuilder_master_key
 
 volumes:
-  exbuilder_data:
+  switchbuilder_data:
 
 # secrets:
-#   exbuilder_master_key:
+#   switchbuilder_master_key:
 #     external: true

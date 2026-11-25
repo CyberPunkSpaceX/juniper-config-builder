@@ -116,7 +116,7 @@ def server_key():
     return paramiko.PKey.from_path(str(kf))
 
 
-def generate_key(comment: str = "exbuilder") -> tuple[str, str]:
+def generate_key(comment: str = "switchbuilder") -> tuple[str, str]:
     """A new ed25519 key pair -> (private key in OpenSSH format, public key line)."""
     from cryptography.hazmat.primitives import serialization as ser
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey

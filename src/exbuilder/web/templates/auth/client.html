@@ -66,7 +66,7 @@
     </div>
     <div class="field" style="max-width: 320px">
       <label for="su">Switch username for the SSH key</label>
-      <input id="su" type="text" name="ssh_user" value="{{ c['ssh_user'] }}" placeholder="exbuilder-ro" autocomplete="off">
+      <input id="su" type="text" name="ssh_user" value="{{ c['ssh_user'] }}" placeholder="switchbuilder-ro" autocomplete="off">
     </div>
     <button type="submit">Save SSH settings</button>
   </form>
@@ -78,9 +78,9 @@
   <label for="pub">Public key</label>
   <textarea id="pub" readonly rows="2" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 12px ui-monospace, Menlo, Consolas, monospace">{{ c['ssh_key_pub'] }}</textarea>
   <p class="hint">On each switch (in configure mode), make a read-only account with this key:</p>
-  <pre style="white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px">set system login class exbuilder-ro permissions view-configuration
-set system login class exbuilder-ro permissions view
-set system login user {{ c['ssh_user'] or 'exbuilder-ro' }} class exbuilder-ro authentication {{ c['ssh_key_pub'].split(' ')[0] }} "{{ c['ssh_key_pub'].split(' ')[:2]|join(' ') }}"</pre>
+  <pre style="white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font-size: 12px">set system login class switchbuilder-ro permissions view-configuration
+set system login class switchbuilder-ro permissions view
+set system login user {{ c['ssh_user'] or 'switchbuilder-ro' }} class switchbuilder-ro authentication {{ c['ssh_key_pub'].split(' ')[0] }} "{{ c['ssh_key_pub'].split(' ')[:2]|join(' ') }}"</pre>
   <form class="inline" method="post" onsubmit="return confirm('Make a new key? The old key stops working, so every switch needs the new public key.')">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="key_generate">
