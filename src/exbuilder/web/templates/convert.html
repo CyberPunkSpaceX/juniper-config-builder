@@ -1,0 +1,231 @@
+{% extends "auth/base.html" %}
+{% block title %}Converter · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+<style>
+main { max-width: 1200px; }
+textarea { width: 100%; min-height: 260px; padding: 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text); font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.grid3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; align-items: end; }
+@media (max-width: 800px) { .grid3 { grid-template-columns: 1fr; } }
+pre.out { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; max-height: 520px;
+  overflow: auto; font-size: 12.5px; white-space: pre; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+.status { font-size: 14px; }
+.status.ok { color: var(--ok); } .status.bad { color: var(--bad); } .status.warn { color: var(--warn); }
+.report h3 { font-size: 15px; margin: 16px 0 6px; }
+.report ul { margin: 0; padding-left: 20px; }
+.report li { margin: 2px 0; }
+.report li.lost { color: var(--bad); }
+.report li.check { color: var(--warn); }
+.report code { font-size: 12.5px; }
+.pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); margin-left: 6px; }
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+details summary { cursor: pointer; font-weight: 600; }
+</style>
+
+<h1>Converter</h1>
+<p class="muted">Paste a running config from one switch brand. The converter reads it into a builder project, moves the
+ports onto a model of the brand you pick (front-panel port 1 stays port 1, uplinks stay uplinks), and writes the
+config with that brand's builder. The report lists everything it could not carry over. Save the result to a client's
+Lab, test it there, then ask for approval to promote it to Production.</p>
+
+<div class="panel">
+  <div class="field">
+    <label for="cfg">Config to convert <span class="hint">(show running-config, or the Junos config in set or curly-brace form)</span></label>
+    <textarea id="cfg" spellcheck="false" placeholder="Paste the config here, or open a file below."></textarea>
+    <div class="actions"><input type="file" id="file" accept=".txt,.conf,.cfg,.log,text/plain"></div>
+  </div>
+  <div class="grid3">
+    <div class="field">
+      <label for="source">From</label>
+      <select id="source">
+        <option value="">Detect it for me</option>
+        {% for v in vendors %}<option value="{{ v.key }}"{% if v.key not in readers %} disabled{% endif %}>{{ v.name }}{% if v.key not in readers %} (coming soon){% endif %}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="target">To</label>
+      <select id="target">
+        {% for v in vendors %}<option value="{{ v.key }}"{% if v.key == 'juniper' %} selected{% endif %}>{{ v.name }} · {{ v.os }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label for="model">New switch model</label>
+      <select id="model"></select>
+    </div>
+  </div>
+  <div class="actions">
+    <button id="go" type="button">Convert</button>
+    <span id="status" class="status" role="status"></span>
+  </div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <h2 id="summary"></h2>
+    <p id="subsummary" class="muted"></p>
+    <div class="split">
+      <div>
+        <div class="actions" style="margin-top:0">
+          <strong>Converted config</strong>
+          <button class="small secondary" type="button" id="copy">Copy</button>
+          <button class="small secondary" type="button" id="download">Download</button>
+        </div>
+        <pre class="out" id="config"></pre>
+      </div>
+      <div class="report" id="report"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Save to a client's Lab</h2>
+    {% if clients %}
+    <p class="muted">The project lands in the client's Lab space. Open it there to check it, build an EVE-NG lab, then use
+      “Ask for approval” on the Projects tab to promote it to Production.</p>
+    <div class="grid3">
+      <div class="field">
+        <label for="client">Client</label>
+        <select id="client">
+          {% for c in clients %}<option value="{{ c.id }}"{% if current and c.id == current.id %} selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="pname">Project name</label>
+        <input type="text" id="pname" maxlength="100">
+      </div>
+      <div class="field"><button id="save" type="button">Save to Lab</button></div>
+    </div>
+    <div class="actions">
+      <span id="savestatus" class="status" role="status"></span>
+      <form id="openform" method="post" action="{{ url_for('converter.open_in_lab') }}" hidden>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <input type="hidden" name="client_id" id="open_cid">
+        <input type="hidden" name="project_id" id="open_pid">
+        <button type="submit" class="secondary">Open it in the Lab</button>
+      </form>
+    </div>
+    {% else %}
+    <p class="muted">You need the editor role in a client to save projects. Ask a client admin to add you.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+const MODELS = {{ models|tojson }};
+const NAMES = Object.fromEntries({{ vendors|tojson }}.map(v => [v.key, v.name]));
+let last = null;
+const $ = id => document.getElementById(id);
+
+function fillModels() {
+  const sel = $("model"), list = MODELS[$("target").value] || [];
+  sel.innerHTML = "";
+  sel.append(new Option("Pick the closest match for me", ""));
+  for (const m of list) sel.append(new Option(m, m));
+}
+$("target").addEventListener("change", fillModels);
+fillModels();
+
+$("file").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (f) $("cfg").value = await f.text();
+});
+
+function status(el, text, cls) { el.textContent = text; el.className = "status " + (cls || ""); }
+
+function li(text, cls) {
+  const x = document.createElement("li");
+  x.textContent = text;
+  if (cls) x.className = cls;
+  return x;
+}
+function section(root, title, items, cls, open) {
+  if (!items.length) return;
+  const h = document.createElement("h3");
+  h.textContent = title;
+  const pill = document.createElement("span");
+  pill.className = "pill"; pill.textContent = items.length;
+  h.append(pill);
+  const ul = document.createElement("ul");
+  for (const it of items) ul.append(typeof it === "string" ? li(it, cls) : li(it.text, it.cls || cls));
+  if (open) { root.append(h, ul); return; }
+  const d = document.createElement("details");
+  const s = document.createElement("summary");
+  s.append(h);
+  h.style.display = "inline";
+  d.append(s, ul);
+  root.append(d);
+}
+
+function render(r) {
+  last = r;
+  $("result").hidden = false;
+  $("summary").textContent = `${NAMES[r.source]} → ${NAMES[r.target]} (${r.model})`;
+  const st = r.stats;
+  $("subsummary").textContent = `${r.detected ? "Detected " + NAMES[r.source] + ". " : ""}Read ${st.vlans} VLANs, `
+    + `${st.port_groups} port groups and ${st.lags} LAGs from a ${(r.source_models || []).filter(Boolean).join(" + ") || "switch"}. `
+    + (r.errors.length ? `${r.errors.length} thing(s) to fix before the config will load.` : "No errors from the builder.");
+  $("config").textContent = r.config || "(no config: fix the errors in the report)";
+  const rep = $("report");
+  rep.innerHTML = "";
+  section(rep, "Fix before loading", r.errors.map(e => `${e.section}: ${e.message}`), "lost", true);
+  section(rep, "Not carried over", r.changes.filter(c => c.level === "lost").map(c => `${c.section}: ${c.text}`), "lost", true);
+  section(rep, "Check these", [...r.changes.filter(c => c.level === "check").map(c => `${c.section}: ${c.text}`),
+                               ...r.notes], "check", true);
+  section(rep, "Changed on the way", r.changes.filter(c => c.level === "changed").map(c => `${c.section}: ${c.text}`), "", true);
+  section(rep, "Lines not read from the old config", r.not_read, "lost", r.not_read.length <= 12);
+  section(rep, "Builder warnings", r.warnings.map(w => `${w.section}: ${w.message}`), "", false);
+  section(rep, "Port map (old → new)", r.ports.map(p => ({text: `${p.from} → ${p.to || "no place on the new switch"}`,
+                                                          cls: p.to ? "" : "lost"})), "", false);
+  if ($("pname")) $("pname").value = (r.project.name || "Converted switch") + ` (${NAMES[r.target]})`;
+  if ($("openform")) $("openform").hidden = true;
+  if ($("savestatus")) status($("savestatus"), "");
+}
+
+async function post(url, body) {
+  const resp = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+                                 body: JSON.stringify(body)});
+  const data = await resp.json().catch(() => ({error: resp.statusText}));
+  return {ok: resp.ok, status: resp.status, data};
+}
+
+$("go").addEventListener("click", async () => {
+  status($("status"), "Converting…");
+  const {ok, data} = await post("{{ url_for('converter.run') }}", {text: $("cfg").value, source: $("source").value,
+                                                                   target: $("target").value, model: $("model").value});
+  if (!ok) { status($("status"), data.error || "Conversion failed.", "bad"); return; }
+  status($("status"), "Done. Read the report before you use the config.", "ok");
+  render(data);
+});
+
+$("copy").addEventListener("click", () => navigator.clipboard.writeText($("config").textContent));
+$("download").addEventListener("click", () => {
+  const a = document.createElement("a");
+  const host = (last && last.project.system.hostname) || "switch";
+  a.href = URL.createObjectURL(new Blob([$("config").textContent], {type: "text/plain"}));
+  a.download = `${host}-${last ? last.target : "converted"}.txt`;
+  a.click();
+});
+
+if ($("save")) $("save").addEventListener("click", async () => {
+  if (!last) return;
+  const data = JSON.parse(JSON.stringify(last.project));
+  for (const [key, hash] of Object.entries(last.hashed || {})) {  // keep hashes, never plain passwords
+    const path = key.split("."); let o = data;
+    for (const k of path.slice(0, -1)) o = o?.[k];
+    if (o && typeof o === "object") o[path[path.length - 1]] = hash;
+  }
+  const body = {client_id: $("client").value, name: $("pname").value.trim(), data};
+  let res = await post("{{ url_for('converter.save') }}", body);
+  if (res.status === 409 && res.data.exists && confirm(res.data.error + " Replace it?")) {
+    res = await post("{{ url_for('converter.save') }}", {...body, overwrite: true});
+  }
+  if (!res.ok) { status($("savestatus"), res.data.error || "Save failed.", "bad"); return; }
+  status($("savestatus"), `Saved “${res.data.name}” to the Lab of ${$("client").selectedOptions[0].text}.`, "ok");
+  $("open_cid").value = $("client").value;
+  $("open_pid").value = res.data.id;
+  $("openform").hidden = false;
+});
+</script>
+{% endblock %}

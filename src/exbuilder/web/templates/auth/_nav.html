@@ -3,6 +3,7 @@
 <nav class="fw-nav">
   <a class="brand" href="{{ url_for('index') }}"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
   <a href="{{ url_for('index') }}">Vendors</a>
+  <a href="{{ url_for('converter.page') }}">Converter</a>
   <a href="{{ url_for('help_page') }}">Help</a>
   {% if current_space and request.endpoint != 'clients.start_page' %}
   <form class="space-switch" method="post" action="{{ url_for('clients.set_space') }}" title="Switch between the Production and Lab spaces">

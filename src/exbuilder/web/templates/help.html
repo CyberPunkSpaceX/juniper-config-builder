@@ -32,6 +32,7 @@ switch configuration appears live on the right, ready to copy or download and pa
   <li><a href="#projects">Projects and clients</a></li>
   <li><a href="#tools">Tools (Juniper)</a></li>
   <li><a href="#eve">Testing in EVE-NG</a></li>
+  <li><a href="#convert">Converting a config to another vendor</a></li>
   <li><a href="#terms">Words you'll see</a></li>
 </ol>
 
@@ -455,7 +456,26 @@ the settings.)</p>
 <p>For Juniper there is also <b>Build lab from the map</b>: every switch on the network map becomes a vJunos node,
 cabled like the map.</p>
 
-<h2 id="terms">12. Words you'll see</h2>
+<h2 id="convert">12. Converting a config to another vendor</h2>
+<p>Open <b>Converter</b> (on the first screen after sign-in, or in the top bar). Paste the old switch's running config,
+or open it from a file.</p>
+<ol>
+  <li><b>From</b>: leave it on <i>Detect it for me</i>, or pick the vendor. Configs from Cisco Catalyst (IOS and IOS-XE)
+    and Juniper EX can be read today; the other vendors are coming.</li>
+  <li><b>To</b>: the vendor of the new switch. <b>New switch model</b>: pick it, or let the converter pick the smallest
+    model with enough ports (and PoE, stacking and a management port when the old one had them).</li>
+  <li>Press <b>Convert</b>. Ports move by position: the old switch's front port 1 becomes the new switch's front port 1,
+    and uplinks stay uplinks. The port map at the bottom of the report shows every move.</li>
+  <li>Read the report. <i>Fix before loading</i> lists what the new vendor's builder refuses (most often passwords:
+    hashed passwords can't move between vendors, so type new ones). <i>Not carried over</i> lists what was left out,
+    and <i>Lines not read</i> lists every line of the old config the converter did not understand, such as access
+    lists and QoS policies. Nothing is dropped without being listed.</li>
+  <li>Pick the client and press <b>Save to Lab</b>, then <b>Open it in the Lab</b>. Fix what the report asked for, test it
+    (an EVE-NG lab if the vendor has one), and use <b>Ask for approval</b> on the Projects tab to promote it to
+    Production.</li>
+</ol>
+
+<h2 id="terms">13. Words you'll see</h2>
 <ul>
   <li><b>VLAN</b>: a separate network on the same switch. <b>Tagged</b> frames carry the VLAN number; <b>untagged</b>
     don't.</li>

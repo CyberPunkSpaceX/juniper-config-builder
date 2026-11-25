@@ -2884,6 +2884,14 @@ window.addEventListener("popstate", () => {
   if (activeTab === "Projects") refreshProjects();
   if (activeTab === "Backups & compare") openBackups();
   if (activeTab === "EVPN-VXLAN") generateFabric();
+  // Opened from the Converter: load that saved project, then drop ?project= from the address.
+  const fromConverter = new URLSearchParams(location.search).get("project");
+  if (fromConverter && /^\d+$/.test(fromConverter)) {
+    history.replaceState({tab: activeTab}, "", location.pathname + "#" + encodeURIComponent(activeTab));
+    api("projects/" + fromConverter).then(p => { load(p.data); saveDraft(); showTab("Switch");
+      setStatus(`Opened ${p.name} from the Converter. Check it, then use Ask for approval on the Projects tab to promote it.`, "ok"); })
+      .catch(e => setStatus(`Couldn't open the converted project: ${e.message}`, "bad"));
+  }
 })();
 </script>
 </body>
