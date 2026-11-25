@@ -1,0 +1,140 @@
+"""The engineer's toolkit: tools that work across many switches at once.
+
+``/tools`` lists them. Each tool has its own page under ``/tools/<name>``. Tools that read or save
+projects use the client and space picked at the top of the page, like the builders do.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+from datetime import datetime, timezone
+
+from flask import Blueprint, Response, abort, render_template, request
+
+from .. import __version__, bulk, vendors
+from . import auth, clients
+
+bp = Blueprint("toolkit", __name__, url_prefix="/tools")
+log = logging.getLogger("exbuilder.toolkit")
+MAX_PROJECT_BYTES = 512 * 1024
+
+# (endpoint, icon, title, one line). Later tools add themselves here.
+TOOLS = [
+    ("toolkit.bulk_page", "&#9638;", "Bulk build",
+     "One template project plus a spreadsheet of hostnames and IPs gives you a config for every switch at once."),
+]
+
+
+@bp.get("/")
+def hub():
+    return render_template("tools/index.html", tools=TOOLS, version=__version__)
+
+
+# ------------------------------------------------------------------ bulk build
+@bp.get("/bulk")
+def bulk_page():
+    return render_template("tools/bulk.html", version=__version__, client=clients.current(),
+                           vendors={k: v.name for k, v in vendors.VENDORS.items()},
+                           well_known=sorted(bulk.WELL_KNOWN), max_rows=bulk.MAX_ROWS)
+
+
+def _body() -> dict:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        abort(400, "Send a JSON object.")
+    return data
+
+
+def _template(body: dict) -> dict:
+    """The template project: a saved project of the current client and space, or one sent as JSON."""
+    pid = body.get("project_id")
+    if pid not in (None, ""):
+        c = clients.need("viewer")
+        try:
+            pid = int(pid)
+        except (TypeError, ValueError):
+            abort(400, "Pick a saved project.")
+        row = auth.db().execute("SELECT data FROM projects WHERE id = ? AND client_id = ? AND space = ?",
+                                (pid, c["id"], c["space"])).fetchone()
+        if row is None:
+            abort(400, "That project is not in this client and space.")
+        return json.loads(row["data"])
+    tpl = body.get("template")
+    if isinstance(tpl, str):
+        try:
+            tpl = json.loads(tpl)
+        except ValueError:
+            abort(400, "The template is not valid project JSON.")
+    if not isinstance(tpl, dict):
+        abort(400, "Pick a template project first.")
+    if len(json.dumps(tpl)) > MAX_PROJECT_BYTES:
+        abort(400, "The template is too large.")
+    return tpl
+
+
+def _run(body: dict) -> dict:
+    try:
+        return bulk.run(_template(body), str(body.get("csv") or ""))
+    except bulk.BulkError as exc:
+        abort(400, str(exc))
+
+
+@bp.post("/bulk/run")
+def bulk_run():
+    result = _run(_body())
+    log.info("audit: %s bulk-built %d switches (%d ok)", auth.current_user()["username"],
+             result["summary"]["total"], result["summary"]["ok"])
+    return result
+
+
+@bp.post("/bulk/zip")
+def bulk_zip():
+    result = _run(_body())
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
+    return Response(bulk.to_zip(result), mimetype="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename=bulk-build-{stamp}.zip"})
+
+
+@bp.post("/bulk/csv-template")
+def bulk_csv_template():
+    text = bulk.csv_template(_template(_body()))
+    return Response(text, mimetype="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=bulk-build-switches.csv"})
+
+
+@bp.post("/bulk/save")
+def bulk_save():
+    """Save every switch that built as its own project in the current client and space."""
+    body = _body()
+    c = clients.need("editor")
+    result = _run(body)
+    good = [s for s in result["switches"] if s["ok"]]
+    if not good:
+        return {"error": "None of the switches built, so nothing was saved."}, 400
+    db = auth.db()
+    names = [s["hostname"][:100] for s in good]
+    q = ",".join("?" * len(names))
+    taken = [r[0] for r in db.execute(f"SELECT name FROM projects WHERE client_id = ? AND space = ? AND name IN ({q})",
+                                      (c["id"], c["space"], *names))]
+    if taken and not body.get("overwrite"):
+        return {"error": f"{len(taken)} of these names are already projects here: {', '.join(taken[:10])}"
+                         f"{'…' if len(taken) > 10 else ''}. Tick “Replace projects with the same name” to update them.",
+                "exists": taken}, 409
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    user = auth.current_user()["username"]
+    for s, name in zip(good, names):
+        text = json.dumps(s["project"])
+        if len(text) > MAX_PROJECT_BYTES:
+            continue
+        db.execute("INSERT INTO projects (client_id, space, name, data, updated_at, updated_by) VALUES (?, ?, ?, ?, ?, ?) "
+                   "ON CONFLICT (client_id, space, name) DO UPDATE SET data = excluded.data, "
+                   "updated_at = excluded.updated_at, updated_by = excluded.updated_by",
+                   (c["id"], c["space"], name, text, now, user))
+    db.commit()
+    log.info("audit: %s saved %d bulk-built projects to %s (%s)", user, len(good), c["name"], c["space"])
+    return {"saved": len(good), "client": c["name"], "space": c["space"], "skipped": len(result["switches"]) - len(good)}
+
+
+def init_app(app) -> None:
+    app.register_blueprint(bp)

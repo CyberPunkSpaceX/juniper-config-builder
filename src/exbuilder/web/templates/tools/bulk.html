@@ -1,0 +1,211 @@
+{% extends "auth/base.html" %}
+{% block title %}Bulk build · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Bulk build</h1>
+<p class="muted">Build one switch the way you like it and save it as a project. Use it here as the template, add a
+spreadsheet with one line per switch, and you get a config for every switch at once. Save them all as projects or
+download them as a zip.</p>
+
+<div class="panel">
+  <h2>1. Template</h2>
+  <div class="grid2">
+    <div class="field">
+      <label for="proj">Saved project <span class="hint">({{ client.name if client else 'no client' }}, {{ client.space if client else '' }})</span></label>
+      <select id="proj"><option value="">Loading…</option></select>
+    </div>
+    <div class="field">
+      <label for="tplfile">…or open a project file <span class="hint">(.json saved from a builder)</span></label>
+      <input type="file" id="tplfile" accept=".json,application/json">
+    </div>
+  </div>
+  <p id="tplinfo" class="muted"></p>
+  <details>
+    <summary>How the spreadsheet fills the template</summary>
+    <ul>
+      <li><strong>Usual columns:</strong> {% for k in well_known %}<code>{{ k }}</code>{{ ", " if not loop.last }}{% endfor %}.
+        Only <code>hostname</code> is required. <code>ip</code>, <code>gateway</code> and <code>serial_number</code> work too.</li>
+      <li><strong>Placeholders:</strong> write <code>{{ '{{' }}site{{ '}}' }}</code> anywhere in the template (an IRB address
+        such as <code>10.{{ '{{' }}site{{ '}}' }}.20.1/24</code>, a description, a banner) and add a <code>site</code> column.</li>
+      <li><strong>Any field by path:</strong> a column called <code>system.banner</code>, <code>vlans.MGMT.irb</code> (the VLAN
+        named MGMT) or <code>ports.0.description</code> (the first port group) sets that field.</li>
+      <li>Commas, semicolons or tabs between columns. Lines starting with <code>#</code> are skipped. Up to {{ max_rows }} switches.</li>
+    </ul>
+  </details>
+</div>
+
+<div class="panel">
+  <h2>2. Switches</h2>
+  <div class="field">
+    <label for="csv">Spreadsheet (CSV) <span class="hint">(paste from Excel, or open a .csv file)</span></label>
+    <textarea id="csv" spellcheck="false" placeholder="hostname,mgmt_address,mgmt_gateway,location&#10;sw-floor1,10.10.0.11/24,10.10.0.1,Floor 1 IDF&#10;sw-floor2,10.10.0.12/24,10.10.0.1,Floor 2 IDF"></textarea>
+  </div>
+  <div class="actions">
+    <input type="file" id="csvfile" accept=".csv,.txt,text/csv,text/plain">
+    <button type="button" class="secondary small" id="csvtpl">Download a starting spreadsheet</button>
+  </div>
+  <div class="actions">
+    <button type="button" id="go">Build all</button>
+    <span id="status" class="status" role="status"></span>
+  </div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <h2 id="summary"></h2>
+    <p id="columns" class="muted"></p>
+    <div class="actions">
+      <button type="button" id="zip">Download zip</button>
+      <button type="button" class="secondary" id="save">Save all as projects</button>
+      <label class="chk"><input type="checkbox" id="overwrite"> Replace projects with the same name</label>
+      <span id="savestatus" class="status" role="status"></span>
+    </div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Line</th><th>Hostname</th><th>Management IP</th><th>Result</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+const VENDORS = {{ vendors|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+let fileTemplate = null, last = null;
+
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function setStatus(el, text, kind) { el.textContent = text; el.className = "status " + (kind || ""); }
+
+async function post(url, body) {
+  return fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF},
+                     body: JSON.stringify(body)});
+}
+async function errorOf(resp) {
+  try { return (await resp.json()).error || resp.statusText; } catch (e) { return resp.statusText || "Request failed"; }
+}
+
+function body() {
+  const b = {csv: $("csv").value};
+  if ($("proj").value === "file" && fileTemplate) b.template = fileTemplate;
+  else if ($("proj").value) b.project_id = $("proj").value;
+  return b;
+}
+
+async function loadProjects() {
+  const sel = $("proj");
+  try {
+    const resp = await fetch("/projects");
+    const data = resp.ok ? await resp.json() : {projects: []};
+    sel.innerHTML = "";
+    sel.append(new Option(data.projects.length ? "Pick a project…" : "No saved projects here yet", ""));
+    for (const p of data.projects) sel.append(new Option(p.name, p.id));
+  } catch (e) { sel.innerHTML = ""; sel.append(new Option("Could not load projects", "")); }
+}
+
+async function describe() {
+  const v = $("proj").value;
+  let tpl = null;
+  if (v === "file") tpl = fileTemplate;
+  else if (v) { const r = await fetch("/projects/" + v); if (r.ok) tpl = (await r.json()).data; }
+  if (!tpl) { $("tplinfo").textContent = ""; return; }
+  const found = new Set();
+  JSON.stringify(tpl).replace(/\{\{\s*([A-Za-z0-9_.-]+)\s*\}\}/g, (_, n) => found.add(n));
+  const m = ((tpl.switch || {}).members || [{}])[0] || {};
+  $("tplinfo").textContent = `${VENDORS[tpl.vendor || "juniper"] || tpl.vendor} · ${m.model || "no model"}` +
+    (found.size ? ` · placeholders: ${[...found].join(", ")}` : " · no {{placeholders}}");
+}
+
+$("proj").addEventListener("change", describe);
+$("tplfile").addEventListener("change", async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    fileTemplate = JSON.parse(await f.text());
+    if (fileTemplate.data && fileTemplate.name && !fileTemplate.system) fileTemplate = fileTemplate.data;
+  } catch (err) { setStatus($("status"), "That file is not project JSON.", "bad"); return; }
+  let opt = [...$("proj").options].find(o => o.value === "file");
+  if (!opt) { opt = new Option("", "file"); $("proj").append(opt); }
+  opt.textContent = "File: " + f.name;
+  $("proj").value = "file";
+  describe();
+});
+$("csvfile").addEventListener("change", async e => { const f = e.target.files[0]; if (f) $("csv").value = await f.text(); });
+
+$("csvtpl").addEventListener("click", async () => {
+  const resp = await post("/tools/bulk/csv-template", body());
+  if (!resp.ok) { setStatus($("status"), await errorOf(resp), "bad"); return; }
+  download(await resp.blob(), "bulk-build-switches.csv");
+});
+
+function download(blob, name) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+$("go").addEventListener("click", async () => {
+  setStatus($("status"), "Building…");
+  const resp = await post("/tools/bulk/run", body());
+  if (!resp.ok) { setStatus($("status"), await errorOf(resp), "bad"); $("result").hidden = true; return; }
+  last = await resp.json();
+  setStatus($("status"), "");
+  show(last);
+});
+
+function show(r) {
+  const s = r.summary;
+  $("summary").textContent = `${s.ok} of ${s.total} switches built` + (s.failed ? `, ${s.failed} need fixing` : "") +
+    ` (${VENDORS[r.vendor] || r.vendor})`;
+  const unused = Object.entries(r.columns).filter(([, k]) => k === "unused").map(([h]) => h);
+  $("columns").textContent = unused.length ? `Not used (no field or {{placeholder}} with that name): ${unused.join(", ")}` : "";
+  const tb = $("rows");
+  tb.innerHTML = "";
+  r.switches.forEach((sw, i) => {
+    const tr = document.createElement("tr");
+    const probs = sw.errors.length ? sw.errors : sw.warnings;
+    const label = sw.ok ? (sw.warnings.length ? `<span class="warn-text">Built, ${sw.warnings.length} warning(s)</span>` : '<span class="ok-text">Built</span>')
+                        : `<span class="bad-text">${sw.errors.length} problem(s)</span>`;
+    tr.innerHTML = `<td>${sw.line}</td><td>${esc(sw.hostname || "—")}</td><td>${esc(sw.mgmt_address || "")}</td>` +
+      `<td>${label}${probs.length ? "<ul>" + probs.slice(0, 8).map(p => `<li>${esc(p)}</li>`).join("") + "</ul>" : ""}</td>` +
+      `<td>${sw.ok ? `<button class="small secondary" type="button" data-i="${i}">Show config</button>` : ""}</td>`;
+    tb.append(tr);
+  });
+  $("result").hidden = false;
+}
+
+$("rows").addEventListener("click", e => {
+  const b = e.target.closest("button[data-i]");
+  if (!b) return;
+  const tr = b.closest("tr"), next = tr.nextElementSibling;
+  if (next && next.classList.contains("cfg")) { next.remove(); b.textContent = "Show config"; return; }
+  const row = document.createElement("tr");
+  row.className = "cfg";
+  row.innerHTML = `<td colspan="5"><pre class="out"></pre></td>`;
+  row.querySelector("pre").textContent = last.switches[+b.dataset.i].config;
+  tr.after(row);
+  b.textContent = "Hide config";
+});
+
+$("zip").addEventListener("click", async () => {
+  const resp = await post("/tools/bulk/zip", body());
+  if (!resp.ok) { setStatus($("savestatus"), await errorOf(resp), "bad"); return; }
+  download(await resp.blob(), "bulk-build.zip");
+});
+
+$("save").addEventListener("click", async () => {
+  setStatus($("savestatus"), "Saving…");
+  const resp = await post("/tools/bulk/save", {...body(), overwrite: $("overwrite").checked});
+  if (!resp.ok) { setStatus($("savestatus"), await errorOf(resp), "bad"); return; }
+  const d = await resp.json();
+  setStatus($("savestatus"), `Saved ${d.saved} projects to ${d.client} (${d.space})` +
+    (d.skipped ? `. ${d.skipped} with problems were not saved.` : "."), "ok");
+});
+
+loadProjects();
+{% endraw %}
+</script>
+{% endblock %}
