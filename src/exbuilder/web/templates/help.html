@@ -563,5 +563,13 @@ Aruba CX <code>show lldp neighbor-info detail</code>, ProCurve <code>show lldp i
 from and it logs in, reads the neighbours with read-only commands, and follows their management addresses inside the
 client's allowed networks. Green lines are seen from both ends; dashed lines and boxes are only seen from one side.
 Download the picture (SVG) or the list of links (CSV).</p>
+<h3>Compliance</h3>
+<p>Scores each switch out of 100 against the client's standard: NTP, remote syslog, DNS, SNMPv3 only, no
+<code>public</code>/<code>private</code> community, login banner, telnet and plain HTTP off, SSH root login denied, time
+zone, BPDU guard on edge ports, unused ports disabled and named admin accounts. A client admin switches rules on or
+off, sets their weight and values (for example the NTP servers every switch must use) under <b>The standard</b>.
+Check saved projects, the latest backup of each switch, or a pasted running config. Running configs are read with the
+Converter's readers where the brand has one, plus text checks; a rule that cannot be told from a config shows as
+"can't tell" and doesn't count. <b>Download the report</b> gives a CSV with every rule per switch.</p>
 </div>
 {% endblock %}
