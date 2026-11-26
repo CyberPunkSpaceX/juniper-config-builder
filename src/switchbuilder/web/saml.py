@@ -31,7 +31,7 @@ from flask import Blueprint, Response, abort, flash, redirect, render_template, 
 from . import auth, sso
 
 bp = Blueprint("saml", __name__, template_folder="templates")
-log = logging.getLogger("exbuilder.saml")
+log = logging.getLogger("switchbuilder.saml")
 
 NS = {"samlp": "urn:oasis:names:tc:SAML:2.0:protocol", "saml": "urn:oasis:names:tc:SAML:2.0:assertion"}
 SKEW = 120  # seconds of clock difference allowed

@@ -12,8 +12,8 @@ import pytest
 paramiko = pytest.importorskip("paramiko")
 flask = pytest.importorskip("flask")
 
-from exbuilder import push as engine  # noqa: E402
-from exbuilder import sshfetch  # noqa: E402
+from switchbuilder import push as engine  # noqa: E402
+from switchbuilder import sshfetch  # noqa: E402
 from test_auth import ADMIN, add_user, app, admin, csrf, login  # noqa: F401,E402
 from test_builder_web import pick_space, token  # noqa: E402
 from test_clients import _bob, _form  # noqa: E402
@@ -204,7 +204,7 @@ def _post(client, url, body=None):
 
 
 def _know(app, switch, cid=1):
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
     with app.app_context():
         folder = auth.data_dir() / "clients" / str(cid)
     folder.mkdir(parents=True, exist_ok=True)
@@ -289,7 +289,7 @@ def test_timer_runs_out(app, admin, switch):
     pid = _setup(app, admin, switch)
     prev = _post(admin, "/push/preview", _creds(switch, project_id=pid, host="127.0.0.1")).json
     _post(admin, f"/push/{prev['id']}/apply", _creds(switch, minutes=1))
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
     with app.app_context():
         auth.db().execute("UPDATE config_pushes SET deadline = ?", (time.time() - 1,))
         auth.db().commit()

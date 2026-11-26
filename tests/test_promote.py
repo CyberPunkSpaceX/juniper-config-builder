@@ -11,7 +11,7 @@ from test_auth import ADMIN, add_user, app, admin, csrf, login  # noqa: F401,E40
 from test_builder_web import pick_space, token  # noqa: E402
 from test_clients import _bob, _form  # noqa: E402
 
-GOOD = json.loads((Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json").read_text())
+GOOD = json.loads((Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json").read_text())
 
 
 def _save(client, name, data):

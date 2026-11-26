@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import evelab, eveng
-from exbuilder.generator import build
+from switchbuilder import evelab, eveng
+from switchbuilder.generator import build
 
-EXAMPLES = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples"
+EXAMPLES = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples"
 
 
 def example(vendor):
@@ -231,13 +231,13 @@ def test_build_an_arista_lab_from_the_web(monkeypatch, tmp_path):
     import test_eveng
     from test_auth import ADMIN, csrf, login
     from test_builder_web import token
-    from exbuilder.web import create_app
+    from switchbuilder.web import create_app
     monkeypatch.setenv("EXB_SSH_ALLOW", "127.0.0.0/8")
     monkeypatch.setenv("EXB_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EXB_USERNAME", ADMIN[0])
     monkeypatch.setenv("EXB_PASSWORD", ADMIN[1])
     from types import SimpleNamespace
-    from exbuilder.web import eve as eve_web
+    from switchbuilder.web import eve as eve_web
     monkeypatch.setattr(eve_web, "secrets", SimpleNamespace(token_urlsafe=lambda n=16: "Lab-pw-from-test"))
     oses: dict[int, FakeOs] = {}
 

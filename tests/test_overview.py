@@ -24,7 +24,7 @@ SW2 = """set system host-name sw2
 set interfaces ge-0/0/47 description "uplink to sw1 ge-0/0/47"
 set vlans users vlan-id 10
 """
-GOOD = json.loads((Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json").read_text())
+GOOD = json.loads((Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json").read_text())
 
 
 def _db():
@@ -35,7 +35,7 @@ def _db():
 
 def _seed(admin):
     """Two nightly versions of sw1, one of sw2, and a planned sw3 that is only in a project."""
-    from exbuilder.web import backups
+    from switchbuilder.web import backups
     pick_space(admin, "production")
     admin.get("/global")           # makes the tables
     conn = _db()

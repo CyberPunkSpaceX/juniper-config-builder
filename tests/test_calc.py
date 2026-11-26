@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import calc
+from switchbuilder import calc
 
 
 def test_subnet():
@@ -63,7 +63,7 @@ flask = pytest.importorskip("flask")
 from test_auth import ADMIN, add_user, app, admin, csrf, login  # noqa: F401,E402
 from test_builder_web import pick_space, token  # noqa: E402
 
-ARISTA = json.loads((Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json").read_text())
+ARISTA = json.loads((Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json").read_text())
 
 
 def test_web_calc(app, admin):

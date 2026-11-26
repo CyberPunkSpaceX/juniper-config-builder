@@ -46,7 +46,7 @@ from ..generator import build
 from . import auth, clients
 
 bp = Blueprint("audit", __name__)
-log = logging.getLogger("exbuilder.audit")
+log = logging.getLogger("switchbuilder.audit")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS audit_log (
@@ -78,7 +78,7 @@ QUIET = {
     "toolkit.compliance_run", "toolkit.firmware_run", "toolkit.map_build", "clients.select", "clients.set_space",
 }
 SIGN_IN = {"auth.login", "auth.login_2fa", "auth.logout", "auth.setup", "saml.acs", "sso.oidc_callback"}
-SIGN_IN_LOGGERS = ("exbuilder.auth", "exbuilder.sso", "exbuilder.saml")
+SIGN_IN_LOGGERS = ("switchbuilder.auth", "switchbuilder.sso", "switchbuilder.saml")
 
 
 def _now() -> str:
@@ -161,7 +161,7 @@ HANDLER = Handler()
 
 
 def _install_handler() -> None:
-    root = logging.getLogger("exbuilder")
+    root = logging.getLogger("switchbuilder")
     if HANDLER in root.handlers:
         return
     if not logging.getLogger().handlers:

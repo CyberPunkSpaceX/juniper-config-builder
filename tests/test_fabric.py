@@ -3,8 +3,8 @@ import zipfile
 
 import pytest
 
-from exbuilder.cryptpw import sha512_crypt
-from exbuilder.fabric import TEMPLATES, generate, plan, FabricError, to_zip
+from switchbuilder.cryptpw import sha512_crypt
+from switchbuilder.fabric import TEMPLATES, generate, plan, FabricError, to_zip
 
 HASH = sha512_crypt("Juniper123!", "fixedsalt")
 BASE = {"system": {"ntp_servers": [{"address": "10.0.0.1"}]},

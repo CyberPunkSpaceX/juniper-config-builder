@@ -16,7 +16,7 @@ from test_auth import (  # noqa: F401 - fixtures
 from test_builder_web import pick_space, token
 from test_clients import _bob, _form
 
-PROJECT = json.loads((Path(__file__).parent.parent / "src/exbuilder/vendor_examples/arista-office.json").read_text())
+PROJECT = json.loads((Path(__file__).parent.parent / "src/switchbuilder/vendor_examples/arista-office.json").read_text())
 
 
 def _rows(client, **q):
@@ -48,8 +48,8 @@ def test_changes_and_sign_ins_are_logged(app, admin):
 
 
 def test_background_lines_get_their_own_row(app, admin):
-    logging.getLogger("exbuilder.nightly").warning("audit: nightly backup (schedule) of client %r: 1 changed", "Default")
-    logging.getLogger("exbuilder.nightly").info("just chatter")
+    logging.getLogger("switchbuilder.nightly").warning("audit: nightly backup (schedule) of client %r: 1 changed", "Default")
+    logging.getLogger("switchbuilder.nightly").info("just chatter")
     rows = _rows(admin, kind="event")
     assert [r["message"] for r in rows] == ["nightly backup (schedule) of client 'Default': 1 changed"]
     assert rows[0]["user"] == "(system)"

@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import fortiswitch_models
-from exbuilder.generator import build
+from switchbuilder import fortiswitch_models
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "fortiswitch-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "fortiswitch-office.json"
 
 
 def base(**over):
@@ -45,7 +45,7 @@ def test_example_builds_clean():
 
 
 def test_port_names():
-    from exbuilder import ports
+    from switchbuilder import ports
     assert ports.expand_named("1-2, port49", fortiswitch_models.ALIASES) == ["port1", "port2", "port49"]
     res = build(base(ports=[{"ports": "Gi1/0/1", "mode": "access", "vlan": "USERS"}]))
     assert "not a port" in msgs(res.errors)

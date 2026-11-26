@@ -5,7 +5,7 @@ import zipfile
 
 import pytest
 
-from exbuilder import compare
+from switchbuilder import compare
 
 flask = pytest.importorskip("flask")
 
@@ -200,6 +200,6 @@ def test_client_backup_and_restore(app, admin, tmp_path):
 
 def test_host_of_mikrotik_export():
     """RouterOS /export puts the section and the set line on two lines."""
-    from exbuilder.web.backups import host_of
+    from switchbuilder.web.backups import host_of
     assert host_of("# by RouterOS 7.16\n/system identity\nset name=crs-office-01\n") == "crs-office-01"
     assert host_of("/system identity set name=r1") == "r1"

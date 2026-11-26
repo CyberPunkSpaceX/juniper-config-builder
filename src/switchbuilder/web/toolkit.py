@@ -16,7 +16,7 @@ from .. import __version__, bulk, calc, compliance, firmware, neighbors, prepush
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
-log = logging.getLogger("exbuilder.toolkit")
+log = logging.getLogger("switchbuilder.toolkit")
 MAX_PROJECT_BYTES = 512 * 1024
 
 # (endpoint, icon, title, one line). Later tools add themselves here.

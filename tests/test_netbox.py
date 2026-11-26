@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import netbox
+from switchbuilder import netbox
 
-ARISTA = json.loads((Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json").read_text())
+ARISTA = json.loads((Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json").read_text())
 
 
 class FakeNetbox:
@@ -75,7 +75,7 @@ def fake(monkeypatch):
 
 
 def _defaults(vendor):
-    from exbuilder.web import _defaults as d
+    from switchbuilder.web import _defaults as d
     return d(vendor)
 
 
@@ -159,7 +159,7 @@ def test_web_netbox(app, admin, fake):
     r = admin.post("/tools/netbox/settings", json={"url": "http://10.1.2.3:8000", "token": "nbt_secret.token"}, headers=hdr)
     assert r.json["configured"]
     with app.app_context():
-        from exbuilder.web import auth
+        from switchbuilder.web import auth
         stored = auth.db().execute("SELECT token FROM netbox_settings").fetchone()[0]
     assert "nbt_secret" not in stored
     page = admin.get("/tools/netbox/").get_data(as_text=True)

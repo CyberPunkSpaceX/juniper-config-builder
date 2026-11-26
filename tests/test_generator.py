@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import models, ports
-from exbuilder.cryptpw import is_hashed, sha512_crypt
-from exbuilder.generator import build
-from exbuilder.junos import Config, q
+from switchbuilder import models, ports
+from switchbuilder.cryptpw import is_hashed, sha512_crypt
+from switchbuilder.generator import build
+from switchbuilder.junos import Config, q
 
 EXAMPLE = Path(__file__).parent.parent / "examples" / "office-switch.json"
 HASH = sha512_crypt("Juniper123!", "fixedsalt")
@@ -286,7 +286,7 @@ INJECT = "x\nusername evil privilege 15 secret pwned"
 @pytest.mark.parametrize("vendor", ["juniper", "cisco", "arista", "aruba", "procurve", "nexus", "dell", "ruckus",
                                     "extreme", "fortiswitch", "mikrotik", "unifi"])
 def test_line_breaks_in_text_fields_are_refused(vendor):
-    from exbuilder.web import _defaults
+    from switchbuilder.web import _defaults
 
     p = _defaults(vendor)
     p["system"]["hostname"] = "sw1"
@@ -301,7 +301,7 @@ def test_line_breaks_in_text_fields_are_refused(vendor):
 
 
 def test_multiline_fields_still_allowed():
-    from exbuilder.web import _defaults
+    from switchbuilder.web import _defaults
 
     p = _defaults("cisco")
     p["system"]["hostname"] = "sw1"

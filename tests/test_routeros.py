@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from exbuilder import ports, routeros_models
-from exbuilder.generator import build
+from switchbuilder import ports, routeros_models
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "mikrotik-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "mikrotik-office.json"
 
 
 def base(**over):
