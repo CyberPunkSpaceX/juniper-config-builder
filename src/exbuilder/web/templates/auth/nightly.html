@@ -1,0 +1,89 @@
+{% extends "auth/base.html" %}
+{% block title %}Nightly backups · {{ c['name'] }} · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('clients.client_page', cid=c['id']) }}">← {{ c['name'] }}</a></p>
+<h1>Nightly backups of {{ c['name'] }}</h1>
+
+{% if ssh_off or not nets or not key %}
+<section class="panel" style="border-color: var(--bad)">
+  <p><b>Not ready yet.</b>
+  {% if ssh_off %}SSH is turned off on this server (EXB_SSH_DISABLE).
+  {% elif not nets %}Add the switch networks on the <a href="{{ url_for('clients.client_page', cid=c['id']) }}#ssh">client page</a> first.
+  {% else %}Make an SSH key on the <a href="{{ url_for('clients.client_page', cid=c['id']) }}#ssh">client page</a> and add its public key to each switch. Nightly backups never use a stored password.{% endif %}</p>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2>Schedule and switches</h2>
+  <p class="hint">Every night the server signs in to each switch with {{ c['name'] }}'s SSH key{% if c['ssh_user'] %} as <b>{{ c['ssh_user'] }}</b>{% endif %},
+    reads the config with a read-only command and keeps it as a config backup in the Production space
+    (Backups &amp; compare tab). An unchanged config is not stored again; the newest 50 versions of each switch are kept.
+    {% if next_run %}<br><b>Next run: {{ next_run }}.</b>{% endif %}</p>
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <label style="font-weight:400"><input type="checkbox" name="enabled" value="1" {% if s['enabled'] %}checked{% endif %}> Back up every night</label>
+    <div class="row" style="grid-template-columns: 1fr 2fr; margin-top: 10px">
+      <div><label for="at">Time</label><input id="at" type="text" name="at_time" value="{{ s['at_time'] }}" placeholder="02:00" pattern="[0-2][0-9]:[0-5][0-9]"></div>
+      <div><label for="tz">Time zone</label><select id="tz" name="tz">{% for z in zones %}<option {% if z == s['tz'] %}selected{% endif %}>{{ z }}</option>{% endfor %}</select></div>
+    </div>
+    <div class="field" style="margin-top: 10px">
+      <label for="sw">Switches ({{ switches|length }})</label>
+      <textarea id="sw" name="switches" rows="8" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 13px ui-monospace, Menlo, Consolas, monospace"
+        placeholder="10.40.10.21 juniper&#10;10.40.10.22 cisco&#10;core-sw1.lan arista 2222">{{ s['switches'] }}</textarea>
+      <p class="hint">One switch per line: address, vendor, and the SSH port if it is not 22. Vendors: {{ vendors|join(', ') }}
+        (UniFi has no SSH config; back it up in the UniFi Network app). Every address must be inside the client's switch networks.</p>
+      {% for p in problems %}<p class="hint" style="color:var(--bad)">{{ p }}</p>{% endfor %}
+    </div>
+
+    <h2 style="margin-top: 22px">Alerts</h2>
+    <div class="field"><label for="no">Send an alert</label><select id="no" name="notify_on">
+      {% for k, v in notify_on.items() %}<option value="{{ k }}" {% if k == s['notify_on'] %}selected{% endif %}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="em">Email addresses</label><input id="em" type="text" name="emails" value="{{ s['emails'] }}" placeholder="noc@example.com, me@example.com" {% if not smtp %}disabled{% endif %}>
+      {% if not smtp %}<p class="hint">Email is not set up on this server (EXB_SMTP_HOST and friends in the stack file). Webhooks work without it.</p>{% endif %}</div>
+    <div class="field"><label for="wh">Add webhooks (Microsoft Teams, Slack, Discord or any JSON webhook)</label>
+      <textarea id="wh" name="hooks" rows="2" style="width:100%; padding:8px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font: 13px ui-monospace, Menlo, Consolas, monospace" placeholder="https://hooks.slack.com/services/…"></textarea>
+      <p class="hint">One https:// address per line. In Teams: a channel's <i>Workflows</i> &gt; "Post to a channel when a webhook request is received". Webhook addresses hold a password-like token, so they are stored encrypted and only the start is shown.</p>
+      {% if hooks %}<p>Set now: {% for h in hooks %}<span class="badge">{{ h }}</span> {% endfor %}
+        <label style="font-weight:400; display:inline"><input type="checkbox" name="clear_hooks" value="1"> remove these</label></p>{% endif %}
+    </div>
+    <button type="submit" name="action" value="save">Save</button>
+  </form>
+  <form method="post" class="inline" style="margin-top: 10px">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" name="action" value="run" class="secondary">Back up now</button>
+    <button type="submit" name="action" value="test" class="secondary">Send a test alert</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Last runs</h2>
+  {% if not runs %}<p class="hint">No runs yet.</p>{% else %}
+  <div class="scroll"><table>
+    <thead><tr><th>Started</th><th>How</th><th>Result</th><th>Alert</th></tr></thead>
+    <tbody>
+    {% for r in runs %}
+    <tr>
+      <td style="white-space:nowrap">{{ r['started_at'] }}{% if not r['finished_at'] %} <span class="badge">running</span>{% endif %}</td>
+      <td class="muted">{{ r['trigger'] }}</td>
+      <td>
+        {% if r['changed'] %}<span class="badge on">{{ r['changed'] }} changed</span>{% endif %}
+        <span class="badge">{{ r['unchanged'] }} unchanged</span>
+        {% if r['failed'] %}<span class="badge off">{{ r['failed'] }} failed</span>{% endif %}
+        <details><summary class="hint">Switches</summary>
+          <ul class="hint">{% for d in r['details'] %}
+            <li><b>{{ d.get('name') or d['host'] }}</b>{% if d.get('name') and d['name'] != d['host'] %} ({{ d['host'] }}){% endif %}:
+              {% if d['status'] == 'failed' %}<span style="color:var(--bad)">{{ d['error'] }}</span>
+              {% elif d['status'] == 'changed' %}changed, {{ d.get('summary', '') }}
+                {% if d.get('diff') %}<pre style="white-space:pre-wrap; margin:4px 0">{{ d['diff']|join('\n') }}</pre>{% endif %}
+              {% elif d['status'] == 'new' %}first backup{% else %}unchanged{% endif %}</li>
+          {% endfor %}</ul>
+        </details>
+      </td>
+      <td class="muted">{{ r['alert'] or '-' }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
+{% endblock %}

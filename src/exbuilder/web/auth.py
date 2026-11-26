@@ -116,7 +116,14 @@ def require_2fa() -> bool:
 
 def needs_2fa(user) -> bool:
     """This user must have 2FA: everyone when EXB_REQUIRE_2FA is on, server admins unless turned off."""
+    if user and _source(user) in ("oidc", "saml"):
+        return False  # the identity provider does the second factor
     return require_2fa() or (bool(user) and user["role"] == "admin" and _flag("EXB_REQUIRE_2FA_ADMINS", "true"))
+
+
+def _source(user) -> str:
+    """Where the account signs in: local, ldap, oidc or saml (see sso.py)."""
+    return user["source"] if "source" in user.keys() and user["source"] else "local"
 
 
 def _lockout() -> tuple[int, int, int]:
@@ -179,7 +186,7 @@ def verify(username: str, password: str) -> sqlite3.Row | None:
         # Spend the same time as a real check so usernames can't be probed.
         check_password_hash(_DUMMY_HASH, password)
         return None
-    if not check_password_hash(row["password_hash"], password) or not row["active"]:
+    if not check_password_hash(row["password_hash"], password) or not row["active"] or _source(row) != "local":
         return None
     return row
 
@@ -303,7 +310,8 @@ def _init_db(folder: Path) -> None:
             )
             log.warning("No users yet: created '%s' with password '%s'. Sign in and change it now.",
                         DEFAULT_ADMIN, DEFAULT_ADMIN)
-        from . import clients
+        from . import clients, sso
+        sso.migrate(conn)
         clients.migrate(conn, folder)
         conn.commit()
     finally:
@@ -467,12 +475,19 @@ def login():
         username = request.form.get("username", "").strip()
         if minutes := locked_minutes(username):
             return render_template("auth/login.html", error=_locked_message(minutes)), 429
-        user = verify(username, request.form.get("password", ""))
+        password = request.form.get("password", "")
+        user = verify(username, password)
+        if user is None and not db().execute("SELECT 1 FROM users WHERE username = ? AND source = 'local'",
+                                             (username,)).fetchone():
+            from . import sso
+            user = sso.ldap_login(username, password)  # company directory, when set up
+            if isinstance(user, str):
+                return render_template("auth/login.html", error=user, providers=sso.login_providers()), 403
         if user is None:
             record_failure(username, "sign-in")
             time.sleep(0.5)
             error = "Wrong username or password, or the account is disabled."
-        elif user["totp_secret"]:
+        elif user["totp_secret"] and needs_code(user):
             # Password is right; the code is asked on the next page.
             session.clear()
             session["pending"] = {"uid": user["id"], "pwv": user["password_hash"][-16:],
@@ -480,7 +495,13 @@ def login():
             return redirect(url_for("auth.login_2fa"))
         else:
             return _finish_login(user, request.args.get("next"))
-    return render_template("auth/login.html", error=error)
+    from . import sso
+    return render_template("auth/login.html", error=error, providers=sso.login_providers())
+
+
+def needs_code(user) -> bool:
+    """Ask the authenticator code at sign-in (not for OIDC/SAML: the identity provider did MFA)."""
+    return _source(user) not in ("oidc", "saml")
 
 
 @bp.route("/login/code", methods=["GET", "POST"])
@@ -525,6 +546,9 @@ def logout():
 @bp.route("/account", methods=["GET", "POST"])
 def account():
     user = current_user()
+    if request.method == "POST" and _source(user) != "local":
+        flash("Your password is managed by your company directory, so change it there.", "error")
+        return redirect(url_for("auth.account"))
     if request.method == "POST":
         current = request.form.get("current", "")
         new = request.form.get("password", "")
@@ -685,9 +709,10 @@ def set_access(uid: int, level: str, scope: str, ids: list[int]) -> None:
 @bp.get("/users")
 @admin_required
 def users():
+    from . import sso
     rows = db().execute("SELECT * FROM users ORDER BY username COLLATE NOCASE").fetchall()
     all_clients = db().execute("SELECT id, name FROM clients ORDER BY name COLLATE NOCASE").fetchall()
-    return render_template("auth/users.html", users=rows, levels=LEVELS, min_password=MIN_PASSWORD,
+    return render_template("auth/users.html", users=rows, levels=LEVELS, min_password=MIN_PASSWORD, sources=sso.SOURCES,
                            clients=all_clients, access={u["id"]: access_of(u["id"]) for u in rows})
 
 
@@ -759,7 +784,9 @@ def users_update(uid: int):
         flash(f"Two-factor sign-in for {name} was reset. They can set it up again on My account.", "ok")
     elif action == "reset":
         password = request.form.get("password", "")
-        if problem := password_problem(password):
+        if _source(target) != "local":
+            flash(f"{name} signs in with the company directory; reset the password there.", "error")
+        elif problem := password_problem(password):
             flash(problem, "error")
         else:
             db().execute("UPDATE users SET password_hash = ?, must_change = 1 WHERE id = ?", (_hash(password), uid))

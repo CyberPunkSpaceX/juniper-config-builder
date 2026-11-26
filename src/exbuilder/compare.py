@@ -1,4 +1,6 @@
-"""Compare two Junos configs line by line.
+"""Compare two switch configs line by line.
+
+Junos configs:
 
 Both configs are turned into ``set`` lines first (curly-brace configs too), so
 the order of statements and the way they are written does not matter. The
@@ -8,10 +10,16 @@ and also gives the commands that make one config look like the other.
 Encrypted secrets ($9$, $6$ ...) are different every time Junos saves them, so
 by default they are compared as "<secret>" and only a missing or added secret
 shows up.
+
+Other vendors (Cisco-style indented configs, FortiSwitch, MikroTik, ...): see
+``text_compare``. Lines that change on every fetch without a config change (the
+"Last configuration change" stamp, ntp clock-period, the RouterOS export date)
+are left out first: ``stable_text``.
 """
 
 from __future__ import annotations
 
+import difflib
 import re
 
 from .importer import to_set_lines
@@ -90,6 +98,97 @@ def _path(line: str) -> str:
     return " ".join(words[:-1])
 
 
+# Lines that differ between two fetches of the same, unchanged config.
+VOLATILE = re.compile(
+    r"^(?:! Last configuration change at|! NVRAM config last updated|ntp clock-period|Building configuration|"
+    r"Current configuration\s*:|!Time:|!Running configuration last done at|! Startup-config last modified|"
+    r"# .* by RouterOS|#\s*(?:\w{3}/\d\d/\d{4}|\d{4}-\d\d-\d\d) \d\d:\d\d:\d\d)")
+TEXT_SECRET = re.compile(
+    r"(\b(?:secret|password|key-string|auth-key|authentication-key|community|passphrase|passwd|"
+    r"pre-shared-key|key)\s+(?:\d\s+)?|\bENC\s+|\b(?:password|passphrase|secret|authentication-password|"
+    r"encryption-password|wpa2?-pre-shared-key)=)(\"[^\"]*\"|\S+)", re.I)
+
+
+def stable_text(text: str) -> str:
+    """The config without the lines that change on every fetch."""
+    return "\n".join(ln.rstrip() for ln in (text or "").replace("\r\n", "\n").split("\n")
+                     if not VOLATILE.match(ln.strip()))
+
+
+def _flatten(text: str, ignore_secrets: bool) -> list[tuple[str, str]]:
+    """Config text -> [(section, line)]: a section is the unindented line above (or the line itself)."""
+    out, seen, section = [], set(), ""
+    for raw in stable_text(text).split("\n")[:MAX_LINES]:
+        line = raw.rstrip()
+        bare = line.strip()
+        if not bare or bare in ("!", "#", "exit", "end", "next", "quit"):
+            continue
+        if ignore_secrets:
+            line = TEXT_SECRET.sub(lambda m: m.group(1) + "<secret>", line)
+        if not raw[:1].isspace():
+            words = line.split()
+            # MikroTik: "/interface vlan add ..." -> section "/interface vlan"
+            section = " ".join(words[:2]) if bare.startswith("/") else line.strip()
+        key = (section, line)
+        if key not in seen:
+            seen.add(key)
+            out.append(key)
+    return out
+
+
+def text_compare(a_text: str, b_text: str, ignore_secrets: bool = True, context: int = 3) -> dict:
+    """Differences between two configs of any vendor, grouped by top-level block, in config order."""
+    a, b = _flatten(a_text, ignore_secrets), _flatten(b_text, ignore_secrets)
+    if not a and not b:
+        return {"error": "Neither side has any config lines."}
+    order, by_a, by_b = [], {}, {}
+    for sec, ln in a:
+        if sec not in by_a and sec not in by_b:
+            order.append(sec)
+        by_a.setdefault(sec, []).append(ln)
+    for sec, ln in b:
+        if sec not in by_a and sec not in by_b:
+            order.append(sec)
+        by_b.setdefault(sec, []).append(ln)
+    sections, only_a, only_b = [], 0, 0
+    for sec in order:
+        la, lb = by_a.get(sec, []), by_b.get(sec, [])
+        if la == lb:
+            continue
+        lines = []
+        for op, i1, i2, j1, j2 in difflib.SequenceMatcher(None, la, lb, autojunk=False).get_opcodes():
+            if op == "equal":
+                lines += [{"op": " ", "text": x} for x in la[i1:i2]]
+            else:
+                lines += [{"op": "-", "text": x} for x in la[i1:i2]] + [{"op": "+", "text": x} for x in lb[j1:j2]]
+        removed, added = sum(x["op"] == "-" for x in lines), sum(x["op"] == "+" for x in lines)
+        only_a, only_b = only_a + removed, only_b + added
+        sections.append({"name": sec, "removed": removed, "added": added, "lines": _trim(lines, context)})
+    return {"a_lines": len(a), "b_lines": len(b), "same": len(set(a) & set(b)), "only_a": only_a, "only_b": only_b,
+            "identical": not sections, "sections": sections, "a_to_b": [], "b_to_a": [],
+            "secrets_ignored": ignore_secrets, "plain": True}
+
+
+def _trim(lines: list[dict], context: int) -> list[dict]:
+    keep = [False] * len(lines)
+    for i, x in enumerate(lines):
+        if x["op"] != " ":
+            for j in range(max(0, i - context), min(len(lines), i + context + 1)):
+                keep[j] = True
+    shown, skipped = [], 0
+    for x, k in zip(lines, keep):
+        if k:
+            if skipped:
+                shown.append({"op": "…", "text": f"{skipped} unchanged line{'s' if skipped > 1 else ''}"})
+                skipped = 0
+            shown.append(x)
+        else:
+            skipped += 1
+    if skipped:
+        shown.append({"op": "…", "text": f"{skipped} unchanged line{'s' if skipped > 1 else ''}"})
+    return shown
+
+
 def compare(a_text: str, b_text: str, ignore_secrets: bool = True, context: int = 3) -> dict:
     """Differences between config A and config B.
 
@@ -98,6 +197,8 @@ def compare(a_text: str, b_text: str, ignore_secrets: bool = True, context: int 
     section are kept around the changes (``context`` lines).
     """
     a, b = normalize(a_text, ignore_secrets), normalize(b_text, ignore_secrets)
+    if (not a or not b) and (a_text or "").strip() and (b_text or "").strip():
+        return text_compare(a_text, b_text, ignore_secrets, context)   # not Junos: compare as text
     if not a and not b:
         return {"error": "Neither side has any config lines."}
     a_set, b_set = set(a), set(b)

@@ -27,6 +27,8 @@
   @media (max-width: 640px) { .access { grid-template-columns: 1fr; } }
 </style>
 <h1>Users</h1>
+<p class="hint">People can also sign in with LDAP / Active Directory, OpenID Connect (Entra ID, Google, Okta, Authentik) or SAML:
+  set that up on <a href="{{ url_for('sso.settings_page') }}">Sign-in settings</a>. Their access then comes from their groups at every sign-in.</p>
 <ul class="levels hint">
   <li><b>Read-only</b>: opens projects, maps and config backups. Passwords, keys and SNMP communities are hidden.</li>
   <li><b>Configurator</b>: builds configs, saves and deletes projects and maps, runs the converter, sees secrets.</li>
@@ -55,6 +57,7 @@
     {% set me = u['id'] == current_user['id'] %}
     <tr>
       <td><b>{{ u['username'] }}</b>{% if me %} <span class="muted">(you)</span>{% endif %}
+        {% if u['source'] and u['source'] != 'local' %}<span class="badge">{{ sources[u['source']] }}</span>{% endif %}
         <div class="muted" style="font-size:12px">added {{ u['created_at'] }}</div></td>
       <td style="min-width:260px">
         {{ access[u['id']].text }}
@@ -83,13 +86,14 @@
       </td>
       <td class="muted">{{ u['last_login'] or 'never' }}</td>
       <td>
+        {% if u['source'] and u['source'] != 'local' %}<span class="muted">set in the directory</span>{% else %}
         <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <input type="hidden" name="action" value="reset">
           <input type="password" name="password" placeholder="new password" required autocomplete="new-password"
                  aria-label="New password for {{ u['username'] }}">
           <button class="small secondary">Reset</button>
-        </form>
+        </form>{% endif %}
       </td>
       <td>
         {% if not me %}

@@ -3,6 +3,13 @@
 {% block content %}
 <h1>My account</h1>
 <div class="cards">
+{% if current_user['source'] and current_user['source'] != 'local' %}
+<section class="panel">
+  <h2>Password</h2>
+  <p class="muted">You sign in with your company account ({{ {'ldap': 'LDAP / Active Directory', 'oidc': 'single sign-on', 'saml': 'SAML single sign-on'}[current_user['source']] }}),
+    so your password is changed there, not here.</p>
+</section>
+{% else %}
 <form class="panel" method="post">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <h2>Change password</h2>
@@ -16,6 +23,7 @@
   <p class="muted">Changing your password signs you out on other devices.</p>
   {% if current_user['must_change'] %}<p class="muted">Then set up two-factor sign-in, on the right, to protect the account further.</p>{% endif %}
 </form>
+{% endif %}
 
 <section class="panel">
   <h2>Two-factor sign-in</h2>
