@@ -196,7 +196,10 @@ function section(root, title, items, cls, open) {
   const s = document.createElement("summary");
   s.append(h);
   h.style.display = "inline";
-  d.append(s, ul);
+  // The list is only added while the section is open: a closed <details> still copies (and in some browsers
+  // shows) its bullets with no text, which looked like empty warnings.
+  d.append(s);
+  d.addEventListener("toggle", () => { if (d.open) d.append(ul); else ul.remove(); });
   root.append(d);
 }
 
@@ -219,7 +222,7 @@ function render(r) {
                                ...r.notes], "check", true);
   section(rep, "Changed on the way", r.changes.filter(c => c.level === "changed").map(c => `${c.section}: ${c.text}`), "", true);
   section(rep, "Lines not read from the old config", r.not_read, "lost", r.not_read.length <= 12);
-  section(rep, "Builder warnings", r.warnings.map(w => `${w.section}: ${w.message}`), "", false);
+  section(rep, "Builder warnings", r.warnings.map(w => `${w.section}: ${w.message || w.text || ""}`), "", true);
   section(rep, "Port map (old → new)", r.ports.map(p => ({text: `${p.from} → ${p.to || "no place on the new switch"}`,
                                                           cls: p.to ? "" : "lost"})), "", false);
   if ($("pname")) $("pname").value = (r.project.name || "Converted switch") + ` (${NAMES[r.target]})`;

@@ -159,6 +159,21 @@ def retarget(project: dict, src: str, dst: str, model: str = "", source_model: s
                 else:
                     out.append(new)
             area[key] = ", ".join(out)
+        costs = []
+        for item in [x.strip() for x in str(area.get("metrics") or "").split(",") if x.strip()]:
+            raw, _, cost = item.rpartition(" ")
+            new = _iface_ref(src, dst, raw, move, lag_names) if raw else None
+            if new is None:
+                note("OSPF", f"Area {area.get('area')}: cost on {raw or item} could not be matched and was left out.", "lost")
+            else:
+                costs.append(f"{new} {cost}")
+        area["metrics"] = ", ".join(costs)
+        if dst != "juniper":
+            if area.get("metrics"):
+                note("OSPF", f"Area {area.get('area')}: interface costs ({area['metrics']}) are only written for Juniper; set them by hand.", "lost")
+            if area.get("ranges"):
+                note("OSPF", f"Area {area.get('area')}: area ranges ({area['ranges']}) are only written for Juniper; set them by hand.", "lost")
+            area["metrics"] = area["ranges"] = ""
 
     # Features the target can't do.
     def gone(feature, section, what):
@@ -193,6 +208,10 @@ def retarget(project: dict, src: str, dst: str, model: str = "", source_model: s
             gone("vlan_translation", "Ports", f"{label}: VLAN translation")
         if row.get("esi") and not v.has("evpn_vxlan"):
             row["esi"] = ""
+    if p.get("access", {}).get("ssh_from") and dst != "juniper":
+        note("Access", f"SSH was limited to {p['access']['ssh_from']} on the old switch; the builder only writes "
+                       f"that filter for Juniper, so add it by hand.", "lost")
+        p["access"]["ssh_from"] = ""
     if p["security"].get("radius_servers") and not v.has("dot1x"):
         p["security"]["radius_servers"] = []
 

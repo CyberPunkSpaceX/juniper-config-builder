@@ -29,7 +29,8 @@ ROUTING_DEFAULTS = {
 POLICY_DEFAULTS = {"prefix_lists": [], "communities": [], "terms": []}
 EVPN_DEFAULTS = {"enabled": False, "role": "leaf", "overlay_type": "internal", "overlay_as": "", "route_reflector": False,
                  "peers": "", "vrf_target": "", "vrfs": []}
-AREA_DEFAULTS = {"area": "0.0.0.0", "type": "normal", "interfaces": "", "passive": "", "p2p": "", "md5_key": ""}
+AREA_DEFAULTS = {"area": "0.0.0.0", "type": "normal", "interfaces": "", "passive": "", "p2p": "", "md5_key": "",
+                 "metrics": "", "ranges": ""}
 BGP_DEFAULTS = {"name": "", "type": "external", "peer_as": "", "local_address": "", "neighbors": "",
                 "import": "", "export": "", "multipath": False, "bfd": "", "auth_key": "", "description": ""}
 TERM_DEFAULTS = {"policy": "", "term": "", "protocol": "", "prefix_list": "", "match": "exact", "route_filter": "",
@@ -266,6 +267,18 @@ def ospf(ctx) -> None:
         if not names:
             ctx.error("OSPF", f"Area {area} has no interfaces.", "interfaces")
         key = _s(a.get("md5_key"))
+        metrics = {}
+        for item in [x.strip() for x in re.split(r"[,;\n]+", _s(a.get("metrics"))) if x.strip()]:
+            parts = item.split()
+            if len(parts) == 2 and parts[1].isdigit() and 1 <= int(parts[1]) <= 65535:
+                metrics[_iface_name(parts[0])] = parts[1]
+            else:
+                ctx.error("OSPF", f"Area {area}: interface cost '{item}' should look like 'ge-0/0/3 10'.", "metrics")
+        for rng in _list(a.get("ranges")):
+            try:
+                cfg.add(base, f"area-range {ipaddress.ip_network(rng, strict=False)}")
+            except ValueError:
+                ctx.error("OSPF", f"Area {area}: range '{rng}' is not a prefix.", "ranges")
         for name in names:
             if name in seen_if:
                 ctx.error("OSPF", f"{name} is in area {seen_if[name]} and area {area}.")
@@ -279,10 +292,19 @@ def ospf(ctx) -> None:
                 continue
             if name in p2p:
                 cfg.add(path, "interface-type p2p")
+            if name in metrics:
+                cfg.add(path, f"metric {metrics.pop(name)}")
             if key:
                 cfg.add((*path, "authentication", "md5 1"), f"key {q(key)}")
-            if name not in p2p and not key:
+            if name not in p2p and not key and not cfg_has_metric(name, a):
                 cfg.add(base, f"interface {name}")
+        for name in metrics:
+            ctx.error("OSPF", f"Area {area}: cost for {name}, which is not in the area.", "metrics")
+
+
+def cfg_has_metric(name: str, area: dict) -> bool:
+    return any(x.split()[:1] and _iface_name(x.split()[0]) == name
+               for x in re.split(r"[,;\n]+", _s(area.get("metrics"))) if x.strip())
 
 
 # --------------------------------------------------------------------- BGP
