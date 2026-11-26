@@ -355,6 +355,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <div class="field" data-only="juniper"><label>SSH root login</label><select data-bind="access.ssh_root_login"><option value="deny">deny</option><option value="deny-password">keys only</option><option value="allow">allow</option></select></div>
         <div class="adv field"><label>SSH connection limit</label><input type="text" data-bind="access.ssh_connection_limit"></div>
         <div class="adv field" data-only="juniper"><label>SSH new connections / minute</label><input type="text" data-bind="access.ssh_rate_limit"></div>
+        <div class="adv field" data-only="juniper"><label>SSH only from <span class="hint">(networks; empty = anywhere)</span></label><input type="text" data-bind="access.ssh_from" placeholder="192.168.99.0/24, 10.255.255.0/24"></div>
         <label class="adv check"><input type="checkbox" data-bind="access.netconf"> NETCONF over SSH (Ansible, automation)</label>
         <label class="adv check"><input type="checkbox" data-bind="access.web"> <span data-only="juniper">J-Web (HTTPS)</span><span data-only="arista">eAPI (HTTPS API)</span><span data-only="cisco">Web UI (HTTPS)</span><span data-only="ruckus">Web UI (HTTPS)</span><span data-only="aruba procurve">Web UI and REST API (HTTPS)</span><span data-only="nexus">NX-API (HTTPS API)</span><span data-only="dell">RESTCONF API (HTTPS)</span><span data-only="extreme fortiswitch">Web UI (HTTPS)</span><span data-only="mikrotik">WebFig and REST API (HTTPS)</span><span data-only="unifi">not on UniFi (the app manages it)</span></label>
         <label class="check"><input type="checkbox" data-bind="access.retry_options"> Slow down password guessing</label>
@@ -1190,8 +1191,10 @@ const TABLES = {
       {key: "interfaces", label: "Interfaces", ph: PH.ospf, cls: "span2"},
       {key: "passive", label: "Passive interfaces", ph: PH.passive, cls: "span2"},
       {key: "p2p", label: "Point-to-point interfaces", ph: PH.p2p, cls: "span2"},
-      {key: "md5_key", label: "MD5 key (optional)", type: "password"}],
-    title: r => `Area ${r.area || "?"}`, blank: rows => ({area: rows.length ? "0.0.0." + rows.length : "0.0.0.0", type: "normal", interfaces: "", passive: "", p2p: "", md5_key: ""})},
+      {key: "md5_key", label: "MD5 key (optional)", type: "password"},
+      {key: "metrics", label: "Interface costs (Juniper)", ph: "ge-0/0/3 10, irb.20 100", cls: "span2", show: () => JUNOS},
+      {key: "ranges", label: "Summary ranges (Juniper)", ph: "192.168.99.0/24", cls: "span2", show: () => JUNOS}],
+    title: r => `Area ${r.area || "?"}`, blank: rows => ({area: rows.length ? "0.0.0." + rows.length : "0.0.0.0", type: "normal", interfaces: "", passive: "", p2p: "", md5_key: "", metrics: "", ranges: ""})},
   "routing.bgp_groups": {fields: [
       {key: "name", label: "Group name", ph: "ISP"},
       {key: "type", label: "Type", type: "select", options: [["external", "external (eBGP)"], ["internal", "internal (iBGP)"]]},

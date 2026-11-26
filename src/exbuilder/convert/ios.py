@@ -53,6 +53,8 @@ IFACE_QUIET = re.compile(
     r"switchport vlan mapping enable|no lldp|lldp transmit|lldp receive|flowcontrol|error-disable|logging event|snmp trap|no snmp trap|hold-queue|bfd )", re.I)
 
 PRIV_CLASS = {15: "super-user", 1: "read-only"}
+# Cisco 'redistribute X' -> the protocol name in a routing policy term.
+REDIST = {"ospf": "ospf", "bgp": "bgp", "static": "static", "connected": "direct"}
 LEVELS = {"emergencies": "emergency", "alerts": "alert", "critical": "critical", "errors": "error",
           "warnings": "warning", "notifications": "notice", "informational": "info", "debugging": "any",
           "0": "emergency", "1": "alert", "2": "critical", "3": "error", "4": "warning", "5": "notice",
@@ -156,6 +158,9 @@ def parse(text: str, vendor: str = "cisco") -> dict:
     ospf_passive: list[str] = []
     ospf_area: dict = {}
     peers: dict[str, dict] = {}
+    ospf_ranges: dict[str, list[str]] = {}
+    redist: list[tuple[str, str, str]] = []   # (into protocol, from protocol, route-map)
+    vty_acls: list[str] = []
     bgp_nets: list[str] = []
     acls: dict[str, list[str]] = {}
     plists: dict[str, list[str]] = {}
@@ -343,6 +348,10 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                         ospf_area["passive_default"] = True
                     elif kid.startswith("auto-cost reference-bandwidth "):
                         rt["ospf"]["reference_bandwidth"] = f"{kw[2]}m"
+                    elif kid.startswith("area ") and len(kw) >= 5 and kw[2] == "range":
+                        ospf_ranges.setdefault(kw[1], []).append(net(kw[3], kw[4]) if "/" not in kw[3] else kw[3])
+                    elif kid.startswith("redistribute ") and len(kw) > 1 and kw[1] in REDIST:
+                        redist.append(("ospf", REDIST[kw[1]], kw[kw.index("route-map") + 1] if "route-map" in kw else ""))
                     elif kid.startswith(("area ", "redistribute ", "default-information", "summary-address")):
                         r.later.append(f"OSPF: '{kid}' was not converted; set it up by hand on the new switch.")
                     elif kid.startswith(("log-adjacency-changes", "no passive-interface")):
@@ -368,9 +377,10 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                         peers.setdefault(kw[1], {})["source"] = kw[3]
                     elif kid.startswith("network ") and len(kw) >= 2:
                         bgp_nets.append(net(kw[1], kw[3]) if "mask" in kw else kw[1])
+                    elif kid.startswith("redistribute ") and len(kw) > 1 and kw[1] in REDIST:
+                        redist.append(("bgp", REDIST[kw[1]], kw[kw.index("route-map") + 1] if "route-map" in kw else ""))
                     elif kid.startswith("redistribute "):
-                        r.later.append(f"BGP: '{kid}' was not converted. Junos announces routes through an export "
-                                       "policy; add a term for them on the Policies tab.")
+                        r.later.append(f"BGP: '{kid}' was not converted; add an export policy term for it by hand.")
                     elif kid.startswith(("bgp log-neighbor", "address-family", "exit-address", "no bgp default",
                                          "bgp send-community")) or \
                             (kid.startswith("neighbor ") and (kw[-1] == "activate" or "send-community" in kw)):
@@ -398,9 +408,8 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                 for kid in kids:
                     if "transport input" in kid and "telnet" in kid:
                         r.notes.append(f"{head}: Telnet was allowed; the builder writes SSH only.")
-                    elif kid.startswith("access-class "):
-                        r.later.append(f"{head}: SSH was limited to access list {kid.split()[1]}. That was not "
-                                       "converted; limit SSH on the new switch (or with a firewall filter) by hand.")
+                    elif kid.startswith("access-class ") and head.startswith("line vty"):
+                        vty_acls.append(kid.split()[1])
             elif head.startswith("ip access-list standard ") or re.match(r"^access-list \d+ (permit|deny) ", head):
                 if w[0] == "access-list":
                     acls.setdefault(w[1], []).append(" ".join(w[2:]))
@@ -435,15 +444,42 @@ def parse(text: str, vendor: str = "cisco") -> dict:
     sl.pop("_level", None)
     if mgmt_port:
         s["mgmt_interface"] = ""
-    _ospf(r, ospf_nets, ospf_passive, ospf_area)
-    _policies(r, acls, plists, rmaps, {x for pr in peers.values() for x in (pr.get("import"), pr.get("export")) if x})
+    _ospf(r, ospf_nets, ospf_passive, ospf_area, ospf_ranges)
+    uses = [(x, x, "") for pr in peers.values() for x in (pr.get("import"), pr.get("export")) if x]
+    for into, frm, rm in redist:
+        if into == "bgp" and not peers:
+            continue
+        uses.append((rm, f"{rm or 'REDIST'}-{frm.upper()}-TO-{into.upper()}", frm))
+    _policies(r, acls, plists, rmaps, uses)
+    for into, frm, rm in redist:
+        name = f"{rm or 'REDIST'}-{frm.upper()}-TO-{into.upper()}"
+        if into == "ospf" and rt["ospf"]["enabled"]:
+            rt["ospf"]["export"] = ", ".join(filter(None, [rt["ospf"]["export"], name]))
+        elif into == "bgp":
+            r.redist_bgp.append(name)
     _bgp(r, peers, bgp_nets)
+    for acl in dict.fromkeys(vty_acls):
+        good, bad = _acl_prefixes(acls.get(acl, []))
+        if good:
+            a["ssh_from"] = ", ".join(dict.fromkeys(filter(None, [*a.get("ssh_from", "").split(", "), *good])))
+            r.notes.append(f"SSH access list {acl} on the vty lines became 'SSH only from {a['ssh_from']}' "
+                           "(a filter on the loopback on Juniper). Check that your own address is in it.")
+        for b in bad:
+            r.later.append(f"Access list {acl}: '{b}' was not converted.")
+        if acl not in acls:
+            r.later.append(f"The vty lines use access list {acl}, but it is not in the config.")
     if s["mgmt_gateway"] and not s["mgmt_address"] and not any(x["prefix"] == "0.0.0.0/0" for x in rt["static"]):
         # 'ip default-gateway' with no management port: the switch's own default route.
         rt["static"].append({"prefix": "0.0.0.0/0", "next_hop": s["mgmt_gateway"]})
         s["mgmt_gateway"] = ""
         r.notes.append("'ip default-gateway' became a static default route, since there is no management port "
                        "address. Check it on the Routing tab.")
+    done = r.acls_used | {x for x in vty_acls if x in acls}
+    if done:
+        # Converted access lists are not "not read"; lines they could not carry are listed in the notes.
+        r.unparsed = [x for x in r.unparsed if not (
+            (x.split()[:3] == ["ip", "access-list", "standard"] and len(x.split()) > 3 and x.split()[3] in done)
+            or (x.split()[:1] == ["access-list"] and len(x.split()) > 1 and x.split()[1] in done))]
     r.notes.extend(r.later)
     return {"project": r.project(), "unparsed": r.unparsed, "notes": r.notes}
 
@@ -664,6 +700,8 @@ def _if_ospf(r: Reader, ifname: str, kw: list[str]) -> None:
         r.ospf_if[ifname] = kw[4]
     elif kw[2:4] == ["network", "point-to-point"]:
         r.ospf_p2p.add(ifname)
+    elif kw[2] == "cost" and len(kw) > 3 and kw[3].isdigit():
+        r.ospf_cost[ifname] = kw[3]
     elif kw[2] in ("cost", "authentication", "message-digest-key", "hello-interval", "dead-interval", "priority"):
         r.later.append(f"OSPF on {ifname}: '{' '.join(kw)}' was not converted.")
     else:
@@ -674,7 +712,7 @@ def _area_id(a: str) -> str:
     return a if "." in a else (str(ipaddress.IPv4Address(int(a))) if a.isdigit() else a)
 
 
-def _ospf(r: Reader, nets, passive, opts) -> None:
+def _ospf(r: Reader, nets, passive, opts, ranges=None) -> None:
     if not nets and not r.ospf_if:
         return
     rt = r.p["routing"]
@@ -713,6 +751,13 @@ def _ospf(r: Reader, nets, passive, opts) -> None:
         a["passive"] = ", ".join(pas)
         a["interfaces"] = ", ".join(i for i in a["interfaces"] if i not in pas)
         a["p2p"] = ", ".join(i for i in a["interfaces"].split(", ") if i in r.ospf_p2p)
+        every = [i for i in (a["interfaces"] + ", " + a["passive"]).split(", ") if i]
+        a["metrics"] = ", ".join(f"{i} {r.ospf_cost[i]}" for i in every if i in r.ospf_cost)
+        a["ranges"] = ""
+    for area, pfx in (ranges or {}).items():
+        a = areas.setdefault(_area_id(area), {"area": _area_id(area), "type": "normal", "interfaces": "",
+                                              "passive": "", "p2p": "", "md5_key": "", "metrics": "", "ranges": ""})
+        a["ranges"] = ", ".join(pfx)
     rt["ospf"]["areas"] = list(areas.values())
 
 
@@ -750,8 +795,12 @@ def _acl_prefixes(lines: list[str]) -> tuple[list[str], list[str]]:
     return out, bad
 
 
-def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, used: set) -> None:
-    """Prefix lists and the route-maps BGP uses -> the builder's routing policies."""
+def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> None:
+    """Prefix lists, and the route-maps that BGP neighbors and redistribution use -> routing policies.
+
+    ``uses`` holds (route-map, policy name, protocol): a neighbor's route-map keeps its name; a
+    'redistribute ospf route-map X' becomes its own policy that only looks at OSPF routes.
+    """
     pol = r.p["policy"]
     made: dict[str, list[str]] = {}
     for name, entries in plists.items():
@@ -767,40 +816,55 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, used: set) -> No
         if good:
             made[name] = good
     used_acls: set[str] = set()
-    comm_n = 0
-    terms = []
-    for rm in rmaps:
-        if rm["name"] not in used:
-            r.skip(f"route-map {rm['name']} {rm['action']} {rm['seq']}  (+{len(rm['kids'])} lines, not used by BGP)")
+    terms: list[dict] = []
+    blank = {"policy": "", "term": "", "protocol": "", "prefix_list": "", "match": "exact", "route_filter": "",
+             "community": "", "action": "accept", "local_pref": "", "med": "", "community_add": "",
+             "next_hop_self": False}
+    seen: set[str] = set()
+    for rm_name, policy, proto in uses:
+        if policy in seen:
             continue
-        t = {"policy": rm["name"], "term": f"seq-{rm['seq']}", "protocol": "", "prefix_list": "", "match": "exact",
-             "route_filter": "", "community": "", "action": "accept" if rm["action"] == "permit" else "reject",
-             "local_pref": "", "med": "", "community_add": "", "next_hop_self": False}
-        for kid in rm["kids"]:
-            kw = kid.split()
-            if kid.startswith("match ip address prefix-list "):
-                t["prefix_list"] = kw[4]
-            elif kid.startswith("match ip address ") and len(kw) > 3:
-                t["prefix_list"] = kw[3]
-                used_acls.add(kw[3])
-            elif kid.startswith("set local-preference "):
-                t["local_pref"] = kw[2]
-            elif kid.startswith("set metric ") and kw[2].isdigit():
-                t["med"] = kw[2]
-            elif kid.startswith("set community "):
-                vals = [x for x in kw[2:] if x != "additive"]
-                comm_n += 1
-                cname = f"{rm['name']}-{rm['seq']}"
-                pol["communities"].append({"name": cname, "members": ", ".join(vals)})
-                t["community_add"] = cname
-                if "additive" not in kw:
-                    r.later.append(f"Route-map {rm['name']} {rm['seq']}: 'set community' replaced the communities on "
-                                   "Cisco; the new config adds them instead. Check it if that matters.")
-            elif kid.startswith("set ip next-hop self") or kid == "set ip next-hop peer-address":
-                t["next_hop_self"] = True
-            else:
-                r.later.append(f"Route-map {rm['name']} {rm['seq']}: '{kid}' was not converted.")
-        terms.append(t)
+        seen.add(policy)
+        entries = [rm for rm in rmaps if rm["name"] == rm_name] if rm_name else []
+        if rm_name and not entries:
+            r.later.append(f"Route-map {rm_name} is used but not in the config; {policy} accepts everything.")
+        if not entries:
+            terms.append({**blank, "policy": policy, "term": "all", "protocol": proto})
+            continue
+        for rm in entries:
+            t = {**blank, "policy": policy, "term": f"seq-{rm['seq']}", "protocol": proto,
+                 "action": "accept" if rm["action"] == "permit" else "reject"}
+            for kid in rm["kids"]:
+                kw = kid.split()
+                if kid.startswith("match ip address prefix-list "):
+                    t["prefix_list"] = kw[4]
+                elif kid.startswith("match ip address ") and len(kw) > 3:
+                    t["prefix_list"] = kw[3]
+                    used_acls.add(kw[3])
+                elif kid.startswith("set local-preference "):
+                    t["local_pref"] = kw[2]
+                elif kid.startswith("set metric ") and kw[2].isdigit():
+                    t["med"] = kw[2]
+                elif kid.startswith("set community "):
+                    vals = [x for x in kw[2:] if x != "additive"]
+                    cname = f"{rm['name']}-{rm['seq']}"
+                    if not any(c["name"] == cname for c in pol["communities"]):
+                        pol["communities"].append({"name": cname, "members": ", ".join(vals)})
+                    t["community_add"] = cname
+                    if "additive" not in kw and policy == rm_name:
+                        r.later.append(f"Route-map {rm['name']} {rm['seq']}: 'set community' replaced the "
+                                       "communities on Cisco; the new config adds them instead. Check it if that matters.")
+                elif kid.startswith("set ip next-hop self") or kid == "set ip next-hop peer-address":
+                    t["next_hop_self"] = True
+                else:
+                    r.later.append(f"Route-map {rm['name']} {rm['seq']}: '{kid}' was not converted.")
+            terms.append(t)
+        # Cisco route-maps deny whatever no entry matched. A redistribution policy only says so for its
+        # own protocol, so other routes still reach the next policy.
+        terms.append({**blank, "policy": policy, "term": "deny-rest", "protocol": proto, "action": "reject"})
+    for rm in rmaps:
+        if rm["name"] not in {u[0] for u in uses}:
+            r.skip(f"route-map {rm['name']} {rm['action']} {rm['seq']}  (+{len(rm['kids'])} lines, not used)")
     for name in sorted(used_acls):
         good, bad = _acl_prefixes(acls.get(name, []))
         if good:
@@ -809,16 +873,13 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, used: set) -> No
             r.later.append(f"Access list {name}: '{b}' was not converted.")
         if name not in acls:
             r.later.append(f"Route-maps use access list {name}, but it is not in the config.")
+    r.acls_used |= used_acls
     for name in {t["prefix_list"] for t in terms if t["prefix_list"]} - set(made):
         for t in terms:
             if t["prefix_list"] == name:
                 t["prefix_list"] = ""
-                r.later.append(f"Route-map {t['policy']}: prefix list {name} has no entries the builder can write, "
+                r.later.append(f"Policy {t['policy']}: prefix list {name} has no entries the builder can write, "
                                "so that term now matches every route. Check it.")
-    # Cisco route-maps deny whatever no entry matched; say the same at the end of each policy.
-    for name in dict.fromkeys(t["policy"] for t in terms):
-        terms.append({**terms[0], "policy": name, "term": "deny-rest", "prefix_list": "", "local_pref": "",
-                      "med": "", "community_add": "", "next_hop_self": False, "action": "reject"})
     pol["prefix_lists"] = [{"name": k, "prefixes": ", ".join(v)} for k, v in made.items()]
     pol["terms"] = terms
 
@@ -844,7 +905,27 @@ def _bgp(r: Reader, peers: dict, nets: list[str]) -> None:
                 r.later.append(f"BGP group {name}: update-source {pr['source']} was not converted; set the local "
                                "address on the Routing tab.")
         g["neighbors"].append(f"{ip} {pr.get('as', '')}".strip() if typ == "external" else ip)
-    rt["bgp_groups"] = [dict(g, neighbors="\n".join(g["neighbors"])) for g in groups.values()]
+    pol = r.p["policy"]
     if nets:
-        r.later.append(f"BGP 'network' lines ({', '.join(nets)}): Junos and most other switches announce routes "
-                       "through the export policy instead. Check that the export policy matches these prefixes.")
+        # Cisco announces 'network' prefixes that are in the routing table; Junos announces what the export
+        # policy accepts. A group with its own export route-map already decides; others get BGP-NETWORKS.
+        pol["terms"].append({"policy": "BGP-NETWORKS", "term": "networks", "protocol": "", "prefix_list": "",
+                             "match": "exact", "route_filter": ", ".join(f"{n} exact" for n in nets),
+                             "community": "", "action": "accept", "local_pref": "", "med": "",
+                             "community_add": "", "next_hop_self": False})
+    for g in groups.values():
+        out = [*r.redist_bgp]
+        if nets and not g["export"]:
+            out.append("BGP-NETWORKS")
+        elif nets:
+            plist = {t["prefix_list"] for t in pol["terms"] if t["policy"] == g["export"] and t["action"] == "accept"}
+            have = {p for pl in pol["prefix_lists"] if pl["name"] in plist for p in pl["prefixes"].split(", ")}
+            missing = [n for n in nets if n not in have]
+            if missing:
+                r.later.append(f"BGP group {g['name']}: 'network' {', '.join(missing)} is not matched by export "
+                               f"policy {g['export']}, so Junos won't announce it. Add it to that policy if needed.")
+        if r.redist_bgp and g["export"]:
+            r.later.append(f"BGP group {g['name']}: redistributed routes go through {', '.join(r.redist_bgp)} before "
+                           f"{g['export']}. On Cisco the neighbor's route-map also filtered them; check the order.")
+        g["export"] = ", ".join(filter(None, [*out, g["export"]]))
+    rt["bgp_groups"] = [dict(g, neighbors="\n".join(g["neighbors"])) for g in groups.values()]

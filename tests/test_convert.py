@@ -298,7 +298,35 @@ def test_old_cisco_routing_carries_over():
     # Only the password errors are left, and what was skipped is listed.
     assert all("password" in e["message"].lower() for e in r["errors"])
     notes = " ".join(r["notes"])
-    assert "redistribute" in notes and "ACL-SSH-MGMT" in notes and "area 10 range" in notes
+    assert "ACL-SSH-MGMT" in notes and not r["not_read"]
+
+
+def test_old_cisco_ospf_cost_range_and_redistribution():
+    r = convert.convert(L3, "cisco", "juniper", "EX4100-48P")
+    cfg = r["config"]
+    assert "set protocols ospf area 0.0.0.0 interface ge-0/0/3.0 metric 10" in cfg
+    assert "set protocols ospf area 0.0.0.10 area-range 192.168.99.0/24" in cfg
+    assert "set protocols ospf export RM-OSPF-TO-BGP-BGP-TO-OSPF" in cfg
+    assert "set policy-options prefix-list ACL-OSPF-REDIST 192.168.99.0/24" in cfg
+    assert "set protocols bgp group ISP-Edge-Peer export RM-OSPF-TO-BGP-OSPF-TO-BGP" in cfg
+    assert not r["errors"] or all("password" in e["message"].lower() for e in r["errors"])
+
+
+def test_old_cisco_vty_acl_becomes_ssh_filter():
+    r = convert.convert(L3, "cisco", "juniper", "EX4100-48P")
+    cfg = r["config"]
+    assert r["project"]["access"]["ssh_from"] == "192.168.99.0/24, 10.255.255.0/24"
+    assert "set firewall family inet filter PROTECT-SSH term ssh-allowed from source-address 192.168.99.0/24" in cfg
+    assert "set firewall family inet filter PROTECT-SSH term ssh-other then discard" in cfg
+    assert "set interfaces lo0 unit 0 family inet filter input PROTECT-SSH" in cfg
+
+
+def test_juniper_only_extras_are_reported_for_other_targets():
+    r = convert.convert(L3, "cisco", "arista")
+    lost = " ".join(c["text"] for c in r["changes"] if c["level"] == "lost")
+    assert "interface costs" in lost and "area ranges" in lost and "SSH was limited" in lost
+    assert not r["project"]["access"]["ssh_from"]
+    assert all(not a["metrics"] and not a["ranges"] for a in r["project"]["routing"]["ospf"]["areas"])
 
 
 @pytest.mark.parametrize("target", ["cisco", "arista", "nexus", "aruba", "dell"])

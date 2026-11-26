@@ -45,7 +45,7 @@ DEFAULTS: dict = {
     "access": {
         "root_password": "", "root_ssh_key": "",
         "users": [],
-        "ssh_root_login": "deny", "ssh_connection_limit": "10", "ssh_rate_limit": "5",
+        "ssh_root_login": "deny", "ssh_connection_limit": "10", "ssh_rate_limit": "5", "ssh_from": "",
         "netconf": False, "web": False,
         "retry_options": True,
     },
@@ -385,6 +385,33 @@ def _password(ctx: Ctx, section: str, label: str, value: str, key: str) -> str |
     return hashed
 
 
+def _ssh_from(ctx, text) -> None:
+    """'SSH only from' networks: a filter on lo0 that drops SSH from anywhere else and lets the rest through."""
+    nets = []
+    for raw in [x for x in re.split(r"[,\s]+", str(text or "").strip()) if x]:
+        try:
+            nets.append(str(ipaddress.ip_network(raw, strict=False)))
+        except ValueError:
+            ctx.error("Access", f"SSH only from: '{raw}' is not a network (example 192.168.99.0/24).", "access.ssh_from")
+    if not nets:
+        return
+    cfg = ctx.cfg
+    cfg.comment("SSH only from the management networks (filter on the loopback; other traffic is not touched)")
+    f = ("firewall", "family inet", "filter PROTECT-SSH")
+    for n in nets:
+        cfg.add((*f, "term ssh-allowed", "from"), f"source-address {n}")
+    cfg.add((*f, "term ssh-allowed", "from"), "protocol tcp")
+    cfg.add((*f, "term ssh-allowed", "from"), "destination-port ssh")
+    cfg.add((*f, "term ssh-allowed", "then"), "accept")
+    cfg.add((*f, "term ssh-other", "from"), "protocol tcp")
+    cfg.add((*f, "term ssh-other", "from"), "destination-port ssh")
+    cfg.add((*f, "term ssh-other", "then"), "discard")
+    cfg.add((*f, "term everything-else", "then"), "accept")
+    cfg.add(("interfaces", "lo0", "unit 0", "family inet"), "filter input PROTECT-SSH")
+    ctx.warn("Access", "SSH is limited by a filter on lo0. Make sure your own address is in 'SSH only from' "
+                       "before you commit, or use 'commit confirmed'.")
+
+
 def _ssh_keys(ctx: Ctx, section: str, label: str, path: tuple, text: str) -> None:
     for line in (text or "").splitlines():
         line = line.strip()
@@ -447,6 +474,7 @@ def _access(ctx: Ctx) -> None:
                 cfg.add(ssh, f"{stmt} {val}")
             else:
                 ctx.error("Access", f"SSH {stmt} must be a number from 1 to {top}.")
+    _ssh_from(ctx, a.get("ssh_from"))
     if _truthy(a.get("netconf")):
         cfg.add(("system", "services", "netconf", "ssh"), "port 830")
     if _truthy(a.get("web")):

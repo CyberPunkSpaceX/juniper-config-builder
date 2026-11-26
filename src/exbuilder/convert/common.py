@@ -91,6 +91,9 @@ class Reader:
         self.vlan1_used = False
         self.ospf_if: dict[str, str] = {}    # interface -> OSPF area, from 'ip ospf 1 area 0'
         self.ospf_p2p: set[str] = set()
+        self.ospf_cost: dict[str, str] = {}
+        self.redist_bgp: list[str] = []      # policies that stand for 'redistribute X' under router bgp
+        self.acls_used: set[str] = set()
         self.later: list[str] = []           # notes for things read but not carried over
 
     def vlan(self, vid: int, name: str = "") -> dict:
