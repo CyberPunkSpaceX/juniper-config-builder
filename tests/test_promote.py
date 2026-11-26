@@ -85,7 +85,7 @@ def test_changes_after_approval_need_a_new_approval(app, admin):
     assert "Core" not in _prod(admin)
 
 
-def test_roles_and_four_eyes(app, admin):
+def test_who_can_approve(app, admin):
     pick_space(admin, "lab")
     bob = _bob(app, admin, role="editor")
     pick_space(bob, "lab")
@@ -93,12 +93,14 @@ def test_roles_and_four_eyes(app, admin):
     rid = _post(bob, "/promote/request", {"project_id": lab_id}).json["id"]
     assert _post(bob, f"/promote/{rid}/approve").status_code == 403           # editors can't approve
     assert _post(bob, f"/promote/{rid}/promote").status_code == 403
-    # With a second admin, nobody approves their own request.
+    assert bob.get("/promote").json["self_approve"] is False
+    # Admins and Super Admins approve, their own requests too, even with other admins around.
     _form(admin, "/clients/1", action="member_add", username="bob", role="admin")
-    assert bob.get("/promote").json["role"] == "admin" and bob.get("/promote").json["self_approve"] is False
-    r = _post(bob, f"/promote/{rid}/approve")
-    assert r.status_code == 403 and "Another admin" in r.json["error"]
-    assert _post(admin, f"/promote/{rid}/approve").json["status"] == "approved"
+    assert bob.get("/promote").json["role"] == "admin" and bob.get("/promote").json["self_approve"] is True
+    assert _post(bob, f"/promote/{rid}/approve").json["status"] == "approved"
+    rid2 = _post(admin, "/promote/request", {"project_id": lab_id}).json["id"]
+    assert _post(admin, f"/promote/{rid2}/approve").json["status"] == "approved"
+    rid = rid2
     # Other clients can't see or touch it.
     _form(admin, "/clients", name="Acme")
     _form(admin, "/clients/select", client_id="2")
@@ -114,24 +116,3 @@ def test_projects_tab_shows_the_steps(app, admin):
     pick_space(admin, "production")
     assert "Projects come here from the Lab space" in admin.get("/build/arista").get_data(as_text=True)
 
-
-def test_client_setting_lets_admins_approve_their_own(app, admin):
-    pick_space(admin, "lab")
-    bob = _bob(app, admin, role="editor")
-    _form(admin, "/clients/1", action="member_add", username="bob", role="admin")
-    lab_id = _save(admin, "Solo", dict(GOOD, name="Solo"))
-    rid = _post(admin, "/promote/request", {"project_id": lab_id}).json["id"]
-    data = admin.get("/promote").json
-    assert data["self_approve"] is False and data["other_approvers"] == ["bob"]
-    r = _post(admin, f"/promote/{rid}/approve")
-    assert r.status_code == 403 and "bob" in r.json["error"]
-    page = admin.get("/clients/1").get_data(as_text=True)
-    assert "Lab to Production approvals" in page and "Let admins approve their own requests" in page
-    # Client admins can't switch the rule off; only a Super Admin can.
-    pick_space(bob, "lab")
-    assert _form(bob, "/clients/1", action="approvals", self_approve="1").status_code == 400
-    _form(admin, "/clients/1", action="approvals", self_approve="1")
-    assert admin.get("/promote").json["self_approve"] is True
-    assert _post(admin, f"/promote/{rid}/approve").json["status"] == "approved"
-    _form(admin, "/clients/1", action="approvals")
-    assert admin.get("/promote").json["self_approve"] is False

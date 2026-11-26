@@ -5,8 +5,9 @@ space, but only after a review:
 
 1. An editor asks for approval of a saved Lab project. The project is frozen
    as it is at that moment (a snapshot), and it must build with no errors.
-2. A client admin approves or rejects it, with a note. When the client has
-   another admin, people can't approve their own request.
+2. A client admin or a Super Admin approves or rejects it, with a note. They
+   may approve their own requests; a Configurator's request always needs one
+   of them.
 3. A client admin promotes the approved snapshot into Production, under the
    same project name. If the Lab project was changed after approval, it has to
    be approved again. The Production project it replaces is kept, so a
@@ -57,9 +58,6 @@ OPEN = ("pending", "approved")
 
 def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
-    if "self_approve" not in {r[1] for r in conn.execute("PRAGMA table_info(clients)")}:
-        # 1 = admins may approve their own requests even when the client has other admins.
-        conn.execute("ALTER TABLE clients ADD COLUMN self_approve INTEGER NOT NULL DEFAULT 0")
 
 
 def _sha(text: str) -> str:
@@ -75,24 +73,6 @@ def _review(c: dict, rid: int) -> sqlite3.Row:
     if r is None:
         abort(404)
     return r
-
-
-def approvers(cid: int) -> list[str]:
-    """People who can approve in this client: its admins, admins of every client and the Super Admins."""
-    return [r[0] for r in auth.db().execute(
-        "SELECT u.username FROM users u WHERE u.active = 1 AND (u.role = 'admin' OR u.all_clients = 'admin' OR EXISTS "
-        "(SELECT 1 FROM client_members m WHERE m.user_id = u.id AND m.client_id = ? AND m.role = 'admin')) "
-        "ORDER BY u.username COLLATE NOCASE", (cid,))]
-
-
-def _admins(cid: int) -> int:
-    return len(approvers(cid))
-
-
-def self_approve_allowed(cid: int) -> bool:
-    """Admins may approve their own request when nobody else can, or when the client allows it."""
-    row = auth.db().execute("SELECT self_approve FROM clients WHERE id = ?", (cid,)).fetchone()
-    return bool(row and row[0]) or _admins(cid) <= 1
 
 
 def _out(r: sqlite3.Row, lab_sha: str | None) -> dict:
@@ -115,8 +95,7 @@ def reviews():
     me = auth.current_user()["username"]
     return {"reviews": [_out(r, shas.get(r["lab_project_id"])) for r in rows],
             "role": c["role"], "space": c["space"], "me": me,
-            "self_approve": self_approve_allowed(c["id"]),
-            "other_approvers": [u for u in approvers(c["id"]) if u != me]}
+            "self_approve": c["role"] == "admin"}
 
 
 @bp.post("/promote/request")
@@ -177,10 +156,6 @@ def decide(rid: int, action: str):
     if action in ("approve", "reject"):
         if r["status"] != "pending":
             return {"error": f"This request is {r['status']}, not waiting for a decision."}, 400
-        if action == "approve" and r["requested_by"] == who and not self_approve_allowed(c["id"]):
-            return {"error": "Another admin of this client has to approve your own request ("
-                             + ", ".join(u for u in approvers(c["id"]) if u != who) + "). A Super Admin can allow "
-                             "self-approval on the client's page."}, 403
         if action == "reject" and not note:
             return {"error": "Say why it is rejected, so the requester knows what to fix."}, 400
         status = "approved" if action == "approve" else "rejected"

@@ -395,8 +395,7 @@ def client_page(cid: int):
     everywhere = [dict(u, level="Super Admin" if u["role"] == "admin" else LABELS[u["all_clients"]])
                   for u in auth.db().execute("SELECT username, active, role, all_clients FROM users WHERE role = 'admin' "
                                              "OR all_clients IN ('viewer', 'editor', 'admin') ORDER BY username COLLATE NOCASE")]
-    from . import promote
-    return render_template("auth/client.html", c=r, approvers_list=promote.approvers(cid), everywhere=everywhere, n_backups=n_backups, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
+    return render_template("auth/client.html", c=r, everywhere=everywhere, n_backups=n_backups, eve=eve.settings(r), members=members, roles=ROLES, server_admin=_is_server_admin(),
                            problems=problems, ceiling=[str(n) for n in sshfetch.ceiling()],
                            ssh_off=sshfetch.disabled(), server_key=bool(sshfetch.key_file()),
                            known=sshfetch.known_hosts(client_folder(cid)))
@@ -434,15 +433,6 @@ def client_update(cid: int):
         audit("deleted the client with its projects, maps and config backups")
         flash(f"Client {r['name']} deleted.", "ok")
         return redirect(url_for("clients.clients_page"))
-    elif action == "approvals" and _is_server_admin():
-        on = request.form.get("self_approve") == "1"
-        db.execute("UPDATE clients SET self_approve = ? WHERE id = ?", (1 if on else 0, cid))
-        audit("let admins approve their own Lab to Production requests" if on
-              else "required another admin to approve Lab to Production requests")
-        flash("Admins can now approve their own requests in this client." if on
-              else "Another admin now has to approve each request when the client has one.", "ok")
-        db.commit()
-        return redirect(url_for("clients.client_page", cid=cid) + "#approvals")
     elif action == "member_add":
         username = request.form.get("username", "").strip()
         role = request.form.get("role", "viewer")

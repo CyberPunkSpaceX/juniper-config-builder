@@ -960,7 +960,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <ol class="hint howto">
         <li>Test the project in the Lab (for example in an EVE-NG lab) and save it to {{ client.name }}.</li>
         <li>Click <b>Ask for approval</b> next to it above. The project is frozen as it is now; it must have no errors.</li>
-        <li>An admin of {{ client.name }} opens it, checks it and clicks <b>Approve</b> (or <b>Reject</b> with a reason).{% if client.role == 'admin' %} When the client has another admin, you can't approve your own request, unless a Super Admin allows it on the client's page.{% endif %}</li>
+        <li>An admin of {{ client.name }} opens it, checks it and clicks <b>Approve</b> (or <b>Reject</b> with a reason). Admins and Super Admins may approve their own requests; a Configurator's request needs one of them.</li>
         <li>An admin clicks <b>Promote to Production</b>. The approved project is copied into Production under the same name. A Production project with that name is replaced, and <b>Undo</b> puts it back.</li>
       </ol>
       {% else %}
@@ -1790,14 +1790,12 @@ async function refreshReviews() {
     const b = [];
     b.push(`<button class="secondary small" type="button" data-rv="open" data-id="${r.id}">Open</button>`);
     if (r.status === "pending" && admin && (data.self_approve || r.requested_by !== data.me)) b.push(`<button class="small" type="button" data-rv="approve" data-id="${r.id}">Approve</button>`);
-    const waitOther = r.status === "pending" && admin && !data.self_approve && r.requested_by === data.me
-      ? `<div class="note">Your own request: ${esc((data.other_approvers || []).join(", ") || "another admin")} approves it. A Super Admin can let admins approve their own requests on the client's page.</div>` : "";
     if (r.status === "pending" && admin) b.push(`<button class="danger small" type="button" data-rv="reject" data-id="${r.id}">Reject</button>`);
     if (r.status === "pending" && (admin || r.requested_by === data.me)) b.push(`<button class="secondary small" type="button" data-rv="cancel" data-id="${r.id}">Cancel</button>`);
     if (r.status === "approved" && admin && !r.lab_changed) b.push(`<button class="small" type="button" data-rv="promote" data-id="${r.id}" data-name="${esc(r.name)}">Promote to Production</button>`);
     if (r.can_undo && admin) b.push(`<button class="secondary small" type="button" data-rv="undo" data-id="${r.id}" data-name="${esc(r.name)}">Undo</button>`);
     return `<tr><td><b>${esc(r.name)}</b> <span class="note">${esc(r.vendor)}</span>${r.note ? `<div class="note">“${esc(r.note)}”</div>` : ""}</td>
-      <td><span class="status ${cls}">${label}</span><div class="note">${who}</div>${r.decision_note ? `<div class="note">${esc(r.decision_note)}</div>` : ""}${warn}${waitOther}</td>
+      <td><span class="status ${cls}">${label}</span><div class="note">${who}</div>${r.decision_note ? `<div class="note">${esc(r.decision_note)}</div>` : ""}${warn}</td>
       <td style="text-align:right;white-space:nowrap">${b.join(" ")}</td></tr>`;
   }).join("") || `<tr><td colspan="3" class="note">No approval requests yet.</td></tr>`;
 }
