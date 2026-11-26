@@ -157,7 +157,8 @@ def inventory(db, c: dict) -> dict:
         host = _project_host(data)
         if not host:
             continue
-        s = add(host, vendor=str(data.get("vendor") or "juniper"))
+        mgmt = str((data.get("system") or {}).get("mgmt_address") or "").split(",")[0].split("/")[0].strip()
+        s = add(host, vendor=str(data.get("vendor") or "juniper"), address=mgmt)
         s["projects"].append({"id": p["id"], "name": p["name"], "updated_at": p["updated_at"]})
         if "projects" not in s["sources"]:
             s["sources"].append("projects")

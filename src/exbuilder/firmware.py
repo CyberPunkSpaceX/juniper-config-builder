@@ -151,7 +151,7 @@ def _policy_for(policy: dict, vendor: str, model: str) -> dict | None:
 def assess(name: str, vendor: str, version: str, model: str, policy: dict) -> dict:
     out = {"name": name, "vendor": vendor, "version": version, "model": model, "status": "unknown", "why": ""}
     if not version:
-        out["why"] = "no version found in the backup"
+        out["why"] = "no version line in this config: fetch it over SSH (nightly or Backups), or paste its show version output under \"Add show version output\""
         return out
     rule = _policy_for(policy, vendor, model)
     if rule is None:

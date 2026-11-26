@@ -111,6 +111,12 @@ button.small { padding: 3px 9px; font-size: 12.5px; }
 .port.camera { background: #8a6d00; color: #fff; border-color: #8a6d00; }
 .port.free { border-style: dashed; }
 .port.picked { outline: 3px solid var(--warn); outline-offset: 1px; }
+/* Phones: a 24-port block (12 columns) fits the screen; wider blocks still scroll sideways. */
+@media (max-width: 600px) {
+  .pgroup { grid-template-rows: repeat(2, 26px); gap: 2px; }
+  .pgroup.single { grid-template-rows: 26px; }
+  .port { width: 25px; height: 26px; font-size: 8px; letter-spacing: -0.3px; }
+}
 .portmap.editing .port:not(.picked) { opacity: 0.55; }
 .portmap.editing .port.picked { outline-color: var(--accent); }
 .legend { display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); margin: 6px 0; }
@@ -234,7 +240,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   <input type="file" id="file-open" accept=".json,application/json" class="hide">
   <button class="secondary" id="btn-save-file" type="button" title="Download the project as a JSON file">Save JSON</button>
   <button class="secondary" id="btn-excel" data-feature="import" type="button" title="Download this project as an Excel workbook you can edit and import again">Save as Excel</button>
-  <button id="btn-save-server" type="button" title="Save this project in the client picked at the top of the page">Save to {{ client.name if client else "client" }}</button>
+  <button id="btn-save-server" type="button"{% if client and client.role == "viewer" %} hidden{% endif %} title="Save this project in the client picked at the top of the page">Save to {{ client.name if client else "client" }}</button>
 </div>
 
 <div class="layout">
@@ -972,7 +978,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <table class="plist"><thead><tr><th>Project</th><th>Status</th><th></th></tr></thead><tbody id="reviews"></tbody></table>
       <p class="status" id="reviews-status"></p>
     </div>
-    <div class="panel" id="push-box">
+    <div class="panel" id="push-box"{% if not client or client.role != "admin" %} hidden{% endif %}>
       <h2>Push to a switch</h2>
       {% if client.space != 'production' %}
       <p class="hint">Configs are pushed to switches from the <b>Production</b> space, after they are approved and promoted from here.</p>
@@ -1052,6 +1058,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
 
 <script>
 const CATALOG = {{ catalog|tojson }};
+let REDACTED = false;   // the open project is a Read-only copy (secrets hidden)
 const SSH = {{ ssh|tojson }}; const CLIENT = {{ client|tojson }}; const EVE = {{ eve|tojson }};
 // The builder lives at /build/<vendor>, but its API calls are written relative to the site root.
 const ROOT = {{ (request.script_root + "/")|tojson }};
@@ -1323,6 +1330,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;"
 function load(project) {
   const other = project && project.vendor && project.vendor !== VENDOR.key;
   if (other && !confirm(`This project was made for ${project.vendor}. Open it in the ${VENDOR.name} builder anyway?`)) return;
+  REDACTED = false;   // set again by the caller when this is a Read-only copy with the secrets hidden
   state = merge(DEFAULTS, project || {});
   state.vendor = VENDOR.key;
   for (const key of ["vlans", "ports", "lags"]) state[key] = state[key] || [];
@@ -1598,6 +1606,16 @@ function showTab(t, fromHistory) {
 // ---------------------------------------------------------------- generate
 let timer = null; let seq = 0;
 function schedule() { clearTimeout(timer); timer = setTimeout(generate, 400); saveDraft(); }
+// A Read-only person opens projects with passwords, keys and SNMP communities blanked out. The checks
+// that need those values are not real problems then: show them as one note instead of red errors.
+const HIDDEN_FIELD = /(^|\.)(password|root_password|secret|auth_password|priv_password|md5_key|auth_key|key|psk)$|\.communities\.\d+\.name$/;
+function hideSecretChecks(data) {
+  if (!REDACTED || !data || !data.errors) return;
+  const skipped = data.errors.filter(m => HIDDEN_FIELD.test(m.field || ""));
+  if (!skipped.length) return;
+  data.errors = data.errors.filter(m => !HIDDEN_FIELD.test(m.field || ""));
+  data.warnings = [{section: "Access", message: `Read-only: passwords, keys and SNMP communities are hidden from you, so they are left out of this config (${skipped.length} check${skipped.length > 1 ? "s" : ""} skipped).`}, ...(data.warnings || [])];
+}
 async function generate() {
   const mine = ++seq; const sent = clone(state); delete sent.fabric;
   setStatus("Generating…", "");
@@ -1607,6 +1625,7 @@ async function generate() {
     const data = await resp.json();
     if (mine !== seq) return;
     if (!resp.ok) { setStatus(data.error || "Server error", "bad"); return; }
+    hideSecretChecks(data);
     result = data;
     applyHashes(sent, data.hashed || {});
     showOutput();
@@ -1884,7 +1903,7 @@ document.getElementById("promote-box") && document.getElementById("reviews").add
 });
 document.getElementById("plist").addEventListener("click", async ev => {
   const b = ev.target.closest("button"); if (!b) return;
-  if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); showTab("Switch"); setStatus(p.redacted ? `Opened ${p.name}. You have Read-only access, so passwords, keys and SNMP communities are hidden.` : `Opened ${p.name}.`, "ok"); }
+  if (b.dataset.open && confirmReplace()) { const p = await api("projects/" + b.dataset.open); load(p.data); REDACTED = !!p.redacted; showTab("Switch"); setStatus(p.redacted ? `Opened ${p.name}. You have Read-only access, so passwords, keys and SNMP communities are hidden.` : `Opened ${p.name}.`, "ok"); }
   if (b.dataset.ask) {
     const note = window.prompt(`Ask for approval to put "${b.dataset.name}" into Production. What was tested? (optional)`, "");
     if (note === null) return;
