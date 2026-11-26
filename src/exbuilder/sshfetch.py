@@ -51,6 +51,33 @@ COMMANDS = (
 MAX_HOSTS = 30
 MAX_OUTPUT = 5_000_000
 
+# Read-only commands per vendor for a config backup. The first command's output
+# is the config; the others are extra information kept below it.
+# mode "exec" runs each command on its own channel; "shell" opens a prompt and
+# types them (for switches that do not run SSH exec commands, or need the pager
+# turned off first). Keys are the builder's vendor keys (vendors.VENDORS).
+VENDOR_CMDS = {
+    "juniper": {"commands": COMMANDS, "mode": "exec"},
+    "cisco": {"commands": ("show running-config",), "mode": "exec"},
+    "arista": {"commands": ("show running-config",), "mode": "exec"},
+    "nexus": {"commands": ("show running-config",), "mode": "exec"},
+    "dell": {"commands": ("show running-configuration",), "mode": "exec"},
+    "aruba": {"commands": ("show running-config",), "mode": "exec"},
+    "extreme": {"commands": ("disable clipaging", "show configuration"), "mode": "shell"},
+    "fortiswitch": {"commands": ("show",), "mode": "exec"},
+    "mikrotik": {"commands": ("/export terse",), "mode": "exec"},
+    "ruckus": {"commands": ("skip-page-display", "show running-config"), "mode": "shell"},
+    "procurve": {"commands": ("no page", "show running-config"), "mode": "shell", "wake": True},
+}
+# A config from each vendor has at least one of these lines.
+_LOOKS = {
+    "juniper": r"^\s*set\s|\{",
+    "mikrotik": r"^/(?:interface|ip|system)\b",
+    "fortiswitch": r"^config (?:system|switch)",
+    "extreme": r"^(?:configure|create|enable|disable) ",
+}
+_LOOKS_DEFAULT = r"^(?:interface|hostname|vlan|ip |snmp-server|username)\b"
+
 
 class FetchError(Exception):
     pass
@@ -236,12 +263,80 @@ def _fingerprint(key) -> str:
 
 
 # ----------------------------------------------------------------- fetch
+def looks_like_config(text: str, vendor: str = "juniper") -> bool:
+    import re
+    return bool(re.search(_LOOKS.get(vendor, _LOOKS_DEFAULT), text or "", re.M))
+
+
+def _run_exec(transport, cmd: str, host: str) -> str:
+    chan = transport.open_session(timeout=timeout())
+    chan.settimeout(timeout() * 3)
+    chan.exec_command(cmd)
+    buf = bytearray()
+    while True:
+        data = chan.recv(65536)
+        if not data:
+            break
+        buf += data
+        if len(buf) > MAX_OUTPUT:
+            raise FetchError(f"{host}: output too large.")
+    chan.close()
+    return buf.decode("utf-8", "replace")
+
+
+def _run_shell(transport, commands, host: str, wake: bool = False, quiet: float = 3.0) -> list[str]:
+    """Type the commands at the switch prompt; return each command's output (prompt and echo removed)."""
+    import re
+    chan = transport.open_session(timeout=timeout())
+    chan.get_pty(width=511, height=1000)
+    chan.invoke_shell()
+    chan.settimeout(0.3)
+
+    def read_until_quiet(limit: float) -> str:
+        buf, last, start = bytearray(), time.monotonic(), time.monotonic()
+        while time.monotonic() - last < quiet and time.monotonic() - start < limit:
+            try:
+                data = chan.recv(65536)
+            except socket.timeout:
+                continue
+            if not data:
+                break
+            buf += data
+            last = time.monotonic()
+            if len(buf) > MAX_OUTPUT:
+                raise FetchError(f"{host}: output too large.")
+        return buf.decode("utf-8", "replace")
+
+    try:
+        read_until_quiet(timeout())                # banner and first prompt
+        if wake:                                   # "Press any key to continue"
+            chan.sendall(b"\n")
+            read_until_quiet(timeout())
+        outs = []
+        for cmd in commands:
+            chan.sendall(cmd.encode() + b"\n")
+            text = read_until_quiet(timeout() * 3).replace("\r", "")
+            text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", text)   # terminal escape codes
+            lines = text.split("\n")
+            if lines and cmd in lines[0]:
+                lines = lines[1:]                  # the echoed command
+            if lines and re.match(r"^\S*[#>]\s*$", lines[-1].strip() or "#"):
+                lines = lines[:-1]                 # the next prompt
+            outs.append("\n".join(lines))
+        return outs
+    finally:
+        chan.close()
+
+
 def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int = 22, nets: list | None = None,
-              pkey=None) -> dict:
-    """Connect, run COMMANDS, return {host, ok, text | error, fingerprint, new_key}."""
+              pkey=None, vendor: str = "juniper") -> dict:
+    """Connect, run the vendor's read-only commands, return {host, ok, text | error, fingerprint, new_key}."""
     import paramiko
 
-    out = {"host": host, "ok": False}
+    out = {"host": host, "ok": False, "vendor": vendor}
+    if vendor not in VENDOR_CMDS:
+        out["error"] = f"{host}: config backups over SSH are not available for {vendor or 'this vendor'}."
+        return out
     try:
         ip = resolve(host, nets or [], port)
         transport = None
@@ -273,26 +368,20 @@ def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int
                 except paramiko.BadAuthenticationType:
                     # Junos often offers keyboard-interactive for passwords.
                     transport.auth_interactive(username, lambda title, instr, prompts: [password] * len(prompts))
-            texts = []
-            for cmd in COMMANDS:
-                chan = transport.open_session(timeout=timeout())
-                chan.settimeout(timeout() * 3)
-                chan.exec_command(cmd)
-                buf = bytearray()
-                while True:
-                    data = chan.recv(65536)
-                    if not data:
-                        break
-                    buf += data
-                    if len(buf) > MAX_OUTPUT:
-                        raise FetchError(f"{host}: output too large.")
-                chan.close()
-                texts.append(buf.decode("utf-8", "replace"))
+            spec = VENDOR_CMDS[vendor]
+            if spec["mode"] == "shell":
+                texts = _run_shell(transport, spec["commands"], host, wake=bool(spec.get("wake")))
+                texts = [t for c, t in zip(spec["commands"], texts) if c.startswith("show")]
+            else:
+                texts = [_run_exec(transport, cmd, host) for cmd in spec["commands"]]
             config = texts[0]
-            if "set " not in config and "{" not in config:
+            if vendor == "juniper" and "set " not in config and "{" not in config:
                 raise FetchError(f"{host}: the switch did not return a config. Is the account allowed to "
                                  "'show configuration'? (root lands in a Unix shell: use a normal Junos user.)")
-            extra = [t.strip() for t in texts[1:] if t.strip() and not t.lstrip().startswith("error:")]
+            if not looks_like_config(config, vendor):
+                raise FetchError(f"{host}: the switch did not return a config. Is the account allowed to "
+                                 f"run '{[c for c in spec['commands'] if c.startswith(('show', '/'))][0]}'?")
+            extra = [t.strip() for t in texts[1:] if t.strip() and not t.lstrip().startswith(("error:", "% "))]
             out.update(ok=True, text=config.rstrip() + "\n\n" + "\n\n".join(extra) + "\n")
         finally:
             if transport is not None:
@@ -308,11 +397,15 @@ def fetch_one(host: str, username: str, password: str, data_dir: Path, port: int
 
 
 def fetch(hosts: list[str], username: str, password: str, data_dir: Path, who: str, port: int = 22,
-          nets: list | None = None, pkey=None, client: str = "") -> list[dict]:
+          nets: list | None = None, pkey=None, client: str = "", vendors: dict | None = None,
+          ports: dict | None = None, max_hosts: int = MAX_HOSTS) -> list[dict]:
+    """Fetch from many switches. ``vendors`` / ``ports`` map a host to its vendor key / SSH port."""
     hosts = [h.strip() for h in hosts if h and h.strip()]
-    hosts = list(dict.fromkeys(hosts))[:MAX_HOSTS]
+    hosts = list(dict.fromkeys(hosts))[:max_hosts]
+    vendors, ports = vendors or {}, ports or {}
     with ThreadPoolExecutor(max_workers=min(8, len(hosts) or 1)) as pool:
-        results = list(pool.map(lambda h: fetch_one(h, username, password, data_dir, port, nets, pkey), hosts))
+        results = list(pool.map(lambda h: fetch_one(h, username, password, data_dir, ports.get(h, port), nets, pkey,
+                                                     vendors.get(h, "juniper")), hosts))
     for r in results:
         # Audit log: who, where, result. Never the password.
         log.warning("audit: ssh fetch by %r for client %r: %s as %r (%s) -> %s", who, client, r["host"], username,

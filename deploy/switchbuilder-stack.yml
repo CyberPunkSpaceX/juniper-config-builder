@@ -30,6 +30,14 @@ services:
       #   head -c 32 /dev/urandom | base64 | docker secret create switchbuilder_master_key -
       # then uncomment this and the secrets parts below.
       # EXB_MASTER_KEY_FILE: /run/secrets/switchbuilder_master_key
+      # Email for alerts ("Send a test alert" and "Back up now" run here too).
+      EXB_SMTP_HOST: ${EXB_SMTP_HOST:-}
+      EXB_SMTP_PORT: ${EXB_SMTP_PORT:-587}
+      EXB_SMTP_TLS: ${EXB_SMTP_TLS:-starttls}
+      EXB_SMTP_USER: ${EXB_SMTP_USER:-}
+      EXB_SMTP_FROM: ${EXB_SMTP_FROM:-}
+      # EXB_SMTP_PASSWORD_FILE: /run/secrets/switchbuilder_smtp_password
+      EXB_PUBLIC_URL: ${EXB_PUBLIC_URL:-}
     ports:
       # Published on every node through the swarm routing mesh.
       # The reverse proxy (switchbuilder.cyberpunkx.ca) forwards here.
@@ -64,6 +72,49 @@ services:
 
     # secrets:
     #   - switchbuilder_master_key
+
+  # Background jobs: nightly config backups and their alerts. Same image and
+  # data volume as the web service, so it must run on the same node.
+  jobs:
+    image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
+    command: ["switchbuilder", "jobs"]
+    environment:
+      EXB_SSH_ALLOW: ${EXB_SSH_ALLOW:-}
+      EXB_SSH_DISABLE: ${EXB_SSH_DISABLE:-false}
+      # EXB_MASTER_KEY_FILE: /run/secrets/switchbuilder_master_key   # the same as the web service
+      # Link in alerts, for example https://switchbuilder.example.com
+      EXB_PUBLIC_URL: ${EXB_PUBLIC_URL:-}
+      # Email alerts (optional; webhooks work without them). Put the password in
+      # a Docker secret: printf '...' | docker secret create switchbuilder_smtp_password -
+      EXB_SMTP_HOST: ${EXB_SMTP_HOST:-}
+      EXB_SMTP_PORT: ${EXB_SMTP_PORT:-587}
+      EXB_SMTP_TLS: ${EXB_SMTP_TLS:-starttls}
+      EXB_SMTP_USER: ${EXB_SMTP_USER:-}
+      EXB_SMTP_FROM: ${EXB_SMTP_FROM:-}
+      # EXB_SMTP_PASSWORD_FILE: /run/secrets/switchbuilder_smtp_password
+    healthcheck:
+      disable: true
+    read_only: true
+    volumes:
+      - switchbuilder_data:/data
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 16777216  # 16 MB
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+      placement:
+        constraints:
+          - node.hostname == ${EXB_NODE:?set EXB_NODE to the node that keeps the data volume}
+      restart_policy:
+        condition: any
+      resources:
+        limits:
+          memory: 192M
+      labels:
+        app: switchbuilder
 
 volumes:
   switchbuilder_data:
