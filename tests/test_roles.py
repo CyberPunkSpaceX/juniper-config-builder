@@ -6,7 +6,7 @@ import zipfile
 
 import pytest
 
-from exbuilder import redact
+from switchbuilder import redact
 
 flask = pytest.importorskip("flask")
 

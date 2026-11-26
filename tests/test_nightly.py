@@ -10,8 +10,8 @@ import test_sshfetch  # noqa: E402
 from test_sshfetch import FakeJunos, env, switch  # noqa: F401,E402
 from test_auth import ADMIN, app, admin, csrf, login  # noqa: F401,E402
 
-from exbuilder import compare, notify, sshfetch  # noqa: E402
-from exbuilder.web import backups, nightly  # noqa: E402
+from switchbuilder import compare, notify, sshfetch  # noqa: E402
+from switchbuilder.web import backups, nightly  # noqa: E402
 
 IOS = """Building configuration...
 

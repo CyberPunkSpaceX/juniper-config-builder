@@ -44,7 +44,7 @@ from flask import Blueprint, abort, flash, redirect, render_template, request, s
 from . import auth, clients
 
 bp = Blueprint("sso", __name__, template_folder="templates")
-log = logging.getLogger("exbuilder.sso")
+log = logging.getLogger("switchbuilder.sso")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS sso_settings (

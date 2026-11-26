@@ -40,7 +40,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-log = logging.getLogger("exbuilder.ssh")
+log = logging.getLogger("switchbuilder.ssh")
 
 COMMANDS = (
     "show configuration | display set | no-more",

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder.generator import build
-from exbuilder.importer import check, guess_model, harden, parse, to_set_lines
+from switchbuilder.generator import build
+from switchbuilder.importer import check, guess_model, harden, parse, to_set_lines
 
 HERE = Path(__file__).parent
 EX = HERE.parent / "examples"
@@ -116,7 +116,7 @@ Member ID  Status   Serial No    Model          prio  Role      Mode  Mode ID  I
 
 
 def test_detect_models_from_show_output():
-    from exbuilder.importer import detect_models
+    from switchbuilder.importer import detect_models
     d = detect_models(VC_OUTPUT)["members"]
     assert [(f, m["model"], m["role"], m["how"]) for f, m in sorted(d.items())] == [
         (0, "EX4300-48P", "routing-engine", "show virtual-chassis"),
@@ -130,7 +130,7 @@ def test_detect_models_from_show_output():
 
 
 def test_guess_models_from_ports():
-    from exbuilder.importer import detect_models
+    from switchbuilder.importer import detect_models
     poe = detect_models("set interfaces ge-0/0/30 unit 0\nset poe interface all\nset interfaces me0 unit 0")
     assert poe["members"][0] == {"model": "EX2300-48P", "serial": "", "role": "", "how": "port names"}
     em0 = detect_models("set interfaces ge-0/0/30 unit 0\nset interfaces em0 unit 0")["members"][0]["model"]
@@ -140,7 +140,7 @@ def test_guess_models_from_ports():
 
 
 def test_import_applies_detected_models():
-    from exbuilder.importer import check, detect_models
+    from switchbuilder.importer import check, detect_models
     text = VC_OUTPUT + "\n{master:0}\nset system host-name vc1\nset interfaces ge-1/0/5 unit 0 family ethernet-switching\n"
     res = check(text, "", detect_models(text)["members"])
     members = res["project"]["switch"]["members"]
@@ -153,7 +153,7 @@ def test_import_applies_detected_models():
 
 
 def test_show_output_around_a_curly_config():
-    from exbuilder.importer import to_set_lines
+    from switchbuilder.importer import to_set_lines
     text = ("Hostname: sw1\nModel: ex4300-48p\nJunos: 23.4R2\nJUNOS Base OS boot [23.4R2]\n{master:0}\n"
             "system {\n    host-name sw1;\n    login {\n        message \"Note: authorized only\";\n    }\n}\n")
     assert to_set_lines(text) == ["system host-name sw1", 'system login message "Note: authorized only"']

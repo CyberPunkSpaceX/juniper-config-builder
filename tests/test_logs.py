@@ -9,8 +9,8 @@ pytest.importorskip("flask")
 
 from test_auth import ADMIN, app, admin, csrf, login  # noqa: F401,E402
 
-from exbuilder import notify, syslogd  # noqa: E402
-from exbuilder.web import logs  # noqa: E402
+from switchbuilder import notify, syslogd  # noqa: E402
+from switchbuilder.web import logs  # noqa: E402
 
 
 def test_parse_formats():

@@ -58,7 +58,7 @@ def test_api_generate_formats(app):
 
 
 def test_fabric_endpoints(admin):
-    from exbuilder.fabric import TEMPLATES
+    from switchbuilder.fabric import TEMPLATES
     hdr = {"X-CSRF-Token": token(admin)}
     body = {"fabric": TEMPLATES["campus-erb"]["fabric"], "base": {}}
     resp = admin.post("/fabric", json=body, headers=hdr)
@@ -120,7 +120,7 @@ def test_network_map_endpoints(admin):
 
 
 def _soon(monkeypatch):
-    from exbuilder import vendors
+    from switchbuilder import vendors
     monkeypatch.setitem(vendors.VENDORS, "nokia", vendors.Vendor("nokia", "Nokia", "SR Linux", "lab", frozenset()))
 
 
@@ -151,7 +151,7 @@ def test_builder_per_vendor(admin, monkeypatch):
     resp = admin.get("/build/nokia")
     assert resp.status_code == 302 and resp.location.endswith("/")
     assert "not ready yet" in admin.get("/").get_data(as_text=True)
-    from exbuilder import vendors
+    from switchbuilder import vendors
     del vendors.VENDORS["nokia"]
     assert admin.get("/build/nokia").status_code == 404
     assert admin.get("/build").location.endswith("/build/juniper")

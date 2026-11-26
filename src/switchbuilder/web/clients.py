@@ -41,7 +41,7 @@ from .. import redact, sshfetch
 from . import auth
 
 bp = Blueprint("clients", __name__, template_folder="templates")
-log = logging.getLogger("exbuilder.clients")
+log = logging.getLogger("switchbuilder.clients")
 
 ROLES = ("viewer", "editor", "admin")
 # Every client has two spaces with their own projects, maps and config backups.

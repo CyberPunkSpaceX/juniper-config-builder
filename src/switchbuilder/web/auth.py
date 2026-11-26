@@ -75,7 +75,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9_.@-]{2,64}$")
 MIN_PASSWORD = 10
 DEFAULT_ADMIN = "admin"  # first-start username and password when none is configured
 PUBLIC_ENDPOINTS = {"auth.login", "auth.login_2fa", "auth.setup", "healthz", "static"}
-log = logging.getLogger("exbuilder.auth")
+log = logging.getLogger("switchbuilder.auth")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -825,7 +825,7 @@ def init_app(app: Flask) -> None:
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=_flag("EXB_SECURE_COOKIES"),
-        SESSION_COOKIE_NAME="exbuilder_session",
+        SESSION_COOKIE_NAME="exbuilder_session",  # old name kept on purpose: renaming it would sign everyone out
         PERMANENT_SESSION_LIFETIME=int(os.environ.get("EXB_SESSION_HOURS", "12")) * 3600,
     )
     _init_storage(app)

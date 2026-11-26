@@ -30,7 +30,7 @@ import threading
 import time
 from pathlib import Path
 
-log = logging.getLogger("exbuilder.syslog")
+log = logging.getLogger("switchbuilder.syslog")
 
 MAX_MSG = 8192
 SEVERITIES = ("emergency", "alert", "critical", "error", "warning", "notice", "info", "debug")

@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import bulk
+from switchbuilder import bulk
 
-EXAMPLES = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples"
+EXAMPLES = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples"
 ARISTA = json.loads((EXAMPLES / "arista-office.json").read_text())
 
 

@@ -1,7 +1,7 @@
 import pytest
 
-from exbuilder import ports, vendors
-from exbuilder.generator import build
+from switchbuilder import ports, vendors
+from switchbuilder.generator import build
 from test_generator import base, msgs, sets
 
 

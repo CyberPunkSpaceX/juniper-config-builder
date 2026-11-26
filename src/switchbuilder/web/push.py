@@ -38,7 +38,7 @@ from .. import sshfetch
 from . import auth, backups, clients
 
 bp = Blueprint("push", __name__)
-log = logging.getLogger("exbuilder.push")
+log = logging.getLogger("switchbuilder.push")
 
 PREVIEW_TTL = 15 * 60
 SCHEMA = """

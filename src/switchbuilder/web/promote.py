@@ -29,7 +29,7 @@ from .. import redact
 from . import auth, clients
 
 bp = Blueprint("promote", __name__)
-log = logging.getLogger("exbuilder.promote")
+log = logging.getLogger("switchbuilder.promote")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS project_reviews (

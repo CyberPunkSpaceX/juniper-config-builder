@@ -36,7 +36,7 @@ from ..generator import build
 from . import auth, backups, clients
 
 bp = Blueprint("overview", __name__)
-log = logging.getLogger("exbuilder.overview")
+log = logging.getLogger("switchbuilder.overview")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS global_layouts (

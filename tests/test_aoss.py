@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import aoss_models as SM
-from exbuilder.generator import build
+from switchbuilder import aoss_models as SM
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "procurve-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "procurve-office.json"
 
 
 def base(**over):

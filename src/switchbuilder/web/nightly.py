@@ -3,7 +3,7 @@
 A client admin lists the client's switches (address, vendor, SSH port), picks a
 time and time zone, and who hears about changes (email addresses and Teams,
 Slack, Discord or other webhooks). Every night the jobs service
-(``exbuilder jobs``, see ``jobs.py``) signs in to each switch with the client's
+(``switchbuilder jobs``, see ``jobs.py``) signs in to each switch with the client's
 SSH key, reads its config with the vendor's read-only command
 (``sshfetch.VENDOR_CMDS``) and keeps it as a config backup of the Production
 space (source "nightly"). An unchanged config is not stored again. When a
@@ -32,7 +32,7 @@ from .. import notify, redact, sshfetch
 from . import auth, backups, clients
 
 bp = Blueprint("nightly", __name__, template_folder="templates")
-log = logging.getLogger("exbuilder.nightly")
+log = logging.getLogger("switchbuilder.nightly")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS nightly_settings (

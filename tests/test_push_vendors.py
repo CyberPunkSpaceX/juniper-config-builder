@@ -12,12 +12,12 @@ import pytest
 paramiko = pytest.importorskip("paramiko")
 flask = pytest.importorskip("flask")
 
-from exbuilder import push as engine  # noqa: E402
-from exbuilder import sshfetch  # noqa: E402
+from switchbuilder import push as engine  # noqa: E402
+from switchbuilder import sshfetch  # noqa: E402
 from test_auth import app, admin  # noqa: F401,E402
 from test_push import Res, _approved_project, _creds, _form, _know, _post, env  # noqa: F401,E402
 
-EXAMPLES = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples"
+EXAMPLES = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples"
 NETS = [sshfetch.ipaddress.ip_network("127.0.0.0/8")]
 
 

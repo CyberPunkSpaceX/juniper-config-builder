@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
-from exbuilder import ios_models, ports
-from exbuilder.cryptpw import cisco_type8, is_type8
-from exbuilder.generator import build
+from switchbuilder import ios_models, ports
+from switchbuilder.cryptpw import cisco_type8, is_type8
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "cisco-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "cisco-office.json"
 
 
 def base(**over):

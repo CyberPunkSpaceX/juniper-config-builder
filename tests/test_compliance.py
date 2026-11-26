@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import compliance as C
+from switchbuilder import compliance as C
 
-ROOT = Path(__file__).parent.parent / "src" / "exbuilder"
+ROOT = Path(__file__).parent.parent / "src" / "switchbuilder"
 ARISTA = json.loads((ROOT / "vendor_examples" / "arista-office.json").read_text())
 
 IOS = """hostname acc-sw9
@@ -108,7 +108,7 @@ def test_web_compliance(app, admin):
     assert "the default one" in admin.get("/tools/compliance").get_data(as_text=True)
     pid = admin.post("/projects", json={"name": "ar", "data": ARISTA}, headers=hdr).json["id"]
     with app.app_context():
-        from exbuilder.web import auth, backups
+        from switchbuilder.web import auth, backups
         junos = (ROOT / "map_examples" / "core-sw1.conf").read_text()
         backups.store(auth.db(), 1, [{"name": "core-sw1", "address": "10.0.0.9", "text": junos}], "upload", "admin")
         auth.db().commit()

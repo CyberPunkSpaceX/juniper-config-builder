@@ -15,7 +15,7 @@ def app(monkeypatch, tmp_path):
     monkeypatch.setenv("EXB_USERNAME", ADMIN[0])
     monkeypatch.setenv("EXB_PASSWORD", ADMIN[1])
     monkeypatch.delenv("EXB_PASSWORD_FILE", raising=False)
-    from exbuilder.web import auth, create_app
+    from switchbuilder.web import auth, create_app
 
     monkeypatch.setattr(auth.time, "sleep", lambda _s: None)
     app = create_app()
@@ -80,7 +80,7 @@ def test_default_admin_must_change_password(monkeypatch, tmp_path):
     monkeypatch.delenv("EXB_USERNAME", raising=False)
     monkeypatch.delenv("EXB_PASSWORD", raising=False)
     monkeypatch.delenv("EXB_PASSWORD_FILE", raising=False)
-    from exbuilder.web import auth, create_app
+    from switchbuilder.web import auth, create_app
 
     monkeypatch.setattr(auth.time, "sleep", lambda _s: None)
     client = create_app().test_client()
@@ -115,7 +115,7 @@ def add_user(admin, username="bob", password="bob-password-1", role="user", must
 
 
 def user_id(app, username):
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
 
     with app.app_context():
         return auth.db().execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()[0]
@@ -212,14 +212,14 @@ def test_concurrent_first_start(monkeypatch, tmp_path):
 
 
 def _start_app():
-    from exbuilder.web import create_app
+    from switchbuilder.web import create_app
 
     create_app()
 
 
 # ------------------------------------------------------- two-factor sign-in
 def _setup_2fa(client):
-    from exbuilder.web import twofactor
+    from switchbuilder.web import twofactor
 
     page = client.get("/account/2fa").get_data(as_text=True)
     secret = re.search(r'<code class="secret">([A-Z2-7]+)</code>', page).group(1)
@@ -233,7 +233,7 @@ def _setup_2fa(client):
 
 
 def test_2fa_setup_and_login(app, admin):
-    from exbuilder.web import twofactor
+    from switchbuilder.web import twofactor
 
     add_user(admin)
     bob = app.test_client()
@@ -333,7 +333,7 @@ def test_lockout_across_usernames(monkeypatch, app, admin):
 
 
 def test_forwarded_for_only_from_a_proxy(app):
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
 
     with app.test_request_context(environ_base={"REMOTE_ADDR": "10.40.45.202"},
                                   headers={"X-Forwarded-For": "1.2.3.4, 203.0.113.9"}):
@@ -358,7 +358,7 @@ def test_api_token_and_2fa(app, admin):
 
 
 def test_totp_matches_rfc6238():
-    from exbuilder.web import twofactor
+    from switchbuilder.web import twofactor
 
     secret = base64.b32encode(b"12345678901234567890").decode()
     # RFC 6238 appendix B, SHA-1, last 6 digits.

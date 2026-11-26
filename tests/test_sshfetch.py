@@ -5,7 +5,7 @@ import pytest
 
 paramiko = pytest.importorskip("paramiko")
 
-from exbuilder import sshfetch  # noqa: E402
+from switchbuilder import sshfetch  # noqa: E402
 
 CONFIG = "set version 23.4R2\nset system host-name lab-sw1\nset vlans USERS vlan-id 20\n"
 LLDP = ("Local Interface    Parent Interface    Chassis Id          Port info          System Name\n"
@@ -134,7 +134,7 @@ def test_fetch_remembers_and_checks_the_host_key(switch, tmp_path):
     r = sshfetch.fetch_one("127.0.0.1", "netops", "Secret-123", tmp_path, port=switch["port"], nets=NETS)
     assert r["ok"] and r["new_key"] and "host-name lab-sw1" in r["text"] and "core-sw1" in r["text"]
     assert "Model: ex4300-48p" in r["text"] and "error:" not in r["text"]
-    from exbuilder import importer
+    from switchbuilder import importer
     assert importer.detect_models(r["text"])["members"][0]["model"] == "EX4300-48P"
     assert switch["commands"] == list(sshfetch.COMMANDS)
     (known,) = sshfetch.known_hosts(tmp_path)
@@ -163,7 +163,7 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
     pytest.importorskip("flask")
     from test_auth import ADMIN, add_user, csrf, login  # noqa: F401
     from test_builder_web import token
-    from exbuilder.web import create_app
+    from switchbuilder.web import create_app
     monkeypatch.setenv("EXB_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EXB_USERNAME", ADMIN[0])
     monkeypatch.setenv("EXB_PASSWORD", ADMIN[1])
@@ -180,7 +180,7 @@ def test_web_route_per_client(switch, monkeypatch, caplog, tmp_path):
     assert client.post("/clients/1", data=form).status_code == 302
     page = client.get("/build/juniper").get_data(as_text=True)
     assert 'id="ssh-go"' in page and "127.0.0.0/24" in page
-    with caplog.at_level("WARNING", logger="exbuilder.ssh"):
+    with caplog.at_level("WARNING", logger="switchbuilder.ssh"):
         resp = client.post("/ssh/fetch", json=body, headers=hdr)
     assert resp.status_code == 200 and resp.json["results"][0]["ok"]
     assert resp.json["results"][0]["backup"]["unchanged"] is False      # kept as a config backup

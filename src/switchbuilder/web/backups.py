@@ -31,7 +31,7 @@ from .. import importer, redact, sshfetch
 from . import auth, clients
 
 bp = Blueprint("backups", __name__)
-log = logging.getLogger("exbuilder.backups")
+log = logging.getLogger("switchbuilder.backups")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS config_backups (

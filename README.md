@@ -440,7 +440,7 @@ config per switch.
 Cisco Catalyst (IOS / IOS-XE), Cisco Nexus, Arista EOS, Dell OS10 or Juniper EX config, auto-detect or pick the source, pick the target vendor and
 model, and get the target config plus a report of everything not carried over (unread lines, features the target
 lacks, password hashes that must be retyped, the old-to-new port map). Ports move by position onto the target model.
-Save the result to a client's Lab, test it, then promote it with the usual approval flow. Code: `src/exbuilder/convert/`
+Save the result to a client's Lab, test it, then promote it with the usual approval flow. Code: `src/switchbuilder/convert/`
 (one reader per source vendor; `retarget()` and `portmap.py` are shared). Readers for the other vendors come next.
 
 ## What it covers
@@ -534,9 +534,9 @@ pytest -q
 switchbuilder serve          # http://127.0.0.1:8080, data in $EXB_DATA_DIR
 ```
 
-The Python package inside is still called `exbuilder` (an older name); the app, the image, the CLI (`switchbuilder`; `exbuilder` still works) and the deploy files use the new name.
+The Python package lives in `src/switchbuilder` (it was `src/exbuilder` before; the `exbuilder` CLI name still works as an alias).
 
-Layout: `src/exbuilder/models.py` (switch models and port layouts),
+Layout: `src/switchbuilder/models.py` (switch models and port layouts),
 `generator.py` (project JSON to config, with all checks), `junos.py` (config
 tree that prints set or hierarchical format), `cryptpw.py` (SHA-512 crypt),
 `web/` (Flask app, login and the builder page).

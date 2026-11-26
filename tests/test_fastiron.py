@@ -1,11 +1,11 @@
 import json
 from pathlib import Path
 
-from exbuilder import fastiron_models, ports
-from exbuilder.cryptpw import is_md5, md5_crypt
-from exbuilder.generator import build
+from switchbuilder import fastiron_models, ports
+from switchbuilder.cryptpw import is_md5, md5_crypt
+from switchbuilder.generator import build
 
-EXAMPLES = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples"
+EXAMPLES = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples"
 
 
 def base(**over):

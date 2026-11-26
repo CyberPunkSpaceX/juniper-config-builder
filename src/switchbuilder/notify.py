@@ -26,7 +26,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlsplit
 
-log = logging.getLogger("exbuilder.notify")
+log = logging.getLogger("switchbuilder.notify")
 
 EMAIL_RE = re.compile(r"^[^@\s<>\"',;]+@[^@\s<>\"',;]+\.[^@\s<>\"',;]+$")
 MAX_TEXT = 12_000          # chat messages are cut here

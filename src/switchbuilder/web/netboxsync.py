@@ -17,7 +17,7 @@ from .. import __version__, netbox
 from . import auth, clients
 
 bp = Blueprint("netbox", __name__, url_prefix="/tools/netbox")
-log = logging.getLogger("exbuilder.netbox")
+log = logging.getLogger("switchbuilder.netbox")
 MAX_PROJECT_BYTES = 512 * 1024
 
 SCHEMA = """
