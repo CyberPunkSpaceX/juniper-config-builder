@@ -11,9 +11,9 @@ from test_auth import ADMIN, add_user, admin, app, login  # noqa: F401,E402
 from test_builder_web import token  # noqa: E402
 from test_clients import _bob  # noqa: E402
 
-from exbuilder import firmware  # noqa: E402
+from switchbuilder import firmware  # noqa: E402
 
-PROJECT = json.loads((Path(__file__).parent.parent / "src/exbuilder/vendor_examples/cisco-office.json").read_text())
+PROJECT = json.loads((Path(__file__).parent.parent / "src/switchbuilder/vendor_examples/cisco-office.json").read_text())
 
 
 def test_sign_in_from_another_site_is_refused(app):
