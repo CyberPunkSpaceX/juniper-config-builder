@@ -806,6 +806,12 @@ def users_update(uid: int):
         flash(f"Two-factor sign-in for {name} was reset. They can set it up again on My account.", "ok")
     elif action == "reset":
         password = request.form.get("password", "")
+        if uid == me["id"]:
+            # Resetting yourself here used to flag your own account "must change password" and
+            # sign you out, which locked you on My account. Your own password changes there,
+            # where it asks for the current one.
+            flash("Change your own password on My account: it asks for your current one first.", "info")
+            return redirect(url_for("auth.account"))
         if _source(target) != "local":
             flash(f"{name} signs in with the company directory; reset the password there.", "error")
         elif problem := password_problem(password):

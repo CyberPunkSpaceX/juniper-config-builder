@@ -369,3 +369,24 @@ def test_totp_matches_rfc6238():
 
 
 # ----------------------------------------------------------- upgrade mode
+
+def test_own_password_reset_in_users_does_not_lock_you_out(app, admin):
+    """Manage on your own row used to flag you 'must change password' and trap you on My account."""
+    uid = user_id(app, "admin")
+    page = admin.get("/users").data
+    assert b"Change your own on" in page
+    resp = admin.post(f"/users/{uid}", data={"action": "reset", "password": "another-password-1",
+                                             "csrf_token": csrf(admin, "/users")})
+    assert resp.location.endswith("/account")
+    # Still signed in, old password still works, and Home is not redirected back to My account.
+    home = admin.get("/start")
+    assert home.status_code == 200
+    assert login(app.test_client(), "admin", "another-password-1").status_code == 200  # refused: unchanged
+
+
+def test_forced_password_page_says_why(app, admin):
+    add_user(admin, must_change=True)
+    bob = app.test_client()
+    login(bob, "bob", "bob-password-1")
+    assert "/account" in bob.get("/start").location
+    assert b"Choose a new password to continue" in bob.get("/account").data
