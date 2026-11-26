@@ -1,0 +1,115 @@
+{% extends "auth/base.html" %}
+{% block title %}Audit log & API · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.filters { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; align-items: start; }
+@media (max-width: 900px) { .filters { grid-template-columns: 1fr 1fr; } }
+.filters .field { margin: 0; }
+.filters input, .filters select { width: 100%; }
+table.log td { font-size: 13px; vertical-align: top; }
+table.log td.when { white-space: nowrap; }
+.kind { display: inline-block; border-radius: 10px; padding: 0 7px; font-size: 12px; border: 1px solid var(--border); }
+.st-bad { color: var(--bad); }
+pre.cmd { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; overflow: auto;
+  font-size: 12.5px; margin: 4px 0 12px; white-space: pre-wrap; word-break: break-all; }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Audit log &amp; API</h1>
+
+<div class="panel">
+  <h2>Audit log</h2>
+  {% if can_read %}
+  <p class="muted">Every change, sign-in and failed sign-in, newest first. Request bodies are never kept, so no
+  passwords end up here. {{ 'You see every client.' if everything else 'You see the clients where you are an admin: ' ~ (scope|map(attribute='name')|join(', ')) ~ '.' }}
+  Rows are kept {{ days }} days.</p>
+  <div class="filters">
+    <div class="field"><label for="f-user">User</label><input type="text" id="f-user"></div>
+    <div class="field"><label for="f-client">Client</label><select id="f-client"><option value="">All</option>
+      {% for c in (mine if everything else scope) %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="f-kind">Kind</label><select id="f-kind"><option value="">All</option>
+      {% for k in kinds %}<option>{{ k }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="f-since">From</label><input type="date" id="f-since"></div>
+    <div class="field"><label for="f-until">To</label><input type="date" id="f-until"></div>
+    <div class="field"><label for="f-q">Text</label><input type="text" id="f-q" placeholder="path, message, address"></div>
+  </div>
+  <div class="actions">
+    <button type="button" id="go">Show</button>
+    <button type="button" class="small secondary" id="csv">Download (CSV)</button>
+    <span class="status" id="status"></span>
+  </div>
+  <div class="scroll" style="margin-top:10px"><table class="log">
+    <thead><tr><th>When (UTC)</th><th>User</th><th>Client</th><th>Kind</th><th>What</th><th>Result</th><th>From</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table></div>
+  {% else %}
+  <p class="muted">The audit log is for admins: a client admin sees their clients, a server admin sees everything.</p>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2>API</h2>
+  <p class="muted">For scripts and other tools. Sign in with your user name and the API token from
+  <a href="{{ url_for('auth.account') }}">your account page</a> (HTTP Basic auth). Add <code>?client=</code> with a
+  client's id or name when you are in more than one, and <code>&amp;space=lab</code> for the Lab space. Read-only
+  people get passwords and keys hidden, like on the web pages. Every change made over the API lands in the audit log.</p>
+  <table>
+    <thead><tr><th>Call</th><th>What it does</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td><code>GET /api/v1/clients</code></td><td>Your clients and your role in each</td><td>any</td></tr>
+      <tr><td><code>GET /api/v1/projects</code></td><td>The saved projects of a client and space</td><td>read-only</td></tr>
+      <tr><td><code>GET /api/v1/projects/&lt;id&gt;</code></td><td>One project (the builder's JSON)</td><td>read-only</td></tr>
+      <tr><td><code>GET /api/v1/projects/&lt;id&gt;/config</code></td><td>Its config as text; <code>?format=hierarchy</code> for Junos in braces</td><td>read-only</td></tr>
+      <tr><td><code>PUT /api/v1/projects/&lt;name&gt;</code></td><td>Create or replace a project by name</td><td>configurator</td></tr>
+      <tr><td><code>GET /api/v1/backups</code></td><td>Config backups; <code>?host=</code> for one switch, <code>?latest=1</code> for the newest of each</td><td>read-only</td></tr>
+      <tr><td><code>GET /api/v1/backups/&lt;id&gt;</code></td><td>One backup; <code>?format=text</code> for the config alone</td><td>read-only</td></tr>
+      <tr><td><code>GET /api/v1/audit</code></td><td>The audit log, same filters as above (<code>user</code>, <code>client</code>, <code>kind</code>, <code>since</code>, <code>until</code>, <code>q</code>, <code>limit</code>)</td><td>admin</td></tr>
+      <tr><td><code>POST /api/generate</code></td><td>Build a config from a project sent as JSON, without saving it</td><td>any</td></tr>
+    </tbody>
+  </table>
+  <h3>Examples</h3>
+  <pre class="cmd">curl -u {{ g.user['username'] }}:YOUR_TOKEN '{{ base }}/api/v1/projects?client={{ (mine[0].name if mine else 'Default')|urlencode }}'</pre>
+  <pre class="cmd">curl -u {{ g.user['username'] }}:YOUR_TOKEN -o core-sw1.conf '{{ base }}/api/v1/projects/12/config'</pre>
+  <pre class="cmd">curl -u {{ g.user['username'] }}:YOUR_TOKEN -X PUT -H 'Content-Type: application/json' --data @core-sw1.json '{{ base }}/api/v1/projects/core-sw1'</pre>
+  <pre class="cmd">curl -u {{ g.user['username'] }}:YOUR_TOKEN '{{ base }}/api/v1/backups?latest=1&amp;space=production'</pre>
+</div>
+
+{% if can_read %}
+<script>
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function params() {
+  const p = new URLSearchParams();
+  for (const [k, id] of [["user", "f-user"], ["client", "f-client"], ["kind", "f-kind"], ["since", "f-since"], ["until", "f-until"], ["q", "f-q"]]) {
+    const v = $(id).value.trim();
+    if (v) p.set(k, v);
+  }
+  return p;
+}
+async function show() {
+  const p = params();
+  $("status").textContent = "Loading…"; $("status").className = "status";
+  let d;
+  try {
+    const r = await fetch("/tools/audit/rows?" + p);
+    d = await r.json();
+    if (!r.ok) throw new Error(d.error || "Request failed");
+  } catch (e) { $("status").textContent = e.message; $("status").className = "status bad"; return; }
+  $("status").textContent = d.rows.length ? `${d.rows.length} row(s)` + (d.rows.length >= 500 ? " (the newest 500; narrow the filters or download the CSV)" : "") : "Nothing matches.";
+  $("rows").innerHTML = d.rows.map(r => {
+    const what = (r.message ? `<div>${esc(r.message)}</div>` : "") + (r.path ? `<div class="hint"><code>${esc(r.method)} ${esc(r.path)}</code></div>` : "");
+    const res = r.status == null ? "" : `<span class="${r.status >= 400 ? "st-bad" : ""}">${esc(r.status)}</span>`;
+    return `<tr><td class="when">${esc(r.at.replace(" UTC", ""))}</td><td>${esc(r.user)}</td>` +
+      `<td>${esc(r.client)}${r.space ? `<div class="hint">${esc(r.space)}</div>` : ""}</td>` +
+      `<td><span class="kind">${esc(r.kind)}</span></td><td>${what}</td><td>${res}</td><td>${esc(r.ip)}</td></tr>`;
+  }).join("");
+}
+$("go").onclick = show;
+$("csv").onclick = () => { location.href = "/tools/audit/csv?" + params(); };
+for (const id of ["f-user", "f-q"]) $(id).addEventListener("keydown", e => { if (e.key === "Enter") show(); });
+show();
+{% endraw %}
+</script>
+{% endif %}
+{% endblock %}

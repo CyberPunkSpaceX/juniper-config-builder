@@ -457,6 +457,7 @@ def _finish_login(user: sqlite3.Row, next_url: str | None) -> Response:
     db().execute("UPDATE users SET last_login = ? WHERE id = ?", (_now(), user["id"]))
     db().commit()
     _start_session(user)
+    log.info("audit: %r signed in from %s", user["username"], client_ip())
     return redirect(_safe_next(next_url))
 
 

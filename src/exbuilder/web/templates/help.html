@@ -590,5 +590,14 @@ they differ, with a minimum version, a recommended version and known-bad version
 number). Each switch shows as Known bad, Below minimum, Update, OK or Unknown. Nothing is looked up on the internet, so
 keep the policy current from the vendors' security advisories. You can also paste <code>show version</code> output for
 switches that have no backup.</p>
+<h3>Audit log &amp; API</h3>
+<p>The audit log keeps every change made in the app: who, when, from which address, in which client and space, what
+was asked and whether it worked. Sign-ins and failed sign-ins, SSH fetches, nightly backups and settings changes are
+there too. Request bodies are never stored, so passwords and secrets stay out of it. A server admin sees everything,
+a client admin sees the rows of their clients. Filter by user, client, kind, date or text, and download the result as
+CSV. Rows are kept 365 days (<code>EXB_AUDIT_DAYS</code> changes that).</p>
+<p>The same page lists the scripting API under <code>/api/v1/</code>: your clients, projects (read, get the config,
+create or replace one), config backups and the audit log. Sign in with HTTP Basic auth using your user name and the API
+token from your account page. Changes made over the API land in the audit log as well.</p>
 </div>
 {% endblock %}

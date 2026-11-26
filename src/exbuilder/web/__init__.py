@@ -28,7 +28,7 @@ from flask import Flask, Response, abort, flash, redirect, render_template, requ
 
 from .. import __version__, redact, evelab, aoscx_models, aoss_models, eos_models, exos_models, fabric, fastiron_models, fortiswitch_models, ios_models, nxos_models, os10_models, routeros_models, unifi_models, importer, models, sshfetch, topology, vendors, xlsx
 from ..generator import DEFAULTS, build
-from . import auth, backups, clients, converter, eve, logs, netboxsync, nightly, promote, push, saml, sso, toolkit
+from . import audit, auth, backups, clients, converter, eve, logs, netboxsync, nightly, promote, push, saml, sso, toolkit
 
 MAX_PROJECT_BYTES = 512 * 1024
 
@@ -137,6 +137,7 @@ def create_app() -> Flask:
     logs.init_app(app)
     toolkit.init_app(app)
     netboxsync.init_app(app)
+    audit.init_app(app)
     zones = _timezones()
 
     @app.after_request
