@@ -480,6 +480,8 @@ the client picked at the top of the page (see **Clients**).
 
 ## Applying the config on a switch
 
+**Push from the builder (Juniper, Arista, Cisco IOS-XE, Nexus, Aruba CX, MikroTik).** Client admins push an approved Production project from the Projects tab: preview (running config kept as a backup, the switch's own `show | compare` and `commit check`), then `commit confirmed N` (1-60 minutes, default 10), a reachability check over a new SSH session, and Keep or Roll back. Without a confirmation the switch reverts by itself. Every step is audited (`audit: push`) and listed per client. Per vendor: Junos `commit confirmed`, Arista config session `commit timer`, IOS-XE `configure terminal revert timer` + `configure confirm`, NX-OS checkpoint + one-time scheduler rollback job, AOS-CX `checkpoint auto`, MikroTik Safe Mode held open by the server. OS10, EXOS, FastIron and AOS-S have no automatic rollback and are not pushable. The Docker image runs gunicorn with a 300 s timeout because commits can be slow. `EXB_PUSH_DISABLE=true` turns it off.
+
 1. Connect to the console or SSH, type `cli`, then `configure`.
 2. Paste the **set** commands.
 3. `show | compare` to see the change, `commit check` to test it.
