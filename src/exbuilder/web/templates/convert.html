@@ -16,13 +16,12 @@ pre.out { background: var(--bg); border: 1px solid var(--border); border-radius:
 .status.ok { color: var(--ok); } .status.bad { color: var(--bad); } .status.warn { color: var(--warn); }
 .report h3 { font-size: 15px; margin: 16px 0 6px; }
 .report ul { margin: 0; padding-left: 20px; }
-.report li { margin: 2px 0; }
+.report li { margin: 2px 0; overflow-wrap: anywhere; }
+.report { min-width: 0; max-width: 100%; }
 .report li.lost { color: var(--bad); }
 .report li.check { color: var(--warn); }
 .report code { font-size: 12.5px; }
 .pill { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--border); margin-left: 6px; }
-.split { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
 details summary { cursor: pointer; font-weight: 600; }
 </style>
 
@@ -71,17 +70,13 @@ Lab, test it there, then ask for approval to promote it to Production.</p>
   <div class="panel">
     <h2 id="summary"></h2>
     <p id="subsummary" class="muted"></p>
-    <div class="split">
-      <div>
-        <div class="actions" style="margin-top:0">
-          <strong>Converted config</strong>
-          <button class="small secondary" type="button" id="copy">Copy</button>
-          <button class="small secondary" type="button" id="download">Download</button>
-        </div>
-        <pre class="out" id="config"></pre>
-      </div>
-      <div class="report" id="report"></div>
+    <div class="report" id="report"></div>
+    <div class="actions">
+      <strong>Converted config</strong>
+      <button class="small secondary" type="button" id="copy">Copy</button>
+      <button class="small secondary" type="button" id="download">Download</button>
     </div>
+    <pre class="out" id="config"></pre>
   </div>
 
   <div class="panel">

@@ -197,7 +197,7 @@ def parse(text: str, vendor: str = "cisco") -> dict:
             elif head.startswith("clock timezone ") and "/" in w[-1]:
                 s["timezone"] = w[-1]
             elif head.startswith("clock timezone "):
-                r.notes.append(f"Time zone '{' '.join(w[2:])}': Cisco uses fixed offsets; pick the matching time zone "
+                r.notes.append(f"Time zone '{' '.join(w[2:])}': {_name(r)} uses fixed offsets; pick the matching time zone "
                                "on the Switch tab (set to UTC for now).")
             elif head.startswith("clock summer-time"):
                 pass
@@ -340,6 +340,8 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                     kw = kid.split()
                     if kid.startswith("router-id "):
                         rt["router_id"] = kw[1]
+                    elif kid.startswith("network ") and len(kw) >= 4 and "/" in kw[1] and kw[2] == "area":
+                        ospf_nets.append((kw[1], kw[3]))  # Arista/Nexus: network 10.0.0.0/24 area 0.0.0.0
                     elif kid.startswith("network ") and len(kw) >= 5:
                         ospf_nets.append((net(kw[1], _wild(kw[2])), kw[4]))
                     elif kid.startswith("passive-interface ") and kw[1] != "default":
@@ -348,8 +350,9 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                         ospf_area["passive_default"] = True
                     elif kid.startswith("auto-cost reference-bandwidth "):
                         rt["ospf"]["reference_bandwidth"] = f"{kw[2]}m"
-                    elif kid.startswith("area ") and len(kw) >= 5 and kw[2] == "range":
-                        ospf_ranges.setdefault(kw[1], []).append(net(kw[3], kw[4]) if "/" not in kw[3] else kw[3])
+                    elif kid.startswith("area ") and len(kw) >= 4 and kw[2] == "range" and ("/" in kw[3] or len(kw) >= 5):
+                        # Cisco: area 10 range 192.168.99.0 255.255.255.0; Arista/Nexus: area 0.0.0.10 range 192.168.99.0/24
+                        ospf_ranges.setdefault(kw[1], []).append(kw[3] if "/" in kw[3] else net(kw[3], kw[4]))
                     elif kid.startswith("redistribute ") and len(kw) > 1 and kw[1] in REDIST:
                         redist.append(("ospf", REDIST[kw[1]], kw[kw.index("route-map") + 1] if "route-map" in kw else ""))
                     elif kid.startswith(("area ", "redistribute ", "default-information", "summary-address")):
@@ -712,6 +715,11 @@ def _area_id(a: str) -> str:
     return a if "." in a else (str(ipaddress.IPv4Address(int(a))) if a.isdigit() else a)
 
 
+def _name(r: Reader) -> str:
+    from .. import vendors
+    return vendors.get(r.vendor).name
+
+
 def _ospf(r: Reader, nets, passive, opts, ranges=None) -> None:
     if not nets and not r.ospf_if:
         return
@@ -853,7 +861,7 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> N
                     t["community_add"] = cname
                     if "additive" not in kw and policy == rm_name:
                         r.later.append(f"Route-map {rm['name']} {rm['seq']}: 'set community' replaced the "
-                                       "communities on Cisco; the new config adds them instead. Check it if that matters.")
+                                       f"communities on {_name(r)}; the new config adds them instead. Check it if that matters.")
                 elif kid.startswith("set ip next-hop self") or kid == "set ip next-hop peer-address":
                     t["next_hop_self"] = True
                 else:
@@ -926,6 +934,6 @@ def _bgp(r: Reader, peers: dict, nets: list[str]) -> None:
                                f"policy {g['export']}, so Junos won't announce it. Add it to that policy if needed.")
         if r.redist_bgp and g["export"]:
             r.later.append(f"BGP group {g['name']}: redistributed routes go through {', '.join(r.redist_bgp)} before "
-                           f"{g['export']}. On Cisco the neighbor's route-map also filtered them; check the order.")
+                           f"{g['export']}. On {_name(r)} the neighbor's route-map also filtered them; check the order.")
         g["export"] = ", ".join(filter(None, [*out, g["export"]]))
     rt["bgp_groups"] = [dict(g, neighbors="\n".join(g["neighbors"])) for g in groups.values()]
