@@ -463,7 +463,7 @@ def test_sweep_cisco_routed_lag_runs_ospf():
 
 
 def test_sweep_juniper_policies_round_trip():
-    r = convert.convert((DATA / "convert" / "sweep" / "juniper-core.conf").read_text(), "", "juniper")
+    r = convert.convert((DATA / "convert" / "sweep" / "juniper-core.txt").read_text(), "", "juniper")
     cfg = r["config"]
     for line in ("set policy-options community CM-OUT members 65090:10",
                  "set policy-options policy-statement EXPORT-ISP term t1 then community add CM-OUT",

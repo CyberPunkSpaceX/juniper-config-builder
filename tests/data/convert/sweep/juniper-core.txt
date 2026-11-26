@@ -1,0 +1,69 @@
+set system host-name EX-CORE-01
+set system time-zone America/Toronto
+set system root-authentication encrypted-password "$6$abc$defghijklmnopqrstuvwxyz"
+set system login user netadmin class super-user
+set system login user netadmin authentication encrypted-password "$6$xyz$abcdefghijklmnop"
+set system services ssh root-login deny
+set system domain-name corp.example.com
+set system name-server 10.20.0.53
+set system ntp server 10.20.0.123
+set system syslog host 10.20.0.80 any info
+set snmp community CorpR0 authorization read-only
+set snmp location "DC1 Core"
+set snmp contact noc@corp.example.com
+set chassis aggregated-devices ethernet device-count 4
+set interfaces ge-0/0/0 description "Server A"
+set interfaces ge-0/0/0 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members SERVERS
+set interfaces ge-0/0/1 description "Phone and PC"
+set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members USERS
+set interfaces xe-0/2/0 ether-options 802.3ad ae0
+set interfaces xe-0/2/1 ether-options 802.3ad ae0
+set interfaces ae0 description "to DIST-A-01"
+set interfaces ae0 aggregated-ether-options lacp active
+set interfaces ae0 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae0 unit 0 family ethernet-switching vlan members [ USERS VOICE SERVERS ]
+set interfaces xe-0/2/2 description "WAN uplink"
+set interfaces xe-0/2/2 unit 0 family inet address 172.16.0.1/30
+set interfaces xe-0/2/3 description "ISP-B"
+set interfaces xe-0/2/3 unit 0 family inet address 203.0.113.2/30
+set interfaces irb unit 10 family inet address 10.1.10.1/24
+set interfaces irb unit 30 family inet address 10.1.30.1/24
+set interfaces lo0 unit 0 family inet address 10.255.9.1/32
+set interfaces me0 unit 0 family inet address 10.99.0.10/24
+set vlans USERS vlan-id 10
+set vlans USERS l3-interface irb.10
+set vlans VOICE vlan-id 20
+set vlans SERVERS vlan-id 30
+set vlans SERVERS l3-interface irb.30
+set switch-options voip interface ge-0/0/1.0 vlan VOICE
+set forwarding-options dhcp-relay server-group DHCP 10.20.0.67
+set forwarding-options dhcp-relay group USERS active-server-group DHCP
+set forwarding-options dhcp-relay group USERS interface irb.10
+set routing-options router-id 10.255.9.1
+set routing-options autonomous-system 65090
+set routing-options static route 0.0.0.0/0 next-hop 172.16.0.2
+set policy-options prefix-list PL-OUT 10.1.0.0/16
+set policy-options prefix-list PL-DEFAULT 0.0.0.0/0
+set policy-options community CM-OUT members 65090:10
+set policy-options policy-statement EXPORT-ISP term t1 from prefix-list PL-OUT
+set policy-options policy-statement EXPORT-ISP term t1 then community add CM-OUT
+set policy-options policy-statement EXPORT-ISP term t1 then accept
+set policy-options policy-statement EXPORT-ISP term reject then reject
+set policy-options policy-statement IMPORT-ISP term t1 from prefix-list PL-DEFAULT
+set policy-options policy-statement IMPORT-ISP term t1 then local-preference 120
+set policy-options policy-statement IMPORT-ISP term t1 then accept
+set policy-options policy-statement IMPORT-ISP term reject then reject
+set protocols ospf area 0.0.0.0 interface xe-0/2/2.0 interface-type p2p
+set protocols ospf area 0.0.0.0 interface xe-0/2/2.0 metric 15
+set protocols ospf area 0.0.0.0 interface lo0.0 passive
+set protocols ospf area 0.0.0.1 interface irb.10 passive
+set protocols ospf area 0.0.0.1 interface irb.30 passive
+set protocols ospf area 0.0.0.1 area-range 10.1.0.0/16
+set protocols bgp group ISP-B type external
+set protocols bgp group ISP-B import IMPORT-ISP
+set protocols bgp group ISP-B export EXPORT-ISP
+set protocols bgp group ISP-B neighbor 203.0.113.1 peer-as 64500
+set protocols lldp interface all
+set protocols rstp
