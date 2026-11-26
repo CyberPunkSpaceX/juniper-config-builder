@@ -26,6 +26,8 @@ TOOLS = [
     ("toolkit.checks_page", "&#10003;", "Pre-push checks",
      "Check several projects together before they go live: duplicate IPs and VLANs, links whose ends disagree, "
      "VLANs no uplink carries, MTU and spanning-tree mismatches."),
+    ("netbox.page", "&#8645;", "NetBox sync",
+     "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
 ]
 
 

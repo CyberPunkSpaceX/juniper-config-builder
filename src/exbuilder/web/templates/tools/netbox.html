@@ -1,0 +1,183 @@
+{% extends "auth/base.html" %}
+{% block title %}NetBox sync · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>NetBox sync</h1>
+<p class="muted">Pull a NetBox site's switches into projects (host name, model, serial, management IP, VLANs and VLAN
+interface addresses), or push your projects to NetBox (missing devices, VLANs and IP addresses). Nothing in NetBox is
+deleted, and a push always shows its plan first. Client: <b>{{ client.name if client else 'none' }}</b>,
+space: <b>{{ client.space if client else '' }}</b>.</p>
+
+<div class="panel">
+  <h2>NetBox for this client</h2>
+  {% if nb.configured %}<p class="ok-text" id="nbstate">Set up: {{ nb.url }} <span class="muted">({{ nb.updated }})</span></p>
+  {% else %}<p class="muted" id="nbstate">Not set up yet.</p>{% endif %}
+  {% if role == 'admin' %}
+  <details{% if not nb.configured %} open{% endif %}>
+    <summary>{{ 'Change' if nb.configured else 'Set up' }} NetBox</summary>
+    <div class="grid3" style="margin-top:10px">
+      <div class="field"><label for="url">NetBox address</label><input type="text" id="url" value="{{ nb.url }}" placeholder="https://netbox.example.lan"></div>
+      <div class="field"><label for="token">API token <span class="hint">{{ '(leave empty to keep it)' if nb.configured else '' }}</span></label><input type="password" id="token" autocomplete="off"></div>
+      <div class="field"><label class="chk"><input type="checkbox" id="insecure"{% if not nb.verify %} checked{% endif %}> Self-signed certificate</label></div>
+    </div>
+    <p class="hint">Give the token read access for pulling, and write access to devices, VLANs and IP addresses for
+      pushing. Empty the address and save to remove NetBox from this client.</p>
+    <div class="actions"><button type="button" id="savecfg">Save</button><span class="status" id="cfgstatus"></span></div>
+  </details>
+  {% else %}<p class="hint">A client admin sets up NetBox here.</p>{% endif %}
+</div>
+
+<div id="main"{% if not nb.configured %} hidden{% endif %}>
+  <div class="panel">
+    <div class="grid2">
+      <div class="field"><label for="site">NetBox site</label><select id="site"><option value="">Loading…</option></select></div>
+      <div class="field"><span class="status" id="sitestatus"></span></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Pull from NetBox</h2>
+    <div class="field">
+      <label for="tpls">Templates <span class="hint">(optional: saved projects whose ports and services each new
+        project starts from, one per brand. Hold Ctrl to pick several.)</span></label>
+      <select id="tpls" multiple size="4"></select>
+    </div>
+    <div class="actions"><button type="button" id="pull">Show the site's switches</button><span class="status" id="pullstatus"></span></div>
+    <div id="pullres" hidden>
+      <div class="scroll"><table>
+        <thead><tr><th><input type="checkbox" id="pullall" checked aria-label="All"></th><th>Device</th><th>Brand</th><th>Model</th><th>Management IP</th><th>Notes</th></tr></thead>
+        <tbody id="pullrows"></tbody>
+      </table></div>
+      <div class="actions">
+        <button type="button" id="pullsave">Save as projects</button>
+        <label class="chk"><input type="checkbox" id="pulloverwrite"> Replace projects with the same name</label>
+        <span class="status" id="pullsavestatus"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Push to NetBox</h2>
+    {% if role == 'admin' %}
+    <div class="grid2">
+      <div class="field"><label for="pushprojects">Projects <span class="hint">(Ctrl to pick several)</span></label><select id="pushprojects" multiple size="6"></select></div>
+      <div class="field"><label for="role">Role for devices NetBox does not have yet</label><select id="role"><option value="">Don't create devices</option></select></div>
+    </div>
+    <div class="actions"><button type="button" id="plan">Show what would change</button><span class="status" id="planstatus"></span></div>
+    <div id="planres" hidden>
+      <div class="scroll"><table>
+        <thead><tr><th><input type="checkbox" id="planall" checked aria-label="All"></th><th>Change</th><th>Switch</th></tr></thead>
+        <tbody id="planrows"></tbody>
+      </table></div>
+      <ul id="plannotes" class="muted"></ul>
+      <div class="actions"><button type="button" id="apply">Make these changes in NetBox</button><span class="status" id="applystatus"></span></div>
+      <ul id="applyres"></ul>
+    </div>
+    {% else %}<p class="hint">Pushing changes NetBox, so it needs the client admin role.</p>{% endif %}
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function st(id, text, kind) { const e = $(id); if (e) { e.textContent = text; e.className = "status " + (kind || ""); } }
+async function call(url, body) {
+  const resp = await fetch(url, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  let data; try { data = await resp.json(); } catch (e) { data = {error: resp.statusText || "Request failed"}; }
+  if (!resp.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+const picked = id => [...$(id).selectedOptions].map(o => o.value);
+let pulled = null, plan = null;
+
+if ($("savecfg")) $("savecfg").onclick = async () => {
+  st("cfgstatus", "Saving…");
+  try {
+    const d = await call("/tools/netbox/settings", {url: $("url").value, token: $("token").value, insecure: $("insecure").checked});
+    st("cfgstatus", d.configured ? "Saved." : "Removed.", "ok");
+    $("token").value = "";
+    $("nbstate").textContent = d.configured ? "Set up: " + d.url : "Not set up yet.";
+    $("main").hidden = !d.configured;
+    if (d.configured) loadSites();
+  } catch (e) { st("cfgstatus", e.message, "bad"); }
+};
+
+async function loadSites() {
+  st("sitestatus", "Connecting to NetBox…");
+  try {
+    const d = await call("/tools/netbox/sites");
+    $("site").innerHTML = "";
+    d.sites.forEach(s => $("site").append(new Option(s.name, s.id)));
+    if ($("role")) d.roles.forEach(r => $("role").append(new Option(r.name, r.id)));
+    st("sitestatus", `Connected to NetBox ${d.version}. ${d.sites.length} site(s).`, "ok");
+  } catch (e) { $("site").innerHTML = ""; st("sitestatus", e.message, "bad"); }
+}
+
+async function loadProjects() {
+  const r = await fetch("/projects");
+  const d = r.ok ? await r.json() : {projects: []};
+  for (const id of ["tpls", "pushprojects"]) {
+    if (!$(id)) continue;
+    $(id).innerHTML = "";
+    d.projects.forEach(p => $(id).append(new Option(p.name, p.id)));
+  }
+}
+
+$("pull").onclick = async () => {
+  st("pullstatus", "Reading NetBox…");
+  try {
+    pulled = await call("/tools/netbox/pull", {site_id: $("site").value, template_ids: picked("tpls")});
+    st("pullstatus", `${pulled.devices.length} device(s) and ${pulled.vlans.length} VLAN(s) at ${pulled.site.name}.`, "ok");
+    $("pullrows").innerHTML = pulled.devices.map(d => `<tr><td>${d.project ? `<input type="checkbox" value="${d.netbox_id}" checked>` : ""}</td>` +
+      `<td>${esc(d.name)}</td><td>${esc(d.manufacturer)}</td><td>${esc(d.model || d.netbox_model)}</td><td>${esc(d.mgmt_address || "")}</td>` +
+      `<td>${d.notes.length ? "<ul>" + d.notes.map(n => `<li>${esc(n)}</li>`).join("") + "</ul>" : (d.template ? "From template" : "")}</td></tr>`).join("");
+    $("pullres").hidden = false;
+  } catch (e) { st("pullstatus", e.message, "bad"); }
+};
+$("pullall").onchange = e => $("pullrows").querySelectorAll("input").forEach(b => b.checked = e.target.checked);
+$("pullsave").onclick = async () => {
+  const ids = [...$("pullrows").querySelectorAll("input:checked")].map(b => +b.value);
+  if (!ids.length) { st("pullsavestatus", "Tick the devices to save.", "bad"); return; }
+  st("pullsavestatus", "Saving…");
+  try {
+    const d = await call("/tools/netbox/pull/save", {site_id: $("site").value, template_ids: picked("tpls"), device_ids: ids, overwrite: $("pulloverwrite").checked});
+    st("pullsavestatus", `Saved ${d.saved} project(s) to ${d.client} (${d.space}).`, "ok");
+    loadProjects();
+  } catch (e) { st("pullsavestatus", e.message, "bad"); }
+};
+
+function pushBody() { return {site_id: $("site").value, project_ids: picked("pushprojects"), role_id: $("role").value}; }
+if ($("plan")) $("plan").onclick = async () => {
+  st("planstatus", "Comparing with NetBox…");
+  $("applyres").innerHTML = "";
+  try {
+    plan = await call("/tools/netbox/push/plan", pushBody());
+    st("planstatus", plan.steps.length ? `${plan.steps.length} change(s).` : "NetBox already has everything.", "ok");
+    $("planrows").innerHTML = plan.steps.map((s, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td>` +
+      `<td>${s.action === "create" ? "Add" : "Update"} ${esc(s.kind === "ip" ? "IP" : s.kind)}: ${esc(s.what)}</td><td>${esc(s.host)}</td></tr>`).join("");
+    $("plannotes").innerHTML = plan.notes.map(n => `<li>${esc(n)}</li>`).join("");
+    $("apply").hidden = !plan.steps.length;
+    $("planres").hidden = false;
+  } catch (e) { st("planstatus", e.message, "bad"); }
+};
+if ($("planall")) $("planall").onchange = e => $("planrows").querySelectorAll("input").forEach(b => b.checked = e.target.checked);
+if ($("apply")) $("apply").onclick = async () => {
+  const steps = [...$("planrows").querySelectorAll("input:checked")].map(b => plan.steps[+b.dataset.i].what);
+  if (!steps.length) { st("applystatus", "Tick the changes to make.", "bad"); return; }
+  st("applystatus", "Writing to NetBox…");
+  try {
+    const d = await call("/tools/netbox/push/apply", {...pushBody(), steps});
+    const bad = d.results.filter(r => !r.ok).length;
+    st("applystatus", `${d.results.length - bad} change(s) made` + (bad ? `, ${bad} failed.` : "."), bad ? "warn" : "ok");
+    $("applyres").innerHTML = d.results.map(r => `<li class="${r.ok ? "ok-text" : "bad-text"}">${esc(r.what)}${r.ok ? "" : ": " + esc(r.error)}</li>`).join("");
+  } catch (e) { st("applystatus", e.message, "bad"); }
+};
+
+loadProjects();
+if (!$("main").hidden) loadSites();
+{% endraw %}
+</script>
+{% endblock %}

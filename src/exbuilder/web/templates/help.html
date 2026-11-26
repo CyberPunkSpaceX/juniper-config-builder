@@ -541,5 +541,18 @@ and <b>Run checks</b>. It reports:</p>
 </ul>
 <p>Links are found from port-group and LAG descriptions that name the other switch (<code>To core-sw1</code>). Add any
 others with <b>Add a link by hand</b>. <b>Ready to push</b> means no errors were found; still read the warnings.</p>
+<h3>NetBox sync</h3>
+<p>A client admin opens <b>NetBox sync</b> and enters the NetBox address and an API token (stored encrypted). The
+address must be inside the networks this server may reach. Then pick a NetBox site:</p>
+<ul>
+  <li><b>Pull from NetBox</b> turns the site's switches into projects: host name, model, serial, management IP (the
+    device's primary IPv4), the site as SNMP location, the site's VLANs and the VLAN interface addresses NetBox has.
+    Pick saved projects as templates (one per brand) so ports and services follow your standard. Devices of other
+    makers (PDUs, firewalls) are listed but skipped.</li>
+  <li><b>Push to NetBox</b> (client admin) shows what would change first: missing VLANs, missing IP addresses (assigned
+    to the device's interface when NetBox has it), serial numbers, and devices NetBox doesn't have yet (pick a role;
+    they are added as "planned"). Tick what you want and <b>Make these changes in NetBox</b>. Nothing in NetBox is
+    deleted.</li>
+</ul>
 </div>
 {% endblock %}
