@@ -1,0 +1,8 @@
+Port                           : 1/1/49
+Neighbor Entries               : 1
+Neighbor Chassis-Name          : core-sw1
+Neighbor Chassis-Description   : Arista Networks EOS
+Neighbor Chassis-ID            : 00:11:22:33:44:55
+Neighbor Management-Address    : 10.9.0.1
+Neighbor Port-ID               : Ethernet3
+Neighbor Port-Desc             : to aruba

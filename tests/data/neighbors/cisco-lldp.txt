@@ -1,0 +1,30 @@
+Capability codes:
+    (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device
+
+------------------------------------------------
+Local Intf: Gi1/0/49
+Chassis id: 0011.2233.4455
+Port id: Ethernet1
+Port Description: To acc-sw1
+System Name: core-sw1.example.lan
+
+System Description: 
+Arista Networks EOS version 4.31.1F running on an Arista Networks DCS-7050SX3-48YC8
+
+Time remaining: 99 seconds
+System Capabilities: B,R
+Enabled Capabilities: B,R
+Management Addresses:
+    IP: 10.9.0.1
+Auto Negotiation - not supported
+
+------------------------------------------------
+Local Intf: Gi1/0/12
+Chassis id: 00aa.bbcc.ddee
+Port id: 00aa.bbcc.ddee
+System Name: SEP00AABBCCDDEE
+
+Management Addresses:
+    IP: 10.9.30.55
+
+Total entries displayed: 2

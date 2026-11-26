@@ -1,0 +1,2 @@
+ 0 interface=sfp-sfpplus1 address=10.9.0.1 mac-address=00:11:22:33:44:55 identity="core-sw1" platform="Arista" version="4.31" interface-name="Ethernet4" system-caps=bridge,router
+ 1 interface=ether5 address=10.9.30.20 mac-address=AA:BB:CC:00:00:01 identity="ap-lobby" platform="MikroTik" board="cAP ax" interface-name="ether1"

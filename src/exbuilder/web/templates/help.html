@@ -554,5 +554,14 @@ address must be inside the networks this server may reach. Then pick a NetBox si
     they are added as "planned"). Tick what you want and <b>Make these changes in NetBox</b>. Nothing in NetBox is
     deleted.</li>
 </ul>
+<h3>Auto network map</h3>
+<p>Draws switches and cables from LLDP and CDP neighbours, for every brand. Either paste each switch's neighbour output
+(<code>show lldp neighbors detail</code>, <code>show cdp neighbors detail</code>, Juniper <code>show lldp neighbors</code>,
+Aruba CX <code>show lldp neighbor-info detail</code>, ProCurve <code>show lldp info remote-device detail</code>, Extreme
+<code>show lldp neighbors detailed</code>, FortiSwitch <code>get switch lldp neighbors-detail</code>, MikroTik
+<code>/ip neighbor print detail</code>), or, as a client admin, <b>Fetch over SSH</b>: give one or two switches to start
+from and it logs in, reads the neighbours with read-only commands, and follows their management addresses inside the
+client's allowed networks. Green lines are seen from both ends; dashed lines and boxes are only seen from one side.
+Download the picture (SVG) or the list of links (CSV).</p>
 </div>
 {% endblock %}

@@ -1,0 +1,22 @@
+Interface Ethernet1 detected 1 LLDP neighbors:
+
+  Neighbor 0011.2233.4466/Gi1/0/49, age 3 seconds
+  Discovered 1 day, 2:03:04 ago; Last changed 1 day, 2:03:04 ago
+  - Source address: 00:11:22:33:44:66
+  - Chassis ID type: MAC address (4)
+    Chassis ID     : 0011.2233.4466
+  - Port ID type: Interface name (5)
+    Port ID     : "Gi1/0/49"
+  - Time To Live: 120 seconds
+  - Port Description: "GigabitEthernet1/0/49"
+  - System Name: "acc-sw1"
+  - Management Address Subtype: IPv4 (1)
+    Management Address        : 10.9.0.11
+
+Interface Ethernet2 detected 1 LLDP neighbors:
+
+  Neighbor 2c6b.f500.0001/ge-0/0/48, age 5 seconds
+  - Chassis ID     : 2c:6b:f5:00:00:01
+  - Port ID     : "ge-0/0/48"
+  - System Name: "ex-idf3"
+    Management Address        : 10.9.0.13

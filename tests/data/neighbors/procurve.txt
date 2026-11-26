@@ -1,0 +1,17 @@
+ LLDP Remote Device Information Detail
+
+  Local Port   : 49
+  ChassisType  : mac-address
+  ChassisId    : 00 11 22 33 44 55
+  PortType     : local
+  PortId       : Ethernet6
+  SysName      : core-sw1
+  System Descr : Arista Networks EOS version 4.31
+  PortDescr    : to procurve
+
+  System Capabilities Supported  : bridge, router
+  System Capabilities Enabled    : bridge, router
+
+  Remote Management Address
+     Type    : ipv4
+     Address : 10.9.0.1
