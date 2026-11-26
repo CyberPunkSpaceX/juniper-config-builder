@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, render_template, request
 
-from .. import __version__, bulk, compliance, neighbors, prepush, sshfetch, vendors
+from .. import __version__, bulk, calc, compliance, neighbors, prepush, sshfetch, vendors
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
@@ -32,6 +32,8 @@ TOOLS = [
     ("toolkit.compliance_page", "&#9745;", "Compliance",
      "Score every switch against your own standard: NTP, syslog, SNMPv3, banner, no telnet or plain HTTP, BPDU "
      "guard and more. Checks projects and running-config backups."),
+    ("toolkit.calc_page", "&#8721;", "Calculators",
+     "Subnet calculator and splitter, a VLAN address plan you can add to a project, and a PoE power budget."),
     ("netbox.page", "&#8645;", "NetBox sync",
      "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
 ]
@@ -329,6 +331,91 @@ def compliance_run():
     out = compliance.run(targets, std)
     out["names"] = {k: v.name for k, v in vendors.VENDORS.items()}
     return out
+
+
+# ----------------------------------------------------------------- calculators
+@bp.get("/calc")
+def calc_page():
+    return render_template("tools/calc.html", version=__version__, client=clients.current(),
+                           poe_devices=calc.POE_DEVICES, poe_classes=calc.POE_CLASSES)
+
+
+def _calc(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except calc.CalcError as exc:
+        abort(400, str(exc))
+
+
+def _int(v):
+    try:
+        return int(v) if v is not None and str(v).strip() else None
+    except (TypeError, ValueError):
+        abort(400, "Use whole numbers.")
+
+
+@bp.post("/calc/subnet")
+def calc_subnet():
+    return _calc(calc.subnet, str(_body().get("address") or ""))
+
+
+@bp.post("/calc/split")
+def calc_split():
+    b = _body()
+    return _calc(calc.split, str(b.get("network") or ""), _int(b.get("prefix")), _int(b.get("count")), _int(b.get("hosts")))
+
+
+@bp.post("/calc/vlans")
+def calc_vlans():
+    b = _body()
+    rows = [r for r in b.get("vlans") or [] if isinstance(r, dict)]
+    return _calc(calc.vlan_plan, str(b.get("supernet") or ""), rows, str(b.get("gateway") or "first"),
+                 _int(b.get("spare")) or 0)
+
+
+@bp.post("/calc/vlans/apply")
+def calc_vlans_apply():
+    """Add the planned VLANs (name, ID, VLAN interface address) to a saved project of the current client and space."""
+    b = _body()
+    c = clients.need("editor")
+    pid = _int(b.get("project_id"))
+    db = auth.db()
+    row = db.execute("SELECT name, data FROM projects WHERE id = ? AND client_id = ? AND space = ?",
+                     (pid, c["id"], c["space"])).fetchone()
+    if row is None:
+        abort(400, "Pick a saved project.")
+    data = json.loads(row["data"])
+    have = data.setdefault("vlans", [])
+    ids = {str(v.get("id")) for v in have if isinstance(v, dict)}
+    names = {str(v.get("name", "")).lower() for v in have if isinstance(v, dict)}
+    added, skipped = [], []
+    for v in [x for x in b.get("vlans") or [] if isinstance(x, dict)][:calc.MAX_VLANS]:
+        name, vid, irb = str(v.get("name") or ""), str(v.get("id") or ""), str(v.get("irb") or "")
+        if vid in ids or name.lower() in names:
+            skipped.append(f"{vid} {name}")
+            continue
+        row_ = {"name": name, "id": vid}
+        if irb and b.get("with_irb", True):
+            row_["irb"] = irb
+        have.append(row_)
+        ids.add(vid)
+        names.add(name.lower())
+        added.append(f"{vid} {name}")
+    text = json.dumps(data)
+    if len(text) > MAX_PROJECT_BYTES:
+        abort(400, "The project would be too large.")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    db.execute("UPDATE projects SET data = ?, updated_at = ?, updated_by = ? WHERE id = ?",
+               (text, now, auth.current_user()["username"], pid))
+    db.commit()
+    return {"project": row["name"], "added": added, "skipped": skipped}
+
+
+@bp.post("/calc/poe")
+def calc_poe():
+    b = _body()
+    rows = [r for r in b.get("devices") or [] if isinstance(r, dict)]
+    return _calc(calc.poe_budget, b.get("budget"), rows, "actual" if b.get("reserve") == "actual" else "class")
 
 
 def init_app(app) -> None:
