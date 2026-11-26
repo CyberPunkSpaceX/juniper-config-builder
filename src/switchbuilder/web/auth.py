@@ -436,6 +436,8 @@ def setup():
     if db().execute("SELECT COUNT(*) FROM users").fetchone()[0] > 0:
         return redirect(url_for("auth.login"))
     error = None
+    if request.method == "POST" and _cross_site_post():
+        abort(400, "Use this site's own setup page.")
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
@@ -465,6 +467,23 @@ def _locked_message(minutes: int) -> str:
     return f"Too many failed attempts. Try again in {minutes} minute{'s' if minutes != 1 else ''}."
 
 
+def _cross_site_post() -> bool:
+    """A sign-in form sent from another web site (login CSRF: signing someone in to an attacker's account).
+
+    The sign-in forms have no session yet to hold a CSRF token, so the browser's Origin header is checked
+    instead: browsers send it with every cross-site POST. Scripts and tests that send none are allowed.
+    """
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return False
+    from urllib.parse import urlparse
+    allowed = {request.host.lower()}
+    public = os.environ.get("EXB_PUBLIC_URL", "").strip()
+    if public:
+        allowed.add(urlparse(public).netloc.lower())
+    return urlparse(origin).netloc.lower() not in allowed
+
+
 @bp.route("/login", methods=["GET", "POST"])
 def login():
     # Already signed in (for example the browser's Back button landed here):
@@ -472,6 +491,8 @@ def login():
     if request.method == "GET" and _session_user() is not None:
         return redirect(_safe_next(request.args.get("next")))
     error = None
+    if request.method == "POST" and _cross_site_post():
+        abort(400, "Sign in from this site's own sign-in page.")
     if request.method == "POST":
         username = request.form.get("username", "").strip()
         if minutes := locked_minutes(username):
