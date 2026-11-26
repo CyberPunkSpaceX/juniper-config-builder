@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, render_template, request
 
-from .. import __version__, bulk, calc, compliance, neighbors, prepush, sshfetch, vendors
+from .. import __version__, bulk, calc, compliance, firmware, neighbors, prepush, sshfetch, vendors
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
@@ -34,6 +34,9 @@ TOOLS = [
      "guard and more. Checks projects and running-config backups."),
     ("toolkit.calc_page", "&#8721;", "Calculators",
      "Subnet calculator and splitter, a VLAN address plan you can add to a project, and a PoE power budget."),
+    ("toolkit.firmware_page", "&#8635;", "Firmware tracker",
+     "Which software every switch runs, from its latest backup, against your minimum, recommended and known-bad "
+     "versions."),
     ("netbox.page", "&#8645;", "NetBox sync",
      "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
 ]
@@ -416,6 +419,72 @@ def calc_poe():
     b = _body()
     rows = [r for r in b.get("devices") or [] if isinstance(r, dict)]
     return _calc(calc.poe_budget, b.get("budget"), rows, "actual" if b.get("reserve") == "actual" else "class")
+
+
+# ------------------------------------------------------------ firmware tracker
+FIRMWARE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS firmware_policy (
+    client_id INTEGER PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL
+);
+"""
+
+
+def _fw_policy(cid: int) -> tuple[dict, str]:
+    db = auth.db()
+    db.executescript(FIRMWARE_SCHEMA)
+    r = db.execute("SELECT data, updated_at, updated_by FROM firmware_policy WHERE client_id = ?", (cid,)).fetchone()
+    if r is None:
+        return {"rows": []}, ""
+    return firmware.clean_policy(json.loads(r["data"])), f"{r['updated_at']} by {r['updated_by']}"
+
+
+@bp.get("/firmware")
+def firmware_page():
+    c = clients.current()
+    policy, updated = _fw_policy(c["id"]) if c else ({"rows": []}, "")
+    return render_template("tools/firmware.html", version=__version__, client=c, policy=policy, updated=updated,
+                           can_edit=bool(c) and c["role"] == "admin",
+                           vendors={k: v.name for k, v in vendors.VENDORS.items()})
+
+
+@bp.post("/firmware/policy")
+def firmware_policy_save():
+    c = clients.need("admin")
+    policy = firmware.clean_policy(_body())
+    unknown = [r["vendor"] for r in policy["rows"] if not vendors.known(r["vendor"])]
+    if unknown:
+        abort(400, f"Unknown brand: {', '.join(unknown)}.")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    db = auth.db()
+    db.executescript(FIRMWARE_SCHEMA)
+    db.execute("INSERT INTO firmware_policy (client_id, data, updated_at, updated_by) VALUES (?, ?, ?, ?) "
+               "ON CONFLICT (client_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, "
+               "updated_by = excluded.updated_by", (c["id"], json.dumps(policy), now, auth.current_user()["username"]))
+    db.commit()
+    log.info("audit: %s changed the firmware policy of client %r", auth.current_user()["username"], c["name"])
+    return {"ok": True, "policy": policy}
+
+
+@bp.post("/firmware/run")
+def firmware_run():
+    """The latest backup of every switch in the current client and space, plus pasted show-version output."""
+    body = _body()
+    c = clients.need("viewer")
+    policy, _ = _fw_policy(c["id"])
+    rows = auth.db().execute(
+        "SELECT b.host, b.text, b.created_at FROM config_backups b JOIN (SELECT host, MAX(id) AS id FROM config_backups "
+        "WHERE client_id = ? AND space = ? GROUP BY host) last ON last.id = b.id ORDER BY b.host COLLATE NOCASE",
+        (c["id"], c["space"])).fetchall()
+    items = [{"name": r["host"], "text": r["text"], "when": r["created_at"]} for r in rows]
+    for p in (body.get("pasted") or [])[:50]:
+        if isinstance(p, dict) and str(p.get("text") or "").strip():
+            items.append({"name": str(p.get("name") or "pasted")[:80], "text": str(p["text"])[:2_000_000], "when": "pasted"})
+    out = firmware.report(items, policy)
+    out["names"] = {k: v.name for k, v in vendors.VENDORS.items()}
+    return out
 
 
 def init_app(app) -> None:

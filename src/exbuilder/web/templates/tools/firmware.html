@@ -1,0 +1,132 @@
+{% extends "auth/base.html" %}
+{% block title %}Firmware tracker · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.pill { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; white-space: nowrap; }
+.pill.vulnerable, .pill.below { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.pill.update { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.pill.ok { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.pill.unknown { border: 1px solid var(--border); color: var(--muted); }
+table.edit input, table.edit select { padding: 4px 6px; font-size: 13px; }
+table.edit td { padding: 4px 6px; vertical-align: top; }
+.counts { display: flex; gap: 18px; flex-wrap: wrap; }
+.counts div { font-size: 13px; color: var(--muted); } .counts b { display: block; font-size: 24px; color: var(--text); }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Firmware tracker</h1>
+<p class="muted">The software version of every switch, read from its latest config backup in
+{{ client.name if client else 'this client' }} ({{ client.space if client else '' }}), checked against your policy.
+Nothing is looked up on the internet: keep the policy current from your vendors' security advisories.</p>
+
+<div class="panel">
+  <details{% if not policy.rows %} open{% endif %}>
+    <summary><strong>Policy</strong> <span class="hint">{{ ('changed ' ~ updated) if updated else '(none yet)' }}</span></summary>
+    <p class="hint">One line per brand (or per model family, such as EX4100 or C9300, when they need different
+      versions). Known-bad versions: one per line, like <code>22.2R1</code>, <code>&lt; 21.4R3</code>,
+      <code>17.9.1 - 17.9.3</code> or <code>16.12*</code>, then a colon and a note such as the advisory number.</p>
+    <table class="edit"><thead><tr><th>Brand</th><th>Model family <span class="hint">(optional)</span></th><th>Minimum</th><th>Recommended</th><th>Known-bad versions</th><th></th></tr></thead>
+      <tbody id="prows"></tbody></table>
+    {% if can_edit %}
+    <div class="actions">
+      <button type="button" class="small secondary" id="padd">Add a line</button>
+      <button type="button" id="psave">Save the policy</button><span class="status" id="pstatus"></span>
+    </div>
+    {% else %}<p class="hint">A client admin keeps the policy.</p>{% endif %}
+  </details>
+</div>
+
+<div class="panel">
+  <details><summary>Add show version output that is not in the backups</summary>
+    <div class="grid2" style="margin-top:8px">
+      <div class="field"><label for="pname">Switch name</label><input type="text" id="pname"></div>
+    </div>
+    <div class="field"><textarea id="ptext" spellcheck="false" placeholder="show version"></textarea></div>
+  </details>
+  <div class="actions"><button type="button" id="go">Check firmware</button><span class="status" id="status"></span></div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <div class="counts" id="counts"></div>
+    <div class="actions"><button type="button" class="small secondary" id="csv">Download (CSV)</button></div>
+  </div>
+  <div class="panel">
+    <div class="scroll"><table>
+      <thead><tr><th>Switch</th><th>Brand</th><th>Model</th><th>Version</th><th>Status</th><th>Why</th><th>Backup from</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+    <h3>Versions in use</h3>
+    <div id="versions" class="muted"></div>
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+const VENDORS = {{ vendors|tojson }};
+const POLICY = {{ policy|tojson }};
+const CAN_EDIT = {{ can_edit|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function st(id, text, kind) { const e = $(id); e.textContent = text; e.className = "status " + (kind || ""); }
+async function call(url, body) {
+  const resp = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  let d; try { d = await resp.json(); } catch (e) { d = {error: resp.statusText || "Request failed"}; }
+  if (!resp.ok) throw new Error(d.error || "Request failed");
+  return d;
+}
+let last = null;
+
+function prow(r = {vendor: "juniper", family: "", minimum: "", recommended: "", bad: []}) {
+  const tr = document.createElement("tr");
+  const opts = Object.entries(VENDORS).map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join("");
+  tr.innerHTML = `<td><select class="v">${opts}</select></td><td><input type="text" class="f" size="10"></td>` +
+    `<td><input type="text" class="mi" size="10"></td><td><input type="text" class="re" size="10"></td>` +
+    `<td><textarea class="b" style="min-height:52px;min-width:260px"></textarea></td>` +
+    `<td>${CAN_EDIT ? '<button type="button" class="small danger">Remove</button>' : ""}</td>`;
+  tr.querySelector(".v").value = r.vendor; tr.querySelector(".f").value = r.family;
+  tr.querySelector(".mi").value = r.minimum; tr.querySelector(".re").value = r.recommended;
+  tr.querySelector(".b").value = (r.bad || []).map(b => b.rule + (b.note ? ": " + b.note : "")).join("\n");
+  tr.querySelectorAll("input, select, textarea").forEach(x => x.disabled = !CAN_EDIT);
+  const rm = tr.querySelector("button"); if (rm) rm.onclick = () => tr.remove();
+  $("prows").append(tr);
+}
+POLICY.rows.forEach(r => prow(r));
+if (!POLICY.rows.length && CAN_EDIT) prow();
+if ($("padd")) $("padd").onclick = () => prow();
+if ($("psave")) $("psave").onclick = async () => {
+  const rows = [...$("prows").children].map(tr => ({
+    vendor: tr.querySelector(".v").value, family: tr.querySelector(".f").value, minimum: tr.querySelector(".mi").value,
+    recommended: tr.querySelector(".re").value,
+    bad: tr.querySelector(".b").value.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+      const i = l.indexOf(":"); return i > 0 ? {rule: l.slice(0, i).trim(), note: l.slice(i + 1).trim()} : {rule: l, note: ""};
+    })}));
+  try { await call("/tools/firmware/policy", {rows}); st("pstatus", "Saved.", "ok"); } catch (e) { st("pstatus", e.message, "bad"); }
+};
+
+const LABEL = {"vulnerable": "Known bad", "below minimum": "Below minimum", "update": "Update", "ok": "OK", "unknown": "Unknown"};
+const CLS = s => s === "below minimum" ? "below" : s;
+$("go").onclick = async () => {
+  st("status", "Reading backups…");
+  const pasted = $("ptext").value.trim() ? [{name: $("pname").value || "pasted", text: $("ptext").value}] : [];
+  try { last = await call("/tools/firmware/run", {pasted}); st("status", ""); } catch (e) { st("status", e.message, "bad"); return; }
+  if (!last.switches.length) { st("status", "No backups in this client and space yet. Fetch configs over SSH or upload them on a builder's Backups tab.", "warn"); return; }
+  $("counts").innerHTML = Object.entries(last.counts).map(([k, n]) => `<div><b>${n}</b>${LABEL[k]}</div>`).join("");
+  $("rows").innerHTML = last.switches.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(last.names[s.vendor] || s.vendor || "?")}</td>` +
+    `<td>${esc(s.model)}</td><td><code>${esc(s.version || "—")}</code></td><td><span class="pill ${CLS(s.status)}">${LABEL[s.status]}</span></td>` +
+    `<td>${esc(s.why)}</td><td>${esc(s.when)}</td></tr>`).join("");
+  $("versions").innerHTML = Object.entries(last.versions).map(([v, vs]) => `<div><b>${esc(last.names[v] || v)}</b>: ` +
+    Object.entries(vs).map(([ver, n]) => `${esc(ver)} (${n})`).join(", ") + "</div>").join("");
+  $("result").hidden = false;
+};
+$("csv").onclick = () => {
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const lines = ["switch,brand,model,version,status,why,backup"].concat(last.switches.map(s =>
+    [s.name, last.names[s.vendor] || s.vendor, s.model, s.version, LABEL[s.status], s.why, s.when].map(q).join(",")));
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], {type: "text/csv"})); a.download = "firmware.csv"; a.click();
+};
+{% endraw %}
+</script>
+{% endblock %}
