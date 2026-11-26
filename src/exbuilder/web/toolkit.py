@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, render_template, request
 
-from .. import __version__, bulk, neighbors, prepush, sshfetch, vendors
+from .. import __version__, bulk, compliance, neighbors, prepush, sshfetch, vendors
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
@@ -29,6 +29,9 @@ TOOLS = [
     ("toolkit.map_page", "&#9741;", "Auto network map",
      "Draw the network from LLDP and CDP neighbours, for every brand. Paste the output, or let it log in over SSH "
      "and follow the neighbours from switch to switch."),
+    ("toolkit.compliance_page", "&#9745;", "Compliance",
+     "Score every switch against your own standard: NTP, syslog, SNMPv3, banner, no telnet or plain HTTP, BPDU "
+     "guard and more. Checks projects and running-config backups."),
     ("netbox.page", "&#8645;", "NetBox sync",
      "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
 ]
@@ -245,6 +248,86 @@ def map_discover():
     for r in out["fetched"]:
         sshfetch.log.warning("audit: neighbour discovery by %r for client %r: %s as %r -> %s", me, c["name"], r["host"],
                              username, "ok" if r["ok"] else r["error"] or "failed")
+    return out
+
+
+# ------------------------------------------------------------------ compliance
+COMPLIANCE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS compliance_standards (
+    client_id INTEGER PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    updated_by TEXT NOT NULL
+);
+"""
+
+
+def _standard(cid: int) -> tuple[dict, str]:
+    db = auth.db()
+    db.executescript(COMPLIANCE_SCHEMA)
+    r = db.execute("SELECT data, updated_at, updated_by FROM compliance_standards WHERE client_id = ?", (cid,)).fetchone()
+    if r is None:
+        return compliance.default_standard(), ""
+    return compliance.clean_standard(json.loads(r["data"])), f"{r['updated_at']} by {r['updated_by']}"
+
+
+@bp.get("/compliance")
+def compliance_page():
+    c = clients.current()
+    std, updated = _standard(c["id"]) if c else (compliance.default_standard(), "")
+    return render_template("tools/compliance.html", version=__version__, client=c, std=std, updated=updated,
+                           rules=compliance.RULES, can_edit=bool(c) and c["role"] == "admin",
+                           vendors={k: v.name for k, v in vendors.VENDORS.items()})
+
+
+@bp.post("/compliance/standard")
+def compliance_save():
+    c = clients.need("admin")
+    std = compliance.clean_standard(_body())
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    db = auth.db()
+    db.executescript(COMPLIANCE_SCHEMA)
+    db.execute("INSERT INTO compliance_standards (client_id, data, updated_at, updated_by) VALUES (?, ?, ?, ?) "
+               "ON CONFLICT (client_id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at, "
+               "updated_by = excluded.updated_by", (c["id"], json.dumps(std), now, auth.current_user()["username"]))
+    db.commit()
+    log.info("audit: %s changed the compliance standard of client %r", auth.current_user()["username"], c["name"])
+    return {"ok": True, "standard": std}
+
+
+@bp.post("/compliance/run")
+def compliance_run():
+    """Score saved projects (project_ids), config backups (backup_ids) and pasted configs against the client's standard."""
+    body = _body()
+    c = clients.need("viewer")
+    std, _ = _standard(c["id"])
+    db = auth.db()
+    targets = []
+
+    def ids(key):
+        return [int(x) for x in body.get(key) or [] if str(x).isdigit()][:200]
+
+    for pid in ids("project_ids"):
+        r = db.execute("SELECT name, data FROM projects WHERE id = ? AND client_id = ? AND space = ?",
+                       (pid, c["id"], c["space"])).fetchone()
+        if r:
+            data = json.loads(r["data"])
+            targets.append(compliance.Target(f"{r['name']} (project)", vendors.get(data.get("vendor")).key, data))
+    for bid in ids("backup_ids"):
+        r = db.execute("SELECT host, text, created_at FROM config_backups WHERE id = ? AND client_id = ? AND space = ?",
+                       (bid, c["id"], c["space"])).fetchone()
+        if r:
+            targets.append(compliance.from_config(f"{r['host']} (backup {r['created_at']})", r["text"]))
+    for item in (body.get("configs") or [])[:50]:
+        if isinstance(item, dict) and str(item.get("text") or "").strip():
+            text = str(item["text"])[:2_000_000]
+            vendor = str(item.get("vendor") or "")
+            targets.append(compliance.from_config(str(item.get("name") or "pasted config")[:80], text,
+                                                  vendor if vendors.known(vendor) else ""))
+    if not targets:
+        abort(400, "Pick projects or backups, or paste a config.")
+    out = compliance.run(targets, std)
+    out["names"] = {k: v.name for k, v in vendors.VENDORS.items()}
     return out
 
 

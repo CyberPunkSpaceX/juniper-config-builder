@@ -1,0 +1,149 @@
+{% extends "auth/base.html" %}
+{% block title %}Compliance · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.score { display: inline-block; min-width: 46px; text-align: center; font-weight: 700; border-radius: 12px; padding: 1px 8px; }
+.score.good { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.score.mid { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.score.bad { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+.std td input[type=text] { padding: 4px 6px; font-size: 13px; }
+.std td.w input { width: 60px; }
+.big { font-size: 28px; font-weight: 700; }
+.fails li { margin: 1px 0; }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Compliance</h1>
+<p class="muted">Each switch gets a score out of 100 against {{ client.name if client else 'the client' }}'s standard: the
+weight of the rules it passes over the weight of the rules that apply. Check builder projects, running-config backups
+(from SSH fetch or uploads) or a pasted config.</p>
+
+<div class="panel">
+  <details>
+    <summary><strong>The standard</strong> <span class="hint">{{ ('changed ' ~ updated) if updated else '(the default one)' }}</span></summary>
+    <div class="scroll"><table class="std" style="margin-top:8px">
+      <thead><tr><th>On</th><th>Rule</th><th>Weight</th><th>Value</th></tr></thead>
+      <tbody>
+      {% for key, title, weight, value_hint in rules %}{% set r = std.rules[key] %}
+      <tr data-key="{{ key }}">
+        <td><input type="checkbox" class="on"{% if r.on %} checked{% endif %}{% if not can_edit %} disabled{% endif %} aria-label="{{ title }}"></td>
+        <td>{{ title }}</td>
+        <td class="w"><input type="text" class="weight" value="{{ r.weight }}"{% if not can_edit %} disabled{% endif %}></td>
+        <td>{% if value_hint %}<input type="text" class="value" value="{{ r.value }}" placeholder="{{ value_hint }}"{% if not can_edit %} disabled{% endif %}>{% endif %}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+    {% if can_edit %}
+    <div class="actions"><button type="button" id="savestd">Save the standard</button><span class="status" id="stdstatus"></span></div>
+    {% else %}<p class="hint">A client admin can change the standard.</p>{% endif %}
+  </details>
+</div>
+
+<div class="panel">
+  <h2>What to check</h2>
+  <div class="grid2">
+    <div class="field"><label for="projects">Projects <span class="hint">(Ctrl to pick several)</span></label><select id="projects" multiple size="6"></select></div>
+    <div class="field"><label for="backups">Latest backup of each switch <span class="hint">(Ctrl to pick several)</span></label><select id="backups" multiple size="6"></select></div>
+  </div>
+  <div class="actions" style="margin-top:0">
+    <button type="button" class="small secondary" id="allp">All projects</button>
+    <button type="button" class="small secondary" id="allb">All backups</button>
+  </div>
+  <details style="margin-top:10px"><summary>Paste a config</summary>
+    <div class="field" style="margin-top:8px"><textarea id="paste" spellcheck="false" placeholder="show running-config"></textarea></div>
+  </details>
+  <div class="actions"><button type="button" id="go">Check compliance</button><span class="status" id="status"></span></div>
+</div>
+
+<div id="result" hidden>
+  <div class="panel">
+    <div class="grid2">
+      <div><span class="muted">Average score</span><div class="big" id="avg"></div></div>
+      <div><span class="muted">Most often failed</span><ul id="worst" class="fails"></ul></div>
+    </div>
+    <div class="actions"><button type="button" class="small secondary" id="csv">Download the report (CSV)</button></div>
+  </div>
+  <div class="panel">
+    <div class="scroll"><table>
+      <thead><tr><th>Switch</th><th>Brand</th><th>Score</th><th>Failed rules</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table></div>
+  </div>
+</div>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function st(id, text, kind) { const e = $(id); e.textContent = text; e.className = "status " + (kind || ""); }
+async function call(url, body) {
+  const resp = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  let d; try { d = await resp.json(); } catch (e) { d = {error: resp.statusText || "Request failed"}; }
+  if (!resp.ok) throw new Error(d.error || "Request failed");
+  return d;
+}
+let last = null;
+
+async function load() {
+  const [p, b] = await Promise.all([fetch("/projects"), fetch("/backups")]);
+  const pd = p.ok ? await p.json() : {projects: []}, bd = b.ok ? await b.json() : {backups: []};
+  pd.projects.forEach(x => $("projects").append(new Option(x.name, x.id)));
+  const seen = new Set();
+  for (const x of bd.backups) {           // newest first within each host
+    if (seen.has(x.host)) continue;
+    seen.add(x.host);
+    $("backups").append(new Option(`${x.host} · ${x.created_at}`, x.id));
+  }
+  if (!pd.projects.length) { const o = new Option("No projects here yet", ""); o.disabled = true; $("projects").append(o); }
+}
+$("allp").onclick = () => [...$("projects").options].forEach(o => o.selected = !!o.value);
+$("allb").onclick = () => [...$("backups").options].forEach(o => o.selected = !!o.value);
+
+if ($("savestd")) $("savestd").onclick = async () => {
+  const rules = {};
+  document.querySelectorAll("tr[data-key]").forEach(tr => {
+    const v = tr.querySelector(".value");
+    rules[tr.dataset.key] = {on: tr.querySelector(".on").checked, weight: tr.querySelector(".weight").value, value: v ? v.value : ""};
+  });
+  try { await call("/tools/compliance/standard", {rules}); st("stdstatus", "Saved.", "ok"); } catch (e) { st("stdstatus", e.message, "bad"); }
+};
+
+const cls = s => s === null ? "" : s >= 90 ? "good" : s >= 70 ? "mid" : "bad";
+$("go").onclick = async () => {
+  const pick = id => [...$(id).selectedOptions].map(o => o.value).filter(Boolean);
+  const configs = $("paste").value.trim() ? [{name: "pasted config", text: $("paste").value}] : [];
+  st("status", "Checking…");
+  try {
+    last = await call("/tools/compliance/run", {project_ids: pick("projects"), backup_ids: pick("backups"), configs});
+    st("status", "");
+  } catch (e) { st("status", e.message, "bad"); return; }
+  $("avg").innerHTML = last.average === null ? "—" : `<span class="score ${cls(last.average)}">${last.average}</span>`;
+  $("worst").innerHTML = last.most_failed.length ? last.most_failed.map(([t, n]) => `<li>${esc(t)}: ${n} switch(es)</li>`).join("") : "<li>Nothing failed.</li>";
+  $("rows").innerHTML = last.switches.map(s => {
+    const fails = s.results.filter(r => r.status === "fail"), na = s.results.filter(r => r.status === "n/a");
+    return `<tr><td>${esc(s.name)}</td><td>${esc(last.names[s.vendor] || s.vendor)}</td>` +
+      `<td><span class="score ${cls(s.score)}">${s.score ?? "—"}</span></td>` +
+      `<td>${fails.length ? "<ul class='fails'>" + fails.map(r => `<li>${esc(r.title)}${r.detail ? ": " + esc(r.detail) : ""}</li>`).join("") + "</ul>" : '<span class="ok-text">All rules pass</span>'}` +
+      `${na.length ? `<div class="hint">Can't tell: ${na.map(r => esc(r.title)).join(", ")}</div>` : ""}</td></tr>`;
+  }).join("");
+  $("result").hidden = false;
+};
+
+$("csv").onclick = () => {
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const titles = [...new Set(last.switches.flatMap(s => s.results.map(r => r.title)))];
+  const lines = [["switch", "brand", "score", ...titles].map(q).join(",")];
+  for (const s of last.switches) {
+    const by = Object.fromEntries(s.results.map(r => [r.title, r.status + (r.detail ? ": " + r.detail : "")]));
+    lines.push([s.name, last.names[s.vendor] || s.vendor, s.score, ...titles.map(t => by[t] || "")].map(q).join(","));
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([lines.join("\n") + "\n"], {type: "text/csv"}));
+  a.download = "compliance-report.csv"; a.click();
+};
+load();
+{% endraw %}
+</script>
+{% endblock %}
