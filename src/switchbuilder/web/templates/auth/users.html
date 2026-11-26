@@ -101,7 +101,9 @@
           </form>
           <div class="side">
             <h3>Password</h3>
-            {% if local %}
+            {% if local and me %}
+            <p class="muted">Change your own on <a href="{{ url_for('auth.account') }}">My account</a>.</p>
+            {% elif local %}
             <form method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}" class="pwreset">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="action" value="reset">

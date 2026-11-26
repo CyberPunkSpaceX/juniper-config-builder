@@ -2,6 +2,12 @@
 {% block title %}My account · Multi-Vendor Switch Config Builder{% endblock %}
 {% block content %}
 <h1>My account</h1>
+{% if current_user['must_change'] and not (current_user['source'] and current_user['source'] != 'local') %}
+<div class="flash info" role="status"><b>Choose a new password to continue.</b> Your password was set by an admin (or is the
+  first one), so the other pages stay closed until you change it below. Your current password is the one you just signed in with.
+  Or <a href="#" onclick="document.getElementById('signout-now').submit(); return false;">sign out</a>.</div>
+<form id="signout-now" method="post" action="{{ url_for('auth.logout') }}" hidden><input type="hidden" name="csrf_token" value="{{ csrf_token }}"></form>
+{% endif %}
 <div class="cards">
 {% if current_user['source'] and current_user['source'] != 'local' %}
 <section class="panel">
