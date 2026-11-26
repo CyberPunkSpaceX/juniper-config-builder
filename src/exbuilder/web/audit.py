@@ -377,12 +377,14 @@ def api_project(pid: int):
 def api_project_config(pid: int):
     c = _api_client()
     data = json.loads(_project_row(c, pid)["data"])
-    if not clients.can_see_secrets(c):
-        data = redact.project(data)
+    # Built from the full project (a redacted one has no passwords, so it would not build), then the
+    # secrets are masked in the text for Read-only people.
     result = build(data)
     if result.errors:
         return {"errors": result.errors, "warnings": result.warnings}, 422
     text = result.hier_text if request.args.get("format") == "hierarchy" else result.set_text
+    if not clients.can_see_secrets(c):
+        text = redact.config(text)
     return Response(text, mimetype="text/plain")
 
 

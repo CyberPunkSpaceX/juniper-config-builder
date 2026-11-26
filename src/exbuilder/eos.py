@@ -252,7 +252,7 @@ def _snmp(ctx: EosCtx) -> None:
     for key in ("location", "contact"):
         if _s(s.get(key)):
             cfg.line(f"snmp-server {key} {_s(s.get(key))}")
-    for c in comms:
+    for k, c in enumerate(comms, 1):
         ctx.at("snmp.communities", c)
         name = _s(c.get("name"))
         if not re.fullmatch(r"[A-Za-z0-9_.@#%+=-]{1,64}", name):
@@ -263,7 +263,7 @@ def _snmp(ctx: EosCtx) -> None:
         clients = [cl for cl in _list(c.get("clients")) if _ip(ctx, "SNMP", f"Community {name} client", cl, allow_net=True)]
         acl = ""
         if clients:
-            acl = f" SNMP-{name.upper()}"[:65]
+            acl = f" SNMP-CLIENTS-{k}"
             body = cfg.block(f"ip access-list standard{acl}")
             for i, cl in enumerate(clients, 1):
                 body.append(f"{i * 10} permit {cl if '/' in cl else cl + '/32'}")

@@ -345,7 +345,7 @@ def _snmp(ctx: IosCtx) -> None:
     for key in ("location", "contact"):
         if _s(s.get(key)):
             cfg.line(f"snmp-server {key} {_s(s.get(key))}")
-    for c in comms:
+    for k, c in enumerate(comms, 1):
         ctx.at("snmp.communities", c)
         name = _s(c.get("name"))
         if not re.fullmatch(r"[A-Za-z0-9_.@#%+=-]{1,64}", name):
@@ -360,7 +360,7 @@ def _snmp(ctx: IosCtx) -> None:
                 clients.append(net)
         acl = ""
         if clients:
-            acl = f" SNMP-{name.upper()}"[:40]
+            acl = f" SNMP-CLIENTS-{k}"
             body = cfg.block(f"ip access-list standard{acl}")
             for net in clients:
                 body.append(f"permit host {net.network_address}" if net.prefixlen == 32

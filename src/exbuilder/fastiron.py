@@ -279,7 +279,7 @@ def _snmp(ctx: FiCtx) -> None:
     for key in ("location", "contact"):
         if _s(s.get(key)):
             cfg.line(f"snmp-server {key} {_s(s.get(key))}")
-    for c in comms:
+    for k, c in enumerate(comms, 1):
         ctx.at("snmp.communities", c)
         name = _s(c.get("name"))
         if not re.fullmatch(r"[A-Za-z0-9_.@#%+=-]{1,32}", name):
@@ -291,7 +291,7 @@ def _snmp(ctx: FiCtx) -> None:
                    if (n := _ip(ctx, "SNMP", f"Community {name} client", cl, allow_net=True)) and n.version == 4]
         acl = ""
         if clients:
-            acl = f" SNMP-{name.upper()}"[:33]
+            acl = f" SNMP-CLIENTS-{k}"
             body = cfg.block(f"ip access-list standard{acl}")
             for net in clients:
                 body.append(f"permit host {net.network_address}" if net.prefixlen == 32

@@ -133,6 +133,18 @@ def _when(ts: float) -> str:
 
 
 # ------------------------------------------------------------------ pages
+def delete_client_logs(cid: int) -> None:
+    """Drop the stored switch logs of a client that is being deleted."""
+    if not syslogd.db_path(auth.data_dir()).exists():
+        return
+    conn = syslogd.connect(auth.data_dir())
+    try:
+        conn.execute("DELETE FROM logs WHERE client_id = ?", (cid,))
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def _logs_db():
     path = syslogd.db_path(auth.data_dir())
     if not path.exists():

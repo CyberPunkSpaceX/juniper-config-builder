@@ -43,7 +43,7 @@ def test_example_builds_clean():
     assert "lacp mode active" in lag and "lacp rate fast" in lag and "dhcpv4-snooping trust" in lag
     assert "lag 1" in block(t, "interface 2/1/49")
     assert "ip helper-address 10.10.0.10" in block(t, "interface vlan 20")
-    assert "access-list SNMP-S3CRET-RO" in t and "10 permit udp 10.10.0.50/255.255.255.255 any eq 161" in t
+    assert "access-list SNMP-CLIENTS-1" in t and "10 permit udp 10.10.0.50/255.255.255.255 any eq 161" in t
     assert "plain text" in msgs(res.warnings)
 
 

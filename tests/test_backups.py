@@ -196,3 +196,10 @@ def test_client_backup_and_restore(app, admin, tmp_path):
     admin.post("/clients/2", data={"csrf_token": tok, "action": "delete", "confirm": "Copy"})
     db = sqlite3.connect(tmp_path / "users.db")
     assert db.execute("SELECT COUNT(*) FROM config_backups WHERE client_id = 2").fetchone()[0] == 0
+
+
+def test_host_of_mikrotik_export():
+    """RouterOS /export puts the section and the set line on two lines."""
+    from exbuilder.web.backups import host_of
+    assert host_of("# by RouterOS 7.16\n/system identity\nset name=crs-office-01\n") == "crs-office-01"
+    assert host_of("/system identity set name=r1") == "r1"

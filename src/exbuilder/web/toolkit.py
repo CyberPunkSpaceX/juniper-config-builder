@@ -78,7 +78,12 @@ def _template(body: dict) -> dict:
                                 (pid, c["id"], c["space"])).fetchone()
         if row is None:
             abort(400, "That project is not in this client and space.")
-        return json.loads(row["data"])
+        data = json.loads(row["data"])
+        if not clients.can_see_secrets(c):
+            # Read-only people may build from a saved project, but never see its passwords or communities.
+            from .. import redact
+            data = redact.project(data)
+        return data
     tpl = body.get("template")
     if isinstance(tpl, str):
         try:

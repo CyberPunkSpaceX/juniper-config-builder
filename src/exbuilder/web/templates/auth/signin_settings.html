@@ -22,6 +22,8 @@
   .copy { font: 12px ui-monospace, Menlo, Consolas, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; overflow-wrap: anywhere; }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
   @media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+  .grid2 > * { min-width: 0; }
+  .hint { overflow-wrap: anywhere; }
 </style>
 <h1>Sign-in settings</h1>
 <p class="hint">Let people sign in with their company account. Local accounts keep working, so you can always sign in
