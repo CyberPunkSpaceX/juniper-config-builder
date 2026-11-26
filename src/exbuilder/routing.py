@@ -18,7 +18,7 @@ COMMUNITY = re.compile(r"^(\d{1,10}:\d{1,10}|target:[\d.]+:\d+|origin:[\d.]+:\d+
 ESI = re.compile(r"^([0-9a-fA-F]{2}:){9}[0-9a-fA-F]{2}$")
 MAC = re.compile(r"^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$")
 PROTOCOLS = ("direct", "static", "ospf", "bgp", "aggregate", "evpn", "local")
-MATCHES = ("exact", "orlonger", "longer", "upto")
+MATCHES = ("exact", "orlonger", "longer", "upto", "prefix-length-range")
 EVPN_MODELS = ("EX4400", "EX4100", "EX4100-F", "EX4300-48MP")
 
 ROUTING_DEFAULTS = {
@@ -184,7 +184,7 @@ def policies(ctx) -> None:
                 continue
             mode = " ".join(parts[1:]) or "exact"
             if mode.split()[0] not in MATCHES:
-                ctx.error("Policies", f"{policy}/{term}: route filter match must be exact, orlonger, longer or upto /N.")
+                ctx.error("Policies", f"{policy}/{term}: route filter match must be exact, orlonger, longer, upto /N or prefix-length-range /N-/M.")
                 continue
             cfg.add((*base, "from"), f"route-filter {net} {mode}")
         comm = _s(t.get("community"))

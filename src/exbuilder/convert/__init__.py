@@ -16,6 +16,7 @@ import copy
 import re
 
 from .. import importer, vendors
+from .. import ports as P
 from ..generator import build
 from . import ios, portmap
 
@@ -79,6 +80,48 @@ def _iface_ref(src: str, dst: str, raw: str, move: portmap.PortMove, lags: dict)
     if len(names) == 1 and names[0] in move.map:
         return move.map[names[0]]
     return None
+
+
+# Targets whose builder writes no routed ports (and Ruckus, which has no routed LAGs): a routed port becomes
+# a VLAN with that one port in it and the address on the VLAN interface, which is how those switches route.
+NO_ROUTED_PORTS = {"extreme", "fortiswitch", "mikrotik", "unifi", "procurve"}
+NO_ROUTED_LAGS = NO_ROUTED_PORTS | {"ruckus"}
+
+
+def _routed_to_vlans(p: dict, dst: str, note) -> None:
+    rows = [(r, False) for r in p.get("ports", []) if r.get("mode") == "routed" and dst in NO_ROUTED_PORTS]
+    rows += [(r, True) for r in p.get("lags", []) if r.get("mode") == "routed" and dst in NO_ROUTED_LAGS]
+    if not rows:
+        return
+    used = {str(v.get("id")) for v in p.get("vlans", [])}
+    names = {v.get("name") for v in p.get("vlans", [])}
+    vid = 4000
+    areas = p["routing"].get("ospf", {}).get("areas", [])
+    for row, is_lag in rows:
+        vid -= 1
+        while str(vid) in used:
+            vid -= 1
+        used.add(str(vid))
+        base = re.sub(r"[^A-Za-z0-9_-]+", "-", row.get("description") or row.get("name") or "").strip("-").upper()
+        name = f"RT-{base}"[:24].rstrip("-") or f"RT-{vid}"
+        while name in names:
+            name = f"{name[:20]}-{vid}"
+        names.add(name)
+        old = row["name"] if is_lag else row.get("ports", "")
+        new = portmap.vlan_iface(dst, str(vid))
+        addr = row.get("address", "")
+        p["vlans"].append({"name": name, "id": str(vid), "description": f"Was routed {old}", "irb": addr})
+        row.update(mode="access", vlan=name, address="", vlans="", native="", edge=False)
+        for area in areas:
+            for key in ("interfaces", "passive", "p2p"):
+                area[key] = ", ".join(new if x == old else x for x in P.iface_list(area.get(key)))
+            area["metrics"] = ", ".join(
+                (f"{new} {m.rsplit(' ', 1)[1]}" if m.rsplit(" ", 1)[0] == old else m)
+                for m in [x.strip() for x in str(area.get("metrics") or "").split(",") if x.strip()])
+        what = "LAG" if is_lag else "Port"
+        note("Ports", f"{what} {old} was a routed port, which {vendors.get(dst).name} doesn't do in the builder. It "
+                      f"is now an untagged port in new VLAN {vid} ({name}), with {addr or 'its address'} on VLAN "
+                      f"interface {new}; OSPF moved with it. The neighbor sees no difference.", "check")
 
 
 def retarget(project: dict, src: str, dst: str, model: str = "", source_model: str = "") -> dict:
@@ -168,12 +211,21 @@ def retarget(project: dict, src: str, dst: str, model: str = "", source_model: s
             else:
                 costs.append(f"{new} {cost}")
         area["metrics"] = ", ".join(costs)
-        if dst != "juniper":
-            if area.get("metrics"):
-                note("OSPF", f"Area {area.get('area')}: interface costs ({area['metrics']}) are only written for Juniper; set them by hand.", "lost")
-            if area.get("ranges"):
-                note("OSPF", f"Area {area.get('area')}: area ranges ({area['ranges']}) are only written for Juniper; set them by hand.", "lost")
-            area["metrics"] = area["ranges"] = ""
+
+    _routed_to_vlans(p, dst, note)
+    for area in p["routing"].get("ospf", {}).get("areas", []) if dst != "juniper" else []:
+        if area.get("metrics"):
+            note("OSPF", f"Area {area.get('area')}: interface costs ({area['metrics']}) are only written for "
+                         "Juniper; set them by hand.", "lost")
+        if area.get("ranges"):
+            note("OSPF", f"Area {area.get('area')}: area ranges ({area['ranges']}) are only written for Juniper; "
+                         "set them by hand.", "lost")
+        area["metrics"] = area["ranges"] = ""
+    if dst == "mikrotik" and p["system"].get("mgmt_address"):
+        note("Switch", f"The management port address {p['system']['mgmt_address']} was left out: MikroTik switches "
+                       "have no separate management port. Give a VLAN an address, or name a port for management "
+                       "on the Switch tab.", "lost")
+        p["system"]["mgmt_address"] = p["system"]["mgmt_gateway"] = ""
 
     # Features the target can't do.
     def gone(feature, section, what):
