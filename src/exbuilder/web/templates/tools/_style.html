@@ -16,5 +16,7 @@ td code, p code { font-size: 12.5px; }
 .crumbs { font-size: 14px; margin-bottom: 8px; }
 .crumbs a { color: var(--accent); text-decoration: none; }
 details summary { cursor: pointer; }
+/* Phones: wide tables scroll sideways inside their box instead of widening the page. */
+@media (max-width: 700px) { main table { display: block; overflow-x: auto; } }
 .chk { display: inline-flex; gap: 6px; align-items: center; font-weight: 400; }
 </style>

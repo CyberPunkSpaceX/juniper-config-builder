@@ -63,7 +63,7 @@ HOST_RE = re.compile(r"host-name\s+\"?([\w.-]+)")
 # Other vendors: hostname X (IOS, EOS, NX-OS, OS10, Aruba, ProCurve, FastIron), set hostname X
 # (FortiSwitch), /system identity set name=X (MikroTik), configure snmp sysName X (EXOS).
 HOST_OTHER_RE = re.compile(r'^\s*(?:hostname|set hostname|configure snmp sysName)\s+"?([\w.-]+)|'
-                           r'^/system identity set name="?([\w.-]+)', re.M)
+                           r'^/system identity\s+set name="?([\w.-]+)', re.M)   # one line, or two as /export writes it
 
 
 def migrate(conn: sqlite3.Connection) -> None:

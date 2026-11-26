@@ -492,11 +492,15 @@ def settings_page():
                 flash(f"{'LDAP' if which == 'ldap' else 'OpenID Connect'} settings saved.", "ok")
         elif which == "ldap_test":
             try:
+                if not str(settings("ldap").get("url") or "").strip():
+                    raise ValueError("save the LDAP server address first")
                 flash(ldap_test(settings("ldap"), request.form.get("test_user", "").strip()), "ok")
             except Exception as exc:
                 flash(f"LDAP test failed: {exc}", "error")
         elif which == "oidc_test":
             try:
+                if not str(settings("oidc").get("issuer") or "").strip():
+                    raise ValueError("save the issuer URL first")
                 doc = discovery(settings("oidc")["issuer"])
                 flash(f"Found the provider: {doc['issuer']}.", "ok")
             except Exception as exc:

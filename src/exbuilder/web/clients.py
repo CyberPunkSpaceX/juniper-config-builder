@@ -429,11 +429,22 @@ def client_update(cid: int):
         if request.form.get("confirm", "").strip() != r["name"]:
             flash("Type the client's name exactly to delete it.", "error")
             return redirect(url_for("clients.client_page", cid=cid))
-        for table in ("projects", "maps", "client_members", "eve_labs", "eve_jobs", "config_backups", "project_reviews"):
-            db.execute(f"DELETE FROM {table} WHERE client_id = ?", (cid,))
+        tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        # Everything kept per client (newer features' tables too, some made only when first used),
+        # so no settings, tokens or schedules of a deleted client stay behind. The audit log is kept.
+        for table in ("projects", "maps", "client_members", "eve_labs", "eve_jobs", "config_backups", "project_reviews",
+                      "config_pushes", "nightly_settings", "nightly_runs", "syslog_settings", "netbox_settings",
+                      "global_layouts", "compliance_standards", "firmware_policy"):
+            if table in tables:
+                db.execute(f"DELETE FROM {table} WHERE client_id = ?", (cid,))
         db.execute("DELETE FROM clients WHERE id = ?", (cid,))
         db.commit()
         shutil.rmtree(client_folder(cid), ignore_errors=True)
+        try:   # its switch logs (the syslog server keeps them in a database of its own)
+            from . import logs
+            logs.delete_client_logs(cid)
+        except Exception:   # noqa: BLE001 - the client is gone either way; old logs expire with retention
+            log.exception("could not delete the switch logs of client %s", cid)
         audit("deleted the client with its projects, maps and config backups")
         flash(f"Client {r['name']} deleted.", "ok")
         return redirect(url_for("clients.clients_page"))

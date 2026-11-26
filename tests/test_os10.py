@@ -36,7 +36,7 @@ def test_example_builds_clean():
     assert "interface range ethernet1/1/41-1/1/46" in t and "switchport access vlan 10\n switchport trunk allowed vlan 20,40" in t
     assert "interface ethernet1/1/49\n description \"To core (member of port-channel1)\"\n no switchport\n lacp rate fast\n channel-group 1 mode active" in t
     assert "password $6$" in t and "Change-me-2026" not in t and "role sysadmin priv-lvl 15" in t
-    assert "snmp-server community s3cret-ro ro acl SNMP-S3CRET-RO" in t
+    assert "snmp-server community s3cret-ro ro acl SNMP-CLIENTS-1" in t
     assert "banner login %\nAuthorized access only.\n%" in t and t.endswith("end\n")
     assert not res.warnings, msgs(res.warnings)
 

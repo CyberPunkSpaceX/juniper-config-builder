@@ -47,7 +47,7 @@ def test_example_builds_clean():
     assert "password 5 $5$" in t and "Change-me-2026" not in t
     assert "clock timezone MST -7 0" in t and "summer time" in msgs(res.warnings)
     assert "banner motd #\nAuthorized access only.\n#" in t and t.endswith("end\n")
-    assert "snmp-server community s3cret-ro use-ipv4acl SNMP-S3CRET-RO" in t
+    assert "snmp-server community s3cret-ro use-ipv4acl SNMP-CLIENTS-1" in t
 
 
 def test_port_names():

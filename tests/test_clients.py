@@ -100,6 +100,29 @@ def test_delete_client_needs_its_name(app, admin):
     assert admin.get("/projects").json["client"] == "Default"  # falls back to a client that exists
 
 
+def test_delete_client_removes_its_settings_and_logs(app, admin):
+    """Nightly backups, log settings and stored switch logs of a deleted client go with it."""
+    from exbuilder import syslogd
+    from exbuilder.web import auth
+    _form(admin, "/clients", name="Acme")
+    _form(admin, "/clients/2/nightly", enabled="1", at_time="02:00", tz="UTC")
+    _form(admin, "/clients/2/logs", enabled="1", networks="10.77.0.0/16", keep_days="7", alert_severity="-1")
+    with app.app_context():
+        conn = syslogd.connect(auth.data_dir())
+        conn.execute("INSERT INTO logs (client_id, ts, source, host, facility, severity, tag, message) "
+                     "VALUES (2, 0, '10.77.0.5', 'sw', 1, 6, '', 'hello')")
+        conn.commit()
+        conn.close()
+    _form(admin, "/clients/2", action="delete", confirm="Acme")
+    with app.app_context():
+        db = auth.db()
+        for table in ("nightly_settings", "syslog_settings"):
+            assert db.execute(f"SELECT COUNT(*) FROM {table} WHERE client_id = 2").fetchone()[0] == 0, table
+        conn = syslogd.connect(auth.data_dir())
+        assert conn.execute("SELECT COUNT(*) FROM logs WHERE client_id = 2").fetchone()[0] == 0
+        conn.close()
+
+
 def test_ssh_settings_are_checked(app, admin, monkeypatch):
     monkeypatch.delenv("EXB_SSH_ALLOW", raising=False)
     _form(admin, "/clients/1", action="ssh", networks="8.8.8.0/24", ssh_user="")

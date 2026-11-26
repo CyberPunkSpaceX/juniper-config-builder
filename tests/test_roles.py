@@ -137,6 +137,16 @@ def test_read_only_never_sees_secrets(app, admin):
     ("set snmp community public authorization read-only", "public", "authorization read-only"),
     ("crypto key generate rsa modulus 2048", None, "crypto key generate rsa modulus 2048"),
     ("tacacs-server key MyKey", "MyKey", "tacacs-server key"),
+    # Secrets that sit later on the line, or are only called "name" (found in a full QA pass).
+    ('password manager user-name "netadmin" plaintext "Pw-2026"', "Pw-2026", 'password manager user-name "netadmin"'),
+    ('create account admin netadmin "Pw-2026"', "Pw-2026", "create account admin netadmin"),
+    ('configure snmpv2c add community readonly "s3cret-ro"', "s3cret-ro", "community readonly"),
+    ("config system snmp community\n    edit 1\n        set name \"s3cret-ro\"\n    next\nend\n"
+     "config system interface\n    edit \"vlan10\"\n        set name keep-me\n    next\nend", "s3cret-ro", "set name keep-me"),
+    ("snmp-server community s3cret-ro RO SNMP-S3CRET-RO\nip access-list standard SNMP-S3CRET-RO", "S3CRET",
+     "ip access-list standard SNMP-<hidden>"),
+    ("/snmp community\nadd name=s3cret-ro addresses=10.0.0.1/32\n/user\nadd name=bob group=full",
+     "s3cret-ro", "add name=bob group=full"),
 ])
 def test_redact_config(line, hidden, kept):
     out = redact.config(line)

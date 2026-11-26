@@ -299,7 +299,7 @@ def _snmp(ctx: CxCtx) -> None:
         cfg.line(f"snmp-server system-location {_s(s.get('location'))}")
     if _s(s.get("contact")):
         cfg.line(f"snmp-server system-contact {_s(s.get('contact'))}")
-    for c in comms:
+    for k, c in enumerate(comms, 1):
         ctx.at("snmp.communities", c)
         name = _s(c.get("name"))
         if not re.fullmatch(r"[A-Za-z0-9_.@#%+=-]{1,32}", name):
@@ -314,7 +314,7 @@ def _snmp(ctx: CxCtx) -> None:
                 clients.append(net)
         body = [f"access-level {'rw' if c.get('access') == 'read-write' else 'ro'}"]
         if clients:
-            acl = f"SNMP-{name.upper()}"[:32]
+            acl = f"SNMP-CLIENTS-{k}"
             ab = cfg.block(f"access-list ip {acl}")
             for n, net in enumerate(clients, 1):
                 ab.append(f"{n * 10} permit udp {net.network_address}/{net.netmask} any eq 161")

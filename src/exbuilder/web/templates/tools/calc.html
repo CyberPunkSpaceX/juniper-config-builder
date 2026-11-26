@@ -3,8 +3,8 @@
 {% block content %}
 {% include "tools/_style.html" %}
 <style>
-.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 16px; font-size: 14px; margin-top: 10px; }
-.kv dt { color: var(--muted); } .kv dd { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.kv { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 2px 16px; font-size: 14px; margin-top: 10px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; overflow-wrap: anywhere; font-family: ui-monospace, Menlo, Consolas, monospace; }
 table.edit input, table.edit select { padding: 4px 6px; font-size: 13px; }
 table.edit td { padding: 4px 6px; }
 .meter { height: 14px; border-radius: 7px; background: var(--border); overflow: hidden; margin: 8px 0; }

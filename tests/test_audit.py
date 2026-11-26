@@ -115,3 +115,23 @@ def test_api(app, admin):
 
 def test_hub_card(admin):
     assert "Audit log &amp; API" in admin.get("/tools/").get_data(as_text=True)
+
+
+def test_read_only_api_config_and_bulk_hide_secrets(app, admin):
+    """Found in a full QA pass: the API refused to build for Read-only people (422), and Toolkit bulk
+    builds from a saved project showed its passwords and SNMP communities to them."""
+    _bob(app, admin, role="viewer")
+    api = app.test_client()
+    me = basic("bob", "bob-password-1")
+    pid = admin.post("/projects", json={"name": "secret-sw", "data": PROJECT},
+                     headers={"X-CSRF-Token": token(admin)}).json["id"]
+    resp = api.get(f"/api/v1/projects/{pid}/config", headers=me)
+    assert resp.status_code == 200, resp.get_data(as_text=True)
+    text = resp.get_data(as_text=True)
+    assert "hostname ar-office-01" in text and "s3cret-ro" not in text and "S3CRET" not in text
+    bob = app.test_client()
+    assert login(bob, "bob", "bob-password-1").status_code == 302
+    h = {"X-CSRF-Token": token(bob)}
+    csv = "hostname,mgmt_address\nsw-a,192.168.100.50/24\n"
+    out = bob.post("/tools/bulk/run", json={"project_id": pid, "csv": csv}, headers=h).get_data(as_text=True)
+    assert "s3cret-ro" not in out and "Change-me-2026" not in out and "$6$" not in out
