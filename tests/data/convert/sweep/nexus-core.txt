@@ -1,0 +1,134 @@
+!Command: show running-config
+version 10.2(5)
+hostname NX-CORE-01
+feature ospf
+feature bgp
+feature interface-vlan
+feature lacp
+feature lldp
+feature vpc
+!
+username admin password 5 $5$KLMN$abcdefghijkl role network-admin
+username netops password 5 $5$OPQR$mnopqrstuvwx role network-operator
+ip domain-name dc.example.com
+ip name-server 10.30.0.53 use-vrf management
+!
+snmp-server community DcR0 group network-operator
+snmp-server host 10.30.0.70 traps version 2c DcR0
+ntp server 10.30.0.123 use-vrf management
+logging server 10.30.0.80 6 use-vrf management
+!
+vlan 1,100,200,300
+vlan 100
+  name SERVERS
+vlan 200
+  name STORAGE
+vlan 300
+  name DMZ
+!
+ip prefix-list PL-LOOPBACKS seq 5 permit 10.255.1.0/24 le 32
+ip prefix-list PL-DEFAULT seq 5 permit 0.0.0.0/0
+ip prefix-list PL-DC-AGG seq 5 permit 10.30.0.0/16
+ip prefix-list PL-DC-AGG seq 10 permit 10.40.0.0/16
+!
+route-map RM-CONNECTED permit 10
+  match ip address prefix-list PL-LOOPBACKS
+route-map RM-TO-WAN permit 10
+  match ip address prefix-list PL-DC-AGG
+  set community 65010:100 additive
+route-map RM-TO-WAN deny 20
+route-map RM-FROM-WAN permit 10
+  match ip address prefix-list PL-DEFAULT
+  set local-preference 150
+!
+vrf context management
+  ip route 0.0.0.0/0 10.30.255.1
+!
+interface Vlan100
+  no shutdown
+  ip address 10.30.100.2/24
+  ip router ospf 1 area 0.0.0.1
+  ip ospf passive-interface
+!
+interface Vlan200
+  no shutdown
+  ip address 10.30.200.2/24
+  ip router ospf 1 area 0.0.0.1
+  ip ospf passive-interface
+!
+interface port-channel20
+  description to SRV-LEAF-1
+  switchport mode trunk
+  switchport trunk allowed vlan 100,200
+  spanning-tree port type network
+!
+interface Ethernet1/1
+  description WAN-RTR-1
+  no switchport
+  ip address 172.31.0.1/31
+  ip ospf network point-to-point
+  ip ospf cost 20
+  ip router ospf 1 area 0.0.0.0
+  no shutdown
+!
+interface Ethernet1/2
+  description WAN-RTR-2
+  no switchport
+  ip address 172.31.0.3/31
+  ip ospf network point-to-point
+  ip router ospf 1 area 0.0.0.0
+  no shutdown
+!
+interface Ethernet1/10
+  description SRV-LEAF-1 e1/49
+  switchport mode trunk
+  switchport trunk allowed vlan 100,200
+  channel-group 20 mode active
+!
+interface Ethernet1/11
+  description SRV-LEAF-1 e1/50
+  switchport mode trunk
+  switchport trunk allowed vlan 100,200
+  channel-group 20 mode active
+!
+interface Ethernet1/20
+  description DMZ firewall
+  switchport mode access
+  switchport access vlan 300
+  spanning-tree port type edge
+!
+interface mgmt0
+  vrf member management
+  ip address 10.30.255.10/24
+!
+interface loopback0
+  ip address 10.255.1.1/32
+  ip router ospf 1 area 0.0.0.0
+!
+router ospf 1
+  router-id 10.255.1.1
+  area 0.0.0.1 range 10.30.0.0/16
+  redistribute direct route-map RM-CONNECTED
+  log-adjacency-changes
+!
+router bgp 65010
+  router-id 10.255.1.1
+  address-family ipv4 unicast
+    network 10.30.0.0/16
+    network 10.40.0.0/16
+    maximum-paths 2
+  neighbor 172.31.0.0
+    remote-as 65000
+    description WAN-RTR-1
+    password 3 a667d47acc18ea6b
+    address-family ipv4 unicast
+      route-map RM-FROM-WAN in
+      route-map RM-TO-WAN out
+      send-community
+  neighbor 172.31.0.2
+    remote-as 65000
+    description WAN-RTR-2
+    address-family ipv4 unicast
+      route-map RM-FROM-WAN in
+      route-map RM-TO-WAN out
+!

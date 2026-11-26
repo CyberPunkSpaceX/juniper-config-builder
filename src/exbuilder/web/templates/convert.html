@@ -216,7 +216,7 @@ function render(r) {
   section(rep, "Check these", [...r.changes.filter(c => c.level === "check").map(c => `${c.section}: ${c.text}`),
                                ...r.notes], "check", true);
   section(rep, "Changed on the way", r.changes.filter(c => c.level === "changed").map(c => `${c.section}: ${c.text}`), "", true);
-  section(rep, "Lines not read from the old config", r.not_read, "lost", r.not_read.length <= 12);
+  section(rep, "Not understood: check these lines by hand", r.not_read, "lost", r.not_read.length <= 12);
   section(rep, "Builder warnings", r.warnings.map(w => `${w.section}: ${w.message || w.text || ""}`), "", true);
   section(rep, "Port map (old → new)", r.ports.map(p => ({text: `${p.from} → ${p.to || "no place on the new switch"}`,
                                                           cls: p.to ? "" : "lost"})), "", false);

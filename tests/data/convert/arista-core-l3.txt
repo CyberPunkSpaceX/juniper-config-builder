@@ -1,0 +1,86 @@
+hostname SW-CORE-01
+!
+username netadmin privilege 15 role network-admin secret sha512 $6$abc$xyz
+!
+vlan 10
+   name USERS
+vlan 99
+   name MGMT
+!
+interface Ethernet1
+   description Workstation - Accounting
+   switchport access vlan 10
+!
+interface Ethernet3
+   description Routed P2P Link to Edge Router R1
+   no switchport
+   ip address 172.16.1.1/30
+   ip ospf network point-to-point
+   ip ospf area 0.0.0.0
+!
+interface Ethernet4
+   description Routed Transit Link to ISP Peering
+   no switchport
+   ip address 198.51.100.2/30
+   ip ospf cost 10
+   ip ospf area 0.0.0.0
+!
+interface Loopback0
+   ip address 10.255.255.1/32
+   ip ospf area 0.0.0.0
+!
+interface Vlan99
+   ip address 192.168.99.2/24
+   ip ospf area 0.0.0.10
+!
+ip access-list standard ACL-SSH-MGMT
+   10 permit 192.168.99.0/24
+   20 permit 10.255.255.0/24
+   30 deny any
+!
+ip access-list standard ACL-OSPF-REDIST
+   10 permit 192.168.99.0/24
+!
+ip prefix-list PL-OUT-ADVERTISE
+   seq 10 permit 10.255.255.1/32
+   seq 20 permit 192.168.99.0/24
+!
+ip prefix-list PL-IN-DEFAULT
+   seq 10 permit 0.0.0.0/0
+!
+route-map RM-BGP-IN-ISP permit 10
+   match ip address prefix-list PL-IN-DEFAULT
+   set local-preference 200
+!
+route-map RM-BGP-OUT-ISP permit 10
+   match ip address prefix-list PL-OUT-ADVERTISE
+   set metric 20
+!
+route-map RM-OSPF-TO-BGP permit 10
+   match ip address access-list ACL-OSPF-REDIST
+   set metric 50
+!
+management ssh
+   ip access-group ACL-SSH-MGMT in
+!
+ip routing
+!
+router ospf 1
+   router-id 10.255.255.1
+   passive-interface Vlan99
+   area 0.0.0.10 range 192.168.99.0/24
+   max-lsa 12000
+   redistribute bgp route-map RM-OSPF-TO-BGP
+!
+router bgp 65001
+   router-id 10.255.255.1
+   maximum-paths 4
+   neighbor 198.51.100.1 remote-as 65100
+   neighbor 198.51.100.1 description ISP-Edge-Peer
+   neighbor 198.51.100.1 route-map RM-BGP-IN-ISP in
+   neighbor 198.51.100.1 route-map RM-BGP-OUT-ISP out
+   network 10.255.255.1/32
+   network 192.168.99.0/24
+   redistribute ospf route-map RM-OSPF-TO-BGP
+!
+end
