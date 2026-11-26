@@ -8,7 +8,7 @@ projects, maps and backups are kept apart.</p>
 {% if my_clients|length > 8 %}
 <form class="field" method="post" action="{{ url_for('clients.select') }}" style="max-width: 360px">
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <input type="hidden" name="next" value="{{ url_for('index') }}">
+  <input type="hidden" name="next" value="{{ next_url or url_for('index') }}">
   <label for="pick-list">Client</label>
   <select id="pick-list" name="client_id" onchange="this.form.submit()">
     <option value="">Choose…</option>
@@ -22,7 +22,7 @@ projects, maps and backups are kept apart.</p>
   <form method="post" action="{{ url_for('clients.select') }}">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="client_id" value="{{ c.id }}">
-    <input type="hidden" name="next" value="{{ url_for('index') }}">
+    <input type="hidden" name="next" value="{{ next_url or url_for('index') }}">
     <button class="card" type="submit" data-client="{{ c.id }}">
       <span class="icon initials" aria-hidden="true">{{ c.name[:2]|upper }}</span>
       <h2>{{ c.name }}</h2>

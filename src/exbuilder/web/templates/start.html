@@ -25,6 +25,12 @@ config from one switch brand into another and saves it in a client's Lab.</p>
     </button>
   </form>
   {% endfor %}
+  <a class="card space-global" href="{{ url_for('overview.global_page') }}" data-space="global">
+    <span class="icon" aria-hidden="true">&#127760;</span>
+    <h2>Global</h2>
+    <span class="muted">A client's whole network on one page: every switch in a diagram you can click, a list to jump
+      to one, and each switch's history of changes (who changed what, and when).</span>
+  </a>
   <a class="card space-convert" href="{{ url_for('converter.page') }}" data-space="convert">
     <span class="icon" aria-hidden="true">&#8644;</span>
     <h2>Converter</h2>

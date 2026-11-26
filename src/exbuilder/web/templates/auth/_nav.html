@@ -4,6 +4,7 @@
   <a class="brand" href="{{ url_for('clients.start_page') }}" title="Home: pick Production, Lab or the converter, then the client"><img class="logo" src="{{ url_for('static', filename='logo.png') }}" alt="CPSX">Multi-Vendor Switch Config Builder</a>
   <a href="{{ url_for('clients.start_page') }}"{% if request.endpoint == 'clients.start_page' %} aria-current="page"{% endif %}>Home</a>
   <a href="{{ url_for('index') }}">Vendors</a>
+  {% if current_client %}<a href="{{ url_for('overview.global_page') }}"{% if request.blueprint == 'overview' %} aria-current="page"{% endif %} title="All of the client's switches on one page">Global</a>{% endif %}
   <a href="{{ url_for('converter.page') }}">Converter</a>
   {% if current_client %}<a href="{{ url_for('logs.logs_page') }}"{% if request.endpoint == 'logs.logs_page' %} aria-current="page"{% endif %}>Logs</a>{% endif %}
   <a href="{{ url_for('toolkit.hub') }}"{% if request.blueprint == 'toolkit' %} aria-current="page"{% endif %}>Toolkit</a>
