@@ -28,6 +28,8 @@ a { color: var(--accent); }
 .tabs .count { float: right; color: var(--muted); font-weight: 400; font-size: 12px; }
 .tabs .bad { color: var(--bad); }
 .tabs button.has-problem { color: var(--bad); }
+.tabs .warn { color: var(--warn, #d97706); }
+.tabs button.has-warning { color: var(--warn, #d97706); }
 .problem[data-bind] { border-color: var(--bad) !important; box-shadow: 0 0 0 2px rgba(220, 38, 38, .25); background: rgba(220, 38, 38, .06); }
 .field.problem > label, .rowfield.problem > label { color: var(--bad); }
 .field.problem > label::after, .rowfield.problem > label::after { content: " ⚠"; }
@@ -1557,12 +1559,16 @@ let activeTab = "Switch";
 function updateTabs() {
   const nav = document.getElementById("tabs");
   const msgs = result ? result.errors : [];
+  const warns = result ? result.warnings : [];
   const button = t => {
     const bad = msgs.filter(m => TAB_SECTION[t].includes(m.section)).length;
+    const warn = bad ? 0 : warns.filter(m => TAB_SECTION[t].includes(m.section)).length;
     let count = "";
     if (t === "VLANs") count = state.vlans.length; else if (t === "Ports") count = state.ports.length; else if (t === "LAGs") count = state.lags.length;
-    const cls = [t === activeTab ? "active" : "", bad ? "has-problem" : "", ADVANCED_TABS.includes(t) ? "advtab" : ""].join(" ").trim();
-    return `<button type="button" data-tabbtn="${t}" class="${cls}" title="${bad ? bad + " to fix on this tab" : ""}">${esc(t)}<span class="count ${bad ? "bad" : ""}">${bad ? bad + " ⚠" : (count || "")}</span></button>`;
+    const cls = [t === activeTab ? "active" : "", bad ? "has-problem" : "", warn ? "has-warning" : "", ADVANCED_TABS.includes(t) ? "advtab" : ""].join(" ").trim();
+    const title = bad ? `${bad} error${bad > 1 ? "s" : ""} to fix on this tab` : warn ? `${warn} warning${warn > 1 ? "s" : ""} to review on this tab` : "";
+    const badge = bad ? `<span class="count bad">${bad} ⚠</span>` : warn ? `<span class="count warn">${warn} !</span>` : `<span class="count">${count || ""}</span>`;
+    return `<button type="button" data-tabbtn="${t}" class="${cls}" title="${title}">${esc(t)}${badge}</button>`;
   };
   nav.innerHTML = TAB_GROUPS.map(([head, tabs]) => {
     const adv = tabs === ADVANCED_TABS;
@@ -1813,7 +1819,7 @@ function confirmReplace() {
 async function api(url, body) {
   const opts = body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)};
   const resp = await fetch(url, opts); const data = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(data.error || resp.statusText);
+  if (!resp.ok) { const err = new Error(data.error || resp.statusText); err.data = data; throw err; }
   return data;
 }
 async function refreshProjects() {
@@ -1883,7 +1889,18 @@ document.getElementById("plist").addEventListener("click", async ev => {
     const note = window.prompt(`Ask for approval to put "${b.dataset.name}" into Production. What was tested? (optional)`, "");
     if (note === null) return;
     try { await api("promote/request", {project_id: Number(b.dataset.ask), note}); setStatus(`Asked for approval of ${b.dataset.name}.`, "ok"); }
-    catch (e) { setStatus(e.message, "bad"); }
+    catch (e) {
+      setStatus(e.message, "bad");
+      const d = e.data || {};
+      if (d.errors && d.errors.length && d.project_id) {
+        const list = d.errors.map(m => `- ${m.section}: ${m.message}`).join("\n");
+        if (window.confirm(`${d.name} has ${d.errors.length} error${d.errors.length > 1 ? "s" : ""} to fix before it can be approved:\n\n${list}\n\nOpen it now? The tabs with problems are marked in red on the left.`) && confirmReplace()) {
+          const p = await api("projects/" + d.project_id); load(p.data); await generate();
+          const first = d.errors[0]; gotoProblem(first.section, first.field, first.row);
+          setStatus(`Opened ${p.name}. Fix the ${d.errors.length} error${d.errors.length > 1 ? "s" : ""} marked in red, click "Save to ${CLIENT ? CLIENT.name : "the client"}", then ask for approval again.`, "bad");
+        }
+      }
+    }
     refreshReviews(); return;
   }
   if (b.dataset.del && window.confirm(`Delete the saved project "${b.dataset.name}"?`)) { await api(`projects/${b.dataset.del}/delete`, {}); refreshProjects(); }
