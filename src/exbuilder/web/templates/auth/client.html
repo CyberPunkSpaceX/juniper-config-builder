@@ -52,6 +52,24 @@
   </table></div>
 </section>
 
+<section class="panel" id="approvals">
+  <h2>Lab to Production approvals</h2>
+  {% set approvers = approvers_list %}
+  <p class="hint">People who can approve: {{ approvers|join(', ') or 'nobody yet' }}.
+    {% if c['self_approve'] %}Admins may approve their own requests.
+    {% elif approvers|length > 1 %}Because more than one person can approve, nobody approves their own request.
+    {% else %}With only one admin, that admin approves their own requests.{% endif %}</p>
+  {% if server_admin %}
+  <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="action" value="approvals">
+    <label><input type="checkbox" name="self_approve" value="1" {% if c['self_approve'] %}checked{% endif %}>
+      Let admins approve their own requests (for one-person teams)</label>
+    <button class="small" type="submit">Save</button>
+  </form>
+  {% endif %}
+</section>
+
 <section class="panel" id="ssh">
   <h2>Fetching configs over SSH</h2>
   {% if ssh_off %}<p class="flash error">SSH fetch is turned off on this server (EXB_SSH_DISABLE).</p>{% endif %}

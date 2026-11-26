@@ -177,7 +177,7 @@ through an approval:
    frozen as a snapshot and must build with no errors.
 2. A client admin opens the snapshot and clicks **Approve** or **Reject** (a
    reason is required). If the client has another admin (server admins count),
-   nobody approves their own request.
+   nobody approves their own request, unless a Super Admin ticks "Let admins approve their own requests" on the client page.
 3. A client admin clicks **Promote to Production**. The approved snapshot is
    copied into Production under the same name. If the Lab project changed after
    approval, it must be approved again. A Production project with that name is
