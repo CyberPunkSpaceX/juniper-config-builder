@@ -23,8 +23,25 @@
   .clientpick { display: flex; flex-wrap: wrap; gap: 2px 16px; margin: 4px 0 0 22px; }
   .clientpick label { display: inline-block; }
   .levels { margin: 0 0 6px; padding-left: 18px; }
-  details.edit summary { cursor: pointer; color: var(--accent, inherit); }
-  @media (max-width: 640px) { .access { grid-template-columns: 1fr; } }
+  table.users { width: 100%; table-layout: auto; }
+  table.users td { vertical-align: middle; }
+  table.users .right { text-align: right; white-space: nowrap; }
+  .small-text { font-size: 12px; }
+  tr.editrow[hidden] { display: none !important; }
+  tr.editrow > td { background: var(--bg); padding: 14px 16px; }
+  .manage { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); gap: 24px; }
+  .manage h3 { margin: 0 0 8px; font-size: 14px; }
+  .manage .side h3 + * { margin-bottom: 8px; }
+  .manage .side h3:not(:first-child) { margin-top: 16px; }
+  .pwreset { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .pwreset input { flex: 1 1 160px; min-width: 0; }
+  @media (max-width: 760px) {
+    .access, .manage { grid-template-columns: 1fr; }
+    table.users thead { display: none; }
+    table.users tr:not(.editrow) td { display: inline-block; border: 0; padding: 4px 8px 4px 0; }
+    table.users tbody { display: block; border-bottom: 1px solid var(--border); padding: 6px 0; }
+    table.users tr, table.users tr.editrow > td { display: block; }
+  }
 </style>
 <h1>Users</h1>
 <p class="hint">People can also sign in with LDAP / Active Directory, OpenID Connect (Entra ID, Google, Okta, Authentik) or SAML:
@@ -45,72 +62,81 @@
       <input id="np" type="password" name="password" required autocomplete="new-password"></div>
   </div>
   {{ access_fields("new", {"level": "editor", "scope": "some", "clients": []}) }}
-  <div style="margin-top:10px"><button type="submit">Add user</button></div>
   <label style="margin-top:10px; font-weight:400"><input type="checkbox" name="must_change" value="1" checked>
     Ask them to choose a new password when they first sign in</label>
+  <div style="margin-top:10px"><button type="submit">Add user</button></div>
 </form>
 
-<section class="panel scroll">
-  <table>
-    <tr><th>User</th><th>Access</th><th>Status</th><th>2FA</th><th>Last sign-in</th><th>Reset password</th><th></th></tr>
+<section class="panel">
+  <table class="users">
+    <thead><tr><th>User</th><th>Access</th><th>Status</th><th>2FA</th><th>Last sign-in</th><th></th></tr></thead>
     {% for u in users %}
     {% set me = u['id'] == current_user['id'] %}
+    {% set local = not u['source'] or u['source'] == 'local' %}
+    <tbody>
     <tr>
       <td><b>{{ u['username'] }}</b>{% if me %} <span class="muted">(you)</span>{% endif %}
-        {% if u['source'] and u['source'] != 'local' %}<span class="badge">{{ sources[u['source']] }}</span>{% endif %}
-        <div class="muted" style="font-size:12px">added {{ u['created_at'] }}</div></td>
-      <td style="min-width:260px">
-        {{ access[u['id']].text }}
-        <details class="edit"><summary>Change</summary>
-        <form method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="access">
-          {{ access_fields("u" ~ u['id'], access[u['id']]) }}
-          <button class="small" style="margin-top:6px">Save access</button>
-        </form>
-        </details>
-      </td>
+        {% if not local %}<span class="badge">{{ sources[u['source']] }}</span>{% endif %}
+        <div class="muted small-text">added {{ u['created_at'] }}</div></td>
+      <td>{{ access[u['id']].text }}</td>
       <td>
         <span class="badge {{ 'on' if u['active'] else 'off' }}">{{ 'active' if u['active'] else 'disabled' }}</span>
         {% if u['must_change'] %}<span class="badge">must change password</span>{% endif %}
       </td>
-      <td>
-        {% if u['totp_secret'] %}<span class="badge on">on</span>
-        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
-              onsubmit="return confirm('Reset two-factor sign-in for {{ u['username'] }}?')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="reset2fa">
-          <button class="small secondary">Reset</button>
-        </form>
-        {% else %}<span class="badge">off</span>{% endif %}
-      </td>
+      <td>{% if u['totp_secret'] %}<span class="badge on">on</span>{% else %}<span class="badge">off</span>{% endif %}</td>
       <td class="muted">{{ u['last_login'] or 'never' }}</td>
-      <td>
-        {% if u['source'] and u['source'] != 'local' %}<span class="muted">set in the directory</span>{% else %}
-        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="reset">
-          <input type="password" name="password" placeholder="new password" required autocomplete="new-password"
-                 aria-label="New password for {{ u['username'] }}">
-          <button class="small secondary">Reset</button>
-        </form>{% endif %}
-      </td>
-      <td>
-        {% if not me %}
-        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="toggle">
-          <button class="small secondary">{{ 'Disable' if u['active'] else 'Enable' }}</button>
-        </form>
-        <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
-              onsubmit="return confirm('Delete {{ u['username'] }}?')">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <input type="hidden" name="action" value="delete">
-          <button class="small danger">Delete</button>
-        </form>
-        {% endif %}
+      <td class="right"><button class="small secondary" type="button" aria-expanded="false" aria-controls="edit-{{ u['id'] }}"
+          onclick="const r = document.getElementById('edit-{{ u['id'] }}'); r.hidden = !r.hidden; this.setAttribute('aria-expanded', !r.hidden); this.textContent = r.hidden ? 'Manage' : 'Close';">Manage</button></td>
+    </tr>
+    <tr class="editrow" id="edit-{{ u['id'] }}" hidden>
+      <td colspan="6">
+        <div class="manage">
+          <form method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <input type="hidden" name="action" value="access">
+            <h3>Access</h3>
+            {% if not local %}<p class="hint">Set from their directory groups at every sign-in when a group rule matches.</p>{% endif %}
+            {{ access_fields("u" ~ u['id'], access[u['id']]) }}
+            <button class="small" style="margin-top:10px">Save access</button>
+          </form>
+          <div class="side">
+            <h3>Password</h3>
+            {% if local %}
+            <form method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}" class="pwreset">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="reset">
+              <input type="password" name="password" placeholder="new password" required autocomplete="new-password"
+                     aria-label="New password for {{ u['username'] }}">
+              <button class="small secondary">Reset password</button>
+            </form>
+            {% else %}<p class="muted">Set in the directory.</p>{% endif %}
+            {% if u['totp_secret'] %}
+            <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
+                  onsubmit="return confirm('Reset two-factor sign-in for {{ u['username'] }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="reset2fa">
+              <button class="small secondary">Reset 2FA</button>
+            </form>
+            {% endif %}
+            {% if not me %}
+            <h3>Account</h3>
+            <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="toggle">
+              <button class="small secondary">{{ 'Disable' if u['active'] else 'Enable' }}</button>
+            </form>
+            <form class="inline" method="post" action="{{ url_for('auth.users_update', uid=u['id']) }}"
+                  onsubmit="return confirm('Delete {{ u['username'] }}?')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="action" value="delete">
+              <button class="small danger">Delete</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
       </td>
     </tr>
+    </tbody>
     {% endfor %}
   </table>
 </section>
