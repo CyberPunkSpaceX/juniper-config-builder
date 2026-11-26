@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import neighbors as N
+from switchbuilder import neighbors as N
 
 DATA = Path(__file__).parent / "data" / "neighbors"
 

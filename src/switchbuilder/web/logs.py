@@ -26,7 +26,7 @@ from .. import notify, sshfetch, syslogd
 from . import auth, clients
 
 bp = Blueprint("logs", __name__, template_folder="templates")
-log = logging.getLogger("exbuilder.logs")
+log = logging.getLogger("switchbuilder.logs")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS syslog_settings (

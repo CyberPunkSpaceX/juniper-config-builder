@@ -17,7 +17,7 @@ from ..convert import portmap
 from . import auth, clients
 
 bp = Blueprint("converter", __name__)
-log = logging.getLogger("exbuilder.converter")
+log = logging.getLogger("switchbuilder.converter")
 MAX_TEXT = 1_500_000
 MAX_PROJECT_BYTES = 512 * 1024
 

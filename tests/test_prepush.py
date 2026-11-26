@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import prepush
+from switchbuilder import prepush
 
-BASE = json.loads((Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json").read_text())
+BASE = json.loads((Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json").read_text())
 
 
 def _pair():

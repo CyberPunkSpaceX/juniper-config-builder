@@ -5,8 +5,8 @@ import pytest
 
 pytest.importorskip("openpyxl")
 
-from exbuilder import xlsx  # noqa: E402
-from exbuilder.generator import build  # noqa: E402
+from switchbuilder import xlsx  # noqa: E402
+from switchbuilder.generator import build  # noqa: E402
 
 EX = Path(__file__).parent.parent / "examples"
 

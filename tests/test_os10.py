@@ -3,10 +3,10 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import os10_models, ports
-from exbuilder.generator import build
+from switchbuilder import os10_models, ports
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "dell-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "dell-office.json"
 
 
 def base(**over):

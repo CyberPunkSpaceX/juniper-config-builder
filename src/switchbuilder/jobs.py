@@ -1,4 +1,4 @@
-"""The background jobs service: ``exbuilder jobs``.
+"""The background jobs service: ``switchbuilder jobs``.
 
 Runs next to the web service, on the same data volume, as its own process (the
 web workers come and go, so they cannot keep a schedule or a listening port):
@@ -19,7 +19,7 @@ import sqlite3
 import threading
 import time
 
-log = logging.getLogger("exbuilder.jobs")
+log = logging.getLogger("switchbuilder.jobs")
 TICK = 30
 
 

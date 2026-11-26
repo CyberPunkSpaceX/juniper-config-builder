@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from exbuilder import eos_models, ports
-from exbuilder.generator import build
+from switchbuilder import eos_models, ports
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "arista-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "arista-office.json"
 
 
 def base(**over):

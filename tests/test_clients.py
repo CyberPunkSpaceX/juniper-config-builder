@@ -102,8 +102,8 @@ def test_delete_client_needs_its_name(app, admin):
 
 def test_delete_client_removes_its_settings_and_logs(app, admin):
     """Nightly backups, log settings and stored switch logs of a deleted client go with it."""
-    from exbuilder import syslogd
-    from exbuilder.web import auth
+    from switchbuilder import syslogd
+    from switchbuilder.web import auth
     _form(admin, "/clients", name="Acme")
     _form(admin, "/clients/2/nightly", enabled="1", at_time="02:00", tz="UTC")
     _form(admin, "/clients/2/logs", enabled="1", networks="10.77.0.0/16", keep_days="7", alert_severity="-1")
@@ -154,7 +154,7 @@ def test_migration_from_before_clients(monkeypatch, tmp_path):
     conn.close()
     (tmp_path / "ssh_known_hosts").write_text("10.0.0.1 ssh-ed25519 AAAA\n")
     monkeypatch.setenv("EXB_DATA_DIR", str(tmp_path))
-    from exbuilder.web import create_app
+    from switchbuilder.web import create_app
     application = create_app()
     application.testing = True
     bob = application.test_client()
@@ -210,7 +210,7 @@ def test_lab_and_production_keep_their_own_projects(app, admin):
 
 
 def test_projects_from_before_spaces_move_to_production(tmp_path):
-    from exbuilder.web import clients
+    from switchbuilder.web import clients
     conn = sqlite3.connect(tmp_path / "old.db")
     conn.executescript("""
         CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id INTEGER NOT NULL, name TEXT NOT NULL,

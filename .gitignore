@@ -9,4 +9,4 @@ __pycache__/
 *.conf
 /projects/
 !tests/data/*.conf
-!src/exbuilder/map_examples/*.conf
+!src/switchbuilder/map_examples/*.conf

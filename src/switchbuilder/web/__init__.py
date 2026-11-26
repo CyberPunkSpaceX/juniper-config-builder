@@ -247,7 +247,7 @@ def create_app() -> Flask:
     @app.get("/map/example")
     def network_map_example():
         from importlib import resources
-        folder = resources.files("exbuilder") / "map_examples"
+        folder = resources.files("switchbuilder") / "map_examples"
         files = sorted((f for f in folder.iterdir() if f.name.endswith(".conf")), key=lambda f: f.name)
         files.sort(key=lambda f: not f.name.startswith("core"))
         return {"files": [{"name": f.name[:-5], "text": f.read_text()} for f in files]}

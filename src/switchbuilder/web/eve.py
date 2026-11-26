@@ -21,7 +21,7 @@ from .. import cryptpw, eveng, evelab
 from . import auth, clients
 
 bp = Blueprint("eve", __name__)
-log = logging.getLogger("exbuilder.eve")
+log = logging.getLogger("switchbuilder.eve")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS eve_labs (

@@ -14,7 +14,7 @@ pytest.importorskip("signxml")
 
 from test_auth import app, admin, csrf, login  # noqa: F401,E402
 
-from exbuilder.web import saml, sso  # noqa: E402
+from switchbuilder.web import saml, sso  # noqa: E402
 
 
 def _settings(admin, **data):
@@ -22,13 +22,13 @@ def _settings(admin, **data):
 
 
 def _db_user(app, username):
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
     with app.app_context():
         return dict(auth.db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone() or {})
 
 
 def _access(app, username):
-    from exbuilder.web import auth
+    from switchbuilder.web import auth
     with app.app_context():
         return auth.access_of(_db_user(app, username)["id"])["text"]
 
@@ -56,7 +56,7 @@ def test_settings_are_checked(app, admin):
                   bind_password="svc-pass", rules="Admins = superadmin")
     assert b"LDAP settings saved" in r.data
     with app.app_context():
-        from exbuilder.web import auth
+        from switchbuilder.web import auth
         raw = auth.db().execute("SELECT data FROM sso_settings WHERE name = 'ldap'").fetchone()[0]
         assert "svc-pass" not in raw                          # stored encrypted
         assert sso.settings("ldap")["bind_password"] == "svc-pass"
@@ -70,7 +70,7 @@ def test_settings_are_checked(app, admin):
 def test_group_rules(app, admin):
     admin.post("/clients", data={"csrf_token": csrf(admin, "/clients"), "name": "Acme"})
     with app.test_request_context():
-        from exbuilder.web import auth
+        from switchbuilder.web import auth
         auth.db()  # noqa
         sso.save_settings("ldap", {**sso.DEFAULTS["ldap"], "rules": "# comment\nCN=NetAdmins,OU=G,DC=x = superadmin\n"
                                    "Eng = configurator @ all\nHelp = readonly @ Acme\nAcmeAdm = admin @ Acme"})

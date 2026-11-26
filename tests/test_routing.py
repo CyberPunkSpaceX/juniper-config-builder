@@ -1,8 +1,8 @@
 import json
 from pathlib import Path
 
-from exbuilder.cryptpw import sha512_crypt
-from exbuilder.generator import build
+from switchbuilder.cryptpw import sha512_crypt
+from switchbuilder.generator import build
 
 EX = Path(__file__).parent.parent / "examples"
 HASH = sha512_crypt("Juniper123!", "fixedsalt")

@@ -10,9 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import eveng
+from switchbuilder import eveng
 
-EXAMPLES = Path(__file__).parent.parent / "src" / "exbuilder" / "map_examples"
+EXAMPLES = Path(__file__).parent.parent / "src" / "switchbuilder" / "map_examples"
 
 
 def example_items():
@@ -188,7 +188,7 @@ class FakeConsole:
 
 
 def test_console_push_and_pull():
-    from exbuilder import cryptpw
+    from switchbuilder import cryptpw
     box = {}
     con_srv = FakeConsole(box)
     try:
@@ -354,7 +354,7 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
     pytest.importorskip("flask")
     from test_auth import ADMIN, csrf, login
     from test_builder_web import token
-    from exbuilder.web import create_app
+    from switchbuilder.web import create_app
     monkeypatch.setenv("EXB_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EXB_USERNAME", ADMIN[0])
     monkeypatch.setenv("EXB_PASSWORD", ADMIN[1])
@@ -393,7 +393,7 @@ def test_build_and_pull_a_lab_from_the_web(monkeypatch, tmp_path):
         fake.box["lab"] = None   # set below, once the job made the lab password
         jid = c.post("/eve/labs", json=body, headers=hdr).json["job"]
         # The fake consoles check the lab password against the hash the job put in the config.
-        from exbuilder import cryptpw
+        from switchbuilder import cryptpw
 
         def check(pw):
             for con in fake.consoles.values():

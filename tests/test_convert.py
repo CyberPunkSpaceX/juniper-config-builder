@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import convert, vendors
-from exbuilder.convert import ios, portmap
+from switchbuilder import convert, vendors
+from switchbuilder.convert import ios, portmap
 
 DATA = Path(__file__).parent / "data"
 CISCO = (DATA / "convert" / "cisco-c9300.txt").read_text()
@@ -102,7 +102,7 @@ def test_unknown_or_unready_source():
 
 
 def test_builder_output_reads_back():
-    from exbuilder.generator import build
+    from switchbuilder.generator import build
     p = json.loads((Path(convert.__file__).parent.parent / "vendor_examples" / "cisco-office.json").read_text())
     r = convert.convert(build(p).to_dict()["set"], "cisco", "juniper")
     assert r["stats"]["vlans"] == 5 and r["stats"]["lags"] == 1
@@ -179,7 +179,7 @@ def test_converter_refuses_hidden_lines():
     assert any("control character" in e["message"] for e in out["errors"])
 # ------------------------------------------------------------------ stage 2: Arista, Nexus, Dell
 def _example_text(vendor):
-    from exbuilder.generator import build
+    from switchbuilder.generator import build
     p = json.loads((Path(convert.__file__).parent.parent / "vendor_examples" / f"{vendor}-office.json").read_text())
     return p, build(p).to_dict()["set"]
 

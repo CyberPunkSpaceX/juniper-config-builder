@@ -3,11 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import nxos_models, ports
-from exbuilder.cryptpw import sha256_crypt
-from exbuilder.generator import build
+from switchbuilder import nxos_models, ports
+from switchbuilder.cryptpw import sha256_crypt
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "nexus-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "nexus-office.json"
 
 
 def base(**over):

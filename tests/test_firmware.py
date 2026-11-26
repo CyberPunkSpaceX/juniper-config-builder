@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from exbuilder import firmware as F
+from switchbuilder import firmware as F
 
-ROOT = Path(__file__).parent.parent / "src" / "exbuilder"
+ROOT = Path(__file__).parent.parent / "src" / "switchbuilder"
 
 
 @pytest.mark.parametrize("text, want", [
@@ -72,7 +72,7 @@ def test_web_firmware(app, admin):
     assert "(none yet)" in admin.get("/tools/firmware").get_data(as_text=True)
     junos = (ROOT / "map_examples" / "core-sw1.conf").read_text()
     with app.app_context():
-        from exbuilder.web import auth, backups
+        from switchbuilder.web import auth, backups
         backups.store(auth.db(), 1, [{"name": "core-sw1", "text": junos}], "upload", "admin")
     ver = F.detect(junos)[1]
     assert ver

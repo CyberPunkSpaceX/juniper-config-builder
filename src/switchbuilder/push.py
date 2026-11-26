@@ -34,7 +34,7 @@ from pathlib import Path
 
 from . import sshfetch
 
-log = logging.getLogger("exbuilder.push")
+log = logging.getLogger("switchbuilder.push")
 
 MIN_MINUTES, MAX_MINUTES, DEFAULT_MINUTES = 1, 60, 10
 MAX_CONFIG = 2_000_000

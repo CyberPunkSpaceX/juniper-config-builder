@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 
-from exbuilder import aoscx, aoscx_models
-from exbuilder.generator import build
+from switchbuilder import aoscx, aoscx_models
+from switchbuilder.generator import build
 
-EXAMPLE = Path(__file__).parent.parent / "src" / "exbuilder" / "vendor_examples" / "aruba-office.json"
+EXAMPLE = Path(__file__).parent.parent / "src" / "switchbuilder" / "vendor_examples" / "aruba-office.json"
 
 
 def base(**over):

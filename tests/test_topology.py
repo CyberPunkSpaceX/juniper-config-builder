@@ -1,9 +1,9 @@
 from pathlib import Path
 
-from exbuilder import topology as T
-from exbuilder.generator import build
+from switchbuilder import topology as T
+from switchbuilder.generator import build
 
-EX = Path(__file__).parent.parent / "src" / "exbuilder" / "map_examples"
+EX = Path(__file__).parent.parent / "src" / "switchbuilder" / "map_examples"
 
 
 def example():

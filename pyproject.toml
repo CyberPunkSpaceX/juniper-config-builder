@@ -16,14 +16,14 @@ web = ["flask>=3.1", "gunicorn>=22", "segno>=1.5", "tzdata>=2024.1", "openpyxl>=
 dev = ["pytest>=7", "flask>=3.1", "segno>=1.5", "tzdata>=2024.1", "openpyxl>=3.1", "paramiko>=3.4", "ldap3>=2.9", "signxml>=4.0"]
 
 [project.scripts]
-switchbuilder = "exbuilder.cli:main"
-exbuilder = "exbuilder.cli:main"   # old name, kept so scripts keep working
+switchbuilder = "switchbuilder.cli:main"
+exbuilder = "switchbuilder.cli:main"   # old name, kept so scripts keep working
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-exbuilder = ["web/templates/*.html", "web/static/*.png", "web/templates/*/*.html", "map_examples/*.conf", "vendor_examples/*.json"]
+switchbuilder = ["web/templates/*.html", "web/static/*.png", "web/templates/*/*.html", "map_examples/*.conf", "vendor_examples/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
