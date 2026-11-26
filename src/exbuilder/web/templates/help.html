@@ -118,6 +118,15 @@ mode the loopback, router ID, OSPF and BGP.</p>
 <h2 id="apply">5. Loading the config on a switch</h2>
 <p>Always keep a way back: a console cable, a backup of the current config, and a timer that undoes the change
 if you lose the connection. The steps for each vendor are below the config in the builder, and here:</p>
+<h3 id="push">Pushing from the builder (with automatic rollback)</h3>
+<p>Admins of a client can push an approved Production project straight to the switch: <b>Projects</b> tab (Production space) → <b>Push to a switch</b>.</p>
+<ol>
+  <li><b>Preview changes</b>: the running config is kept as a backup first, then the switch shows what would change (<code>show | compare</code>) and runs <code>commit check</code>. Nothing changes yet.</li>
+  <li><b>Push with auto-rollback</b>: the switch commits with its own safe-revert timer (1 to 60 minutes, 10 by default): Juniper <code>commit confirmed</code>, Arista <code>commit timer</code> in a config session, Cisco <code>configure terminal revert timer</code> (the config archive is turned on if needed), Aruba CX <code>checkpoint auto</code>, Nexus a checkpoint plus a one-time scheduler job that rolls back to it, MikroTik Safe Mode in a session the server keeps open. Confirming also saves the config on vendors that have a startup config.</li>
+  <li>The page signs in again to check the switch is still reachable. Click <b>Keep the change</b> before the timer ends, or <b>Roll back now</b>. If you do nothing, or the change cuts the switch off, it puts the old config back by itself.</li>
+</ol>
+<p>Only projects approved and promoted from the Lab can be pushed, the switch must be in the client's SSH networks and fetched over SSH once (so its key is known), and a switch whose name differs from the project's needs an extra tick. Juniper and Arista show the switch's own diff; for Cisco, Nexus and Aruba CX the builder works out what is new, and MikroTik shows the script. Dell OS10, Extreme, Ruckus and ProCurve have no automatic rollback and can't be pushed yet; UniFi is set up in the UniFi app. <code>EXB_PUSH_DISABLE=true</code> turns pushing off.</p>
+
 <div class="vendor-help">
   <h3>Juniper (Junos)</h3>
   <ol>
