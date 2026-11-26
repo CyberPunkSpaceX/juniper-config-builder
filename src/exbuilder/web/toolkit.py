@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, abort, render_template, request
 
-from .. import __version__, bulk, vendors
+from .. import __version__, bulk, prepush, vendors
 from . import auth, clients
 
 bp = Blueprint("toolkit", __name__, url_prefix="/tools")
@@ -23,6 +23,9 @@ MAX_PROJECT_BYTES = 512 * 1024
 TOOLS = [
     ("toolkit.bulk_page", "&#9638;", "Bulk build",
      "One template project plus a spreadsheet of hostnames and IPs gives you a config for every switch at once."),
+    ("toolkit.checks_page", "&#10003;", "Pre-push checks",
+     "Check several projects together before they go live: duplicate IPs and VLANs, links whose ends disagree, "
+     "VLANs no uplink carries, MTU and spanning-tree mismatches."),
 ]
 
 
@@ -134,6 +137,40 @@ def bulk_save():
     db.commit()
     log.info("audit: %s saved %d bulk-built projects to %s (%s)", user, len(good), c["name"], c["space"])
     return {"saved": len(good), "client": c["name"], "space": c["space"], "skipped": len(result["switches"]) - len(good)}
+
+
+# ------------------------------------------------------------ pre-push checks
+@bp.get("/checks")
+def checks_page():
+    return render_template("tools/checks.html", version=__version__, client=clients.current(),
+                           vendors={k: v.name for k, v in vendors.VENDORS.items()})
+
+
+@bp.post("/checks/run")
+def checks_run():
+    """Check saved projects (project_ids, current client and space) or projects sent as JSON."""
+    body = _body()
+    projects = []
+    ids = body.get("project_ids")
+    if ids:
+        c = clients.need("viewer")
+        try:
+            ids = [int(x) for x in ids][:prepush.MAX_SWITCHES]
+        except (TypeError, ValueError):
+            abort(400, "Pick saved projects.")
+        q = ",".join("?" * len(ids))
+        rows = auth.db().execute(f"SELECT id, name, data FROM projects WHERE client_id = ? AND space = ? AND id IN ({q})",
+                                 (c["id"], c["space"], *ids)).fetchall()
+        order = {pid: i for i, pid in enumerate(ids)}
+        projects = [{"name": r["name"], "data": json.loads(r["data"])} for r in sorted(rows, key=lambda r: order[r["id"]])]
+    elif isinstance(body.get("projects"), list):
+        projects = [p for p in body["projects"] if isinstance(p, dict) and isinstance(p.get("data"), dict)]
+        if len(json.dumps(projects)) > 20 * MAX_PROJECT_BYTES:
+            abort(400, "Those projects are too large together.")
+    if len(projects) < 1:
+        abort(400, "Pick the projects to check.")
+    links = [x for x in body.get("links") or [] if isinstance(x, dict)][:200]
+    return prepush.check(projects, links)
 
 
 def init_app(app) -> None:

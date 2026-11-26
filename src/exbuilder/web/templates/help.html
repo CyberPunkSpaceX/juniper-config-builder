@@ -527,5 +527,19 @@ or open it from a file.</p>
   <li><b>Download zip</b> gives every config, every project and a summary sheet. <b>Save all as projects</b> saves each
     switch as its own project (editor role needed).</li>
 </ol>
+<h3>Pre-push checks</h3>
+<p>Each builder checks its own switch. <b>Pre-push checks</b> looks at several saved projects together. Tick the projects
+and <b>Run checks</b>. It reports:</p>
+<ul>
+  <li>the same host name or IP address (management, loopback, VLAN interface, routed port) on two switches, one subnet
+    on different VLANs, and VLAN IDs or names that do not match between switches;</li>
+  <li>links whose ends disagree: access against trunk, a LAG on one end only, both ends LACP passive, a different
+    native VLAN, VLANs allowed on one end only or missing on the far switch, routed ends in different subnets, and MTU
+    differences;</li>
+  <li>VLANs used on a switch's ports that no uplink carries;</li>
+  <li>spanning tree: different protocols, no bridge priority anywhere, or a tie for the root.</li>
+</ul>
+<p>Links are found from port-group and LAG descriptions that name the other switch (<code>To core-sw1</code>). Add any
+others with <b>Add a link by hand</b>. <b>Ready to push</b> means no errors were found; still read the warnings.</p>
 </div>
 {% endblock %}
