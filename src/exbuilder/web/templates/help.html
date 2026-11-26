@@ -394,8 +394,8 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     Production, and the other way round.</li>
   <li><b>From Lab to Production, with approval:</b> save the tested project in Lab, then in <b>Projects</b> click
     <b>Ask for approval</b> (editors and admins). The project is frozen as it is then, and it must have no errors.
-    A client admin opens it, then clicks <b>Approve</b> or <b>Reject</b> (with a reason). When the client has more
-    than one admin, nobody can approve their own request. Then an admin clicks <b>Promote to Production</b>: the
+    A client admin or a Super Admin opens it, then clicks <b>Approve</b> or <b>Reject</b> (with a reason). Admins and
+    Super Admins may approve their own requests; a Configurator's request needs one of them. Then an admin clicks <b>Promote to Production</b>: the
     approved version is copied into Production under the same name. If the Lab project was changed after approval,
     it has to be approved again. A Production project with the same name is replaced, and <b>Undo</b> puts it back.
     Every step is listed with who did it and when.</li>

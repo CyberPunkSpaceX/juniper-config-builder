@@ -960,7 +960,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <ol class="hint howto">
         <li>Test the project in the Lab (for example in an EVE-NG lab) and save it to {{ client.name }}.</li>
         <li>Click <b>Ask for approval</b> next to it above. The project is frozen as it is now; it must have no errors.</li>
-        <li>An admin of {{ client.name }} opens it, checks it and clicks <b>Approve</b> (or <b>Reject</b> with a reason).{% if client.role == 'admin' %} When the client has another admin, you can't approve your own request.{% endif %}</li>
+        <li>An admin of {{ client.name }} opens it, checks it and clicks <b>Approve</b> (or <b>Reject</b> with a reason). Admins and Super Admins may approve their own requests; a Configurator's request needs one of them.</li>
         <li>An admin clicks <b>Promote to Production</b>. The approved project is copied into Production under the same name. A Production project with that name is replaced, and <b>Undo</b> puts it back.</li>
       </ol>
       {% else %}

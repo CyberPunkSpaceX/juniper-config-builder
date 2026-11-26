@@ -5,8 +5,9 @@ space, but only after a review:
 
 1. An editor asks for approval of a saved Lab project. The project is frozen
    as it is at that moment (a snapshot), and it must build with no errors.
-2. A client admin approves or rejects it, with a note. When the client has
-   another admin, people can't approve their own request.
+2. A client admin or a Super Admin approves or rejects it, with a note. They
+   may approve their own requests; a Configurator's request always needs one
+   of them.
 3. A client admin promotes the approved snapshot into Production, under the
    same project name. If the Lab project was changed after approval, it has to
    be approved again. The Production project it replaces is kept, so a
@@ -74,13 +75,6 @@ def _review(c: dict, rid: int) -> sqlite3.Row:
     return r
 
 
-def _admins(cid: int) -> int:
-    """People who can approve in this client: its admins and the server admins (who manage every client)."""
-    return auth.db().execute(
-        "SELECT COUNT(*) FROM users u WHERE u.active = 1 AND (u.role = 'admin' OR u.all_clients = 'admin' OR EXISTS (SELECT 1 FROM "
-        "client_members m WHERE m.user_id = u.id AND m.client_id = ? AND m.role = 'admin'))", (cid,)).fetchone()[0]
-
-
 def _out(r: sqlite3.Row, lab_sha: str | None) -> dict:
     d = {k: r[k] for k in r.keys() if k not in ("data", "replaced_data")}
     d["lab_changed"] = r["status"] in OPEN and lab_sha is not None and lab_sha != r["sha"]
@@ -101,7 +95,7 @@ def reviews():
     me = auth.current_user()["username"]
     return {"reviews": [_out(r, shas.get(r["lab_project_id"])) for r in rows],
             "role": c["role"], "space": c["space"], "me": me,
-            "self_approve": _admins(c["id"]) <= 1}
+            "self_approve": c["role"] == "admin"}
 
 
 @bp.post("/promote/request")
@@ -162,8 +156,6 @@ def decide(rid: int, action: str):
     if action in ("approve", "reject"):
         if r["status"] != "pending":
             return {"error": f"This request is {r['status']}, not waiting for a decision."}, 400
-        if action == "approve" and r["requested_by"] == who and _admins(c["id"]) > 1:
-            return {"error": "Another admin of this client has to approve your own request."}, 403
         if action == "reject" and not note:
             return {"error": "Say why it is rejected, so the requester knows what to fix."}, 400
         status = "approved" if action == "approve" else "rejected"
