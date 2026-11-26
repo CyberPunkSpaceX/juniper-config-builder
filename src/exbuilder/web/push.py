@@ -69,9 +69,7 @@ CREATE TABLE IF NOT EXISTS config_pushes (
     pushed_at TEXT NOT NULL DEFAULT '',
     checked_at TEXT NOT NULL DEFAULT '',
     decided_by TEXT NOT NULL DEFAULT '',
-    decided_at TEXT NOT NULL DEFAULT '',
-    request TEXT NOT NULL DEFAULT '',            -- held sessions (MikroTik): confirm / rollback asked, and the answer
-    heartbeat REAL                               -- held sessions: last sign of life of the held session
+    decided_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS config_pushes_client ON config_pushes (client_id, id);
 """
@@ -84,11 +82,6 @@ _busy_lock = threading.Lock()
 
 def migrate(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(config_pushes)")}
-    for col, kind in (("request", "TEXT NOT NULL DEFAULT ''"), ("heartbeat", "REAL")):
-        if col not in cols:
-            conn.execute(f"ALTER TABLE config_pushes ADD COLUMN {col} {kind}")
-    conn.commit()
 
 
 def disabled() -> bool:
@@ -239,17 +232,20 @@ def _expire(cid: int) -> None:
     db.execute("UPDATE config_pushes SET status = 'expired', message = 'The timer ran out without a confirmation, "
                "so the switch put the old config back by itself.' WHERE client_id = ? AND status = 'waiting' AND "
                "deadline < ?", (cid, time.time()))
-    db.execute("UPDATE config_pushes SET status = 'rolled_back', message = 'The server lost the session it held, so "
-               "the switch undid the change by itself (Safe Mode).' WHERE client_id = ? AND status = 'waiting' AND "
-               "heartbeat IS NOT NULL AND heartbeat < ? AND request = ''", (cid, time.time() - 30))
+    held = [k for k, d in engine.DRIVERS.items() if d.held]
+    for (pid,) in db.execute(f"SELECT id FROM config_pushes WHERE client_id = ? AND status = 'waiting' AND vendor IN "
+                             f"({','.join('?' * len(held))})", (cid, *held)).fetchall():
+        age = _alive(pid)
+        if age is None or age > 30:
+            db.execute("UPDATE config_pushes SET status = 'rolled_back', message = 'The server lost the session it "
+                       "held, so the switch undid the change by itself (Safe Mode).' WHERE id = ?", (pid,))
     db.execute("UPDATE config_pushes SET status = 'cancelled' WHERE client_id = ? AND status = 'previewed' AND "
                "created_ts < ?", (cid, time.time() - PREVIEW_TTL))
     db.commit()
 
 
 def _out(r: sqlite3.Row, show_diff: bool) -> dict:
-    d = {k: r[k] for k in r.keys() if k not in ("diff", "created_ts", "deadline", "running_sha", "project_sha",
-                                                "request", "heartbeat")}
+    d = {k: r[k] for k in r.keys() if k not in ("diff", "created_ts", "deadline", "running_sha", "project_sha")}
     d["label"] = LABEL.get(r["status"], r["status"])
     d["deadline_at"] = _when(r["deadline"])
     d["seconds_left"] = max(0, int(r["deadline"] - time.time())) if r["status"] == "waiting" and r["deadline"] else 0
@@ -288,19 +284,36 @@ def _keep_backup(cid: int, host: str, text: str, source: str, who: str, note: st
 
 
 # ---------------------------------------------------- held sessions (MikroTik Safe Mode)
+# The thread that holds the session lives in one web worker; any worker can ask it to confirm or roll back.
+# They talk through small files in <data>/push-held (not the database, so the holder never takes a write lock).
+def _held_dir():
+    d = auth.data_dir() / "push-held"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _alive(push_id: int, folder=None) -> float | None:
+    """Seconds since the holder of this push last showed a sign of life, or None if it never did."""
+    try:
+        return time.time() - ((folder or _held_dir()) / f"{int(push_id)}.alive").stat().st_mtime
+    except OSError:
+        return None
+
+
 def _start_holder(push_id: int, shell, drv, deadline: float) -> None:
-    path = auth.data_dir() / "users.db"
+    folder = _held_dir()
+    (folder / f"{push_id}.alive").touch()
     try:
         shell.transport.set_keepalive(15)
     except Exception:  # noqa: BLE001
         pass
-    threading.Thread(target=_hold, args=(path, push_id, shell, drv, deadline), daemon=True,
+    threading.Thread(target=_hold, args=(folder, push_id, shell, drv, deadline), daemon=True,
                      name=f"push-hold-{push_id}").start()
 
 
-def _hold(path, push_id: int, shell, drv, deadline: float) -> None:
-    """Keep the Safe Mode session open; act on confirm / rollback asked through the database (any worker can ask)."""
-    conn = sqlite3.connect(path, timeout=10)
+def _hold(folder, push_id: int, shell, drv, deadline: float) -> None:
+    """Keep the Safe Mode session open; act on confirm / rollback asked through a file (any worker can ask)."""
+    alive, ask, answer = (folder / f"{push_id}.{x}" for x in ("alive", "request", "answer"))
     try:
         while True:
             if time.time() >= deadline:
@@ -308,47 +321,48 @@ def _hold(path, push_id: int, shell, drv, deadline: float) -> None:
                 log.warning("audit: push: timer of push %s ran out; Safe Mode session closed, the switch undid it",
                             push_id)
                 return
-            req = conn.execute("SELECT request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()
-            req = req[0] if req else "rollback"
+            req = ask.read_text().strip() if ask.exists() else ""
             if req in ("confirm", "rollback"):
                 try:
                     drv.confirm() if req == "confirm" else drv.rollback()
-                    answer = f"{req}:done"
+                    result = f"{req}:done"
                 except Exception as exc:  # noqa: BLE001
                     drv.drop()  # when keeping fails, undo: never leave it half-done
-                    answer = f"{req}:failed: {exc}"[:500]
-                conn.execute("UPDATE config_pushes SET request = ? WHERE id = ?", (answer, push_id))
-                conn.commit()
+                    result = f"{req}:failed: {exc or exc.__class__.__name__}"[:500]
+                tmp = answer.with_suffix(".tmp")
+                tmp.write_text(result)
+                tmp.replace(answer)  # appears whole, never half-written
                 return
             if shell.transport is None or not shell.transport.is_active():
-                conn.execute("UPDATE config_pushes SET request = 'lost' WHERE id = ?", (push_id,))
-                conn.commit()
                 return
-            conn.execute("UPDATE config_pushes SET heartbeat = ? WHERE id = ?", (time.time(), push_id))
-            conn.commit()
+            alive.touch()
             time.sleep(1)
     finally:
-        conn.close()
         shell.close()
+        alive.unlink(missing_ok=True)
 
 
 def _ask_holder(push_id: int, action: str, wait: float = 45) -> None:
     """Ask the thread holding the session to confirm or roll back, and wait for its answer."""
-    db = auth.db()
-    row = db.execute("SELECT heartbeat, request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()
-    if not row["heartbeat"] or time.time() - row["heartbeat"] > 15 or row["request"]:
+    folder = _held_dir()
+    age = _alive(push_id, folder)
+    if age is None or age > 15 or (folder / f"{push_id}.request").exists():
         raise engine.PushError("The server no longer holds the Safe Mode session, so the switch has undone the change "
                                "by itself.")
-    db.execute("UPDATE config_pushes SET request = ? WHERE id = ?", (action, push_id))
-    db.commit()
+    tmp = folder / f"{push_id}.request.tmp"
+    tmp.write_text(action)
+    tmp.replace(folder / f"{push_id}.request")
+    answer = folder / f"{push_id}.answer"
     end = time.time() + wait
     while time.time() < end:
-        time.sleep(0.5)
-        answer = db.execute("SELECT request FROM config_pushes WHERE id = ?", (push_id,)).fetchone()[0]
-        if answer.startswith(action + ":"):
-            if answer == f"{action}:done":
+        time.sleep(0.3)
+        if answer.exists():
+            text = answer.read_text()
+            for f in (answer, folder / f"{push_id}.request"):
+                f.unlink(missing_ok=True)
+            if text == f"{action}:done":
                 return
-            raise engine.PushError(answer.split(":", 2)[-1].strip() + " The session was closed, so Safe Mode undid "
+            raise engine.PushError(text.split(":", 2)[-1].strip() + " The session was closed, so Safe Mode undid "
                                    "the change.")
     raise engine.PushError("The session holder did not answer; if it is gone, the switch undoes the change by itself.")
 
@@ -489,8 +503,6 @@ def apply(push_id: int):
     deadline = started + mins * 60
     db.execute("UPDATE config_pushes SET status = 'waiting', minutes = ?, deadline = ?, pushed_by = ?, pushed_at = ?, "
                "message = ? WHERE id = ?", (mins, deadline, me, auth._now(), out[-500:], push_id))
-    if engine.DRIVERS[r["vendor"]].held:
-        db.execute("UPDATE config_pushes SET heartbeat = ? WHERE id = ? AND heartbeat IS NULL", (time.time(), push_id))
     db.commit()
     _audit(c, f"pushed {r['project_name']!r} to {r['host']} with a {mins} minute rollback timer (push {push_id}, "
               f"backup {r['backup_id']})")
@@ -510,9 +522,8 @@ def check(push_id: int):
         with _Session(c, r["vendor"], r["host"], body, port=r["port"]) as drv:
             if drv.held:  # a second session shows the switch is reachable; the held one carries the change
                 drv.running()
-                beat = auth.db().execute("SELECT heartbeat FROM config_pushes WHERE id = ?", (push_id,)).fetchone()[0]
-                pending = ("Safe Mode is on in the session the server holds" if beat and time.time() - beat < 15
-                           else "")
+                age = _alive(push_id)
+                pending = "Safe Mode is on in the session the server holds" if age is not None and age < 15 else ""
             else:
                 pending = drv.pending_confirm(str(push_id))
     except HTTPException:
