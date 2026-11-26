@@ -571,5 +571,16 @@ off, sets their weight and values (for example the NTP servers every switch must
 Check saved projects, the latest backup of each switch, or a pasted running config. Running configs are read with the
 Converter's readers where the brand has one, plus text checks; a rule that cannot be told from a config shows as
 "can't tell" and doesn't count. <b>Download the report</b> gives a CSV with every rule per switch.</p>
+<h3>Calculators</h3>
+<ul>
+  <li><b>Subnet</b>: an address with prefix (or mask) gives the network, mask, wildcard, first and last host,
+    broadcast and the number of hosts. <b>Split a network</b> by number of subnets, hosts per subnet or new prefix.</li>
+  <li><b>VLAN plan</b>: give an address block and each VLAN's name, ID and number of devices (plus room to grow). Each
+    VLAN gets the smallest subnet that fits, biggest first, with the gateway on the first or last address. <b>Add to
+    project</b> puts the VLANs (and the gateway as VLAN interface address) into a saved project; VLANs it already has
+    are left alone.</li>
+  <li><b>PoE budget</b>: the switch's PoE budget and the devices on it. Most switches reserve power by PoE class, so the
+    reserved total can run out before the devices actually draw it all.</li>
+</ul>
 </div>
 {% endblock %}

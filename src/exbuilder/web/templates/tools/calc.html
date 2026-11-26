@@ -1,0 +1,204 @@
+{% extends "auth/base.html" %}
+{% block title %}Calculators · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 16px; font-size: 14px; margin-top: 10px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-family: ui-monospace, Menlo, Consolas, monospace; }
+table.edit input, table.edit select { padding: 4px 6px; font-size: 13px; }
+table.edit td { padding: 4px 6px; }
+.meter { height: 14px; border-radius: 7px; background: var(--border); overflow: hidden; margin: 8px 0; }
+.meter > div { height: 100%; background: var(--ok); }
+.meter.warn > div { background: var(--warn); } .meter.bad > div { background: var(--bad); }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button[aria-pressed=true] { background: var(--accent); color: var(--accent-text); }
+.tabs button[aria-pressed=false] { background: transparent; color: var(--accent); }
+</style>
+<div class="crumbs"><a href="{{ url_for('toolkit.hub') }}">Toolkit</a> ›</div>
+<h1>Calculators</h1>
+<div class="tabs" role="group">
+  <button type="button" class="small" data-tab="subnet" aria-pressed="true">Subnet</button>
+  <button type="button" class="small" data-tab="vlans" aria-pressed="false">VLAN plan</button>
+  <button type="button" class="small" data-tab="poe" aria-pressed="false">PoE budget</button>
+</div>
+
+<section id="tab-subnet">
+  <div class="panel">
+    <h2>Subnet calculator</h2>
+    <div class="grid2">
+      <div class="field"><label for="addr">Address and prefix <span class="hint">(10.20.30.40/26, or 10.20.30.40 255.255.255.192, or IPv6)</span></label><input type="text" id="addr" value="10.20.30.40/26"></div>
+      <div class="field"><button type="button" id="calc">Calculate</button> <span class="status" id="sstatus"></span></div>
+    </div>
+    <dl class="kv" id="sres"></dl>
+  </div>
+  <div class="panel">
+    <h2>Split a network</h2>
+    <div class="grid3">
+      <div class="field"><label for="snet">Network</label><input type="text" id="snet" value="10.20.0.0/22"></div>
+      <div class="field"><label for="sby">Split by</label>
+        <select id="sby"><option value="count">Number of subnets</option><option value="hosts">Hosts per subnet</option><option value="prefix">New prefix</option></select></div>
+      <div class="field"><label for="sval">Value</label><input type="text" id="sval" value="4"></div>
+    </div>
+    <div class="actions" style="margin-top:0"><button type="button" id="split">Split</button><span class="status" id="splitstatus"></span></div>
+    <div class="scroll"><table><tbody id="splitres"></tbody></table></div>
+  </div>
+</section>
+
+<section id="tab-vlans" hidden>
+  <div class="panel">
+    <h2>VLAN address plan</h2>
+    <p class="muted">List the VLANs and how many devices each needs. Each gets the smallest subnet that fits (biggest
+      first, so nothing is wasted), with the gateway on the first or last address.</p>
+    <div class="grid3">
+      <div class="field"><label for="super">Address block</label><input type="text" id="super" value="10.20.0.0/16"></div>
+      <div class="field"><label for="gw">Gateway</label><select id="gw"><option value="first">First usable address</option><option value="last">Last usable address</option></select></div>
+      <div class="field"><label for="spare">Room to grow (%)</label><input type="text" id="spare" value="25"></div>
+    </div>
+    <table class="edit"><thead><tr><th>VLAN name</th><th>ID</th><th>Hosts</th><th></th></tr></thead><tbody id="vrows"></tbody></table>
+    <div class="actions">
+      <button type="button" class="small secondary" id="vadd">Add a VLAN</button>
+      <button type="button" id="vplan">Make the plan</button><span class="status" id="vstatus"></span>
+    </div>
+    <div id="vres" hidden>
+      <div class="scroll"><table><thead><tr><th>VLAN</th><th>Hosts</th><th>Subnet</th><th>Gateway</th><th>Hosts from - to</th><th>Room</th></tr></thead><tbody id="vout"></tbody></table></div>
+      <ul id="verr" class="bad-text"></ul>
+      <p class="muted" id="vfree"></p>
+      <div class="grid3">
+        <div class="field"><label for="vproj">Add these VLANs to a project <span class="hint">({{ client.name if client else '' }}, {{ client.space if client else '' }})</span></label><select id="vproj"></select></div>
+        <div class="field"><label class="chk"><input type="checkbox" id="virb" checked> With the gateway as the VLAN interface address</label></div>
+        <div class="field"><button type="button" class="secondary" id="vapply">Add to project</button></div>
+      </div>
+      <span class="status" id="vapplystatus"></span>
+    </div>
+  </div>
+</section>
+
+<section id="tab-poe" hidden>
+  <div class="panel">
+    <h2>PoE power budget</h2>
+    <p class="muted">Switches reserve power per port by the device's PoE class, so a switch can run out of budget
+      before the devices actually use it all. Take the budget from the switch's datasheet for the power supplies you
+      have.</p>
+    <div class="grid3">
+      <div class="field"><label for="budget">PoE budget (watts)</label><input type="text" id="budget" value="740"></div>
+      <div class="field"><label for="reserve">Reserve power by</label><select id="reserve"><option value="class">PoE class (most switches)</option><option value="actual">Actual draw (LLDP power negotiation)</option></select></div>
+    </div>
+    <table class="edit"><thead><tr><th>Device</th><th>How many</th><th>Watts each</th><th>Class</th><th></th></tr></thead><tbody id="prows"></tbody></table>
+    <div class="actions">
+      <button type="button" class="small secondary" id="padd">Add a device</button>
+      <button type="button" id="pcalc">Calculate</button><span class="status" id="pstatus"></span>
+    </div>
+    <div id="pres" hidden>
+      <div class="meter" id="pmeter"><div></div></div>
+      <p id="psum"></p>
+      <p id="pnote" class="warn-text"></p>
+    </div>
+  </div>
+</section>
+
+<script>
+const CSRF = {{ csrf_token|tojson }};
+const POE_DEVICES = {{ poe_devices|tojson }};
+const POE_CLASSES = {{ poe_classes|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+function st(id, text, kind) { const e = $(id); e.textContent = text; e.className = "status " + (kind || ""); }
+async function call(url, body) {
+  const resp = await fetch(url, {method: "POST", headers: {"Content-Type": "application/json", "X-CSRF-Token": CSRF}, body: JSON.stringify(body)});
+  let d; try { d = await resp.json(); } catch (e) { d = {error: resp.statusText || "Request failed"}; }
+  if (!resp.ok) throw new Error(d.error || "Request failed");
+  return d;
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => {
+  document.querySelectorAll(".tabs button").forEach(x => x.setAttribute("aria-pressed", x === b));
+  document.querySelectorAll("section[id^=tab-]").forEach(s => s.hidden = s.id !== "tab-" + b.dataset.tab);
+});
+
+// Subnet
+$("calc").onclick = async () => {
+  try {
+    const d = await call("/tools/calc/subnet", {address: $("addr").value}); st("sstatus", "");
+    const rows = [["Network", d.network], ["Mask", d.mask], ["Wildcard", d.wildcard], ["First host", d.first], ["Last host", d.last],
+                  ["Broadcast", d.broadcast], ["Usable hosts", d.usable.toLocaleString()], ["Addresses", d.total.toLocaleString()],
+                  ["Mask in binary", d.binary_mask], ["Private", d.private === undefined ? undefined : (d.private ? "yes" : "no")]];
+    $("sres").innerHTML = rows.filter(r => r[1] !== undefined).map(([k, v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+  } catch (e) { st("sstatus", e.message, "bad"); $("sres").innerHTML = ""; }
+};
+$("addr").onkeydown = e => { if (e.key === "Enter") $("calc").click(); };
+$("split").onclick = async () => {
+  try {
+    const d = await call("/tools/calc/split", {network: $("snet").value, [$("sby").value]: $("sval").value});
+    st("splitstatus", `${d.count.toLocaleString()} subnets of /${d.prefix}` + (d.shown < d.count ? ` (first ${d.shown} shown)` : ""), "ok");
+    $("splitres").innerHTML = "<tr><th>Subnet</th><th>First host</th><th>Last host</th><th>Usable</th></tr>" +
+      d.subnets.map(s => `<tr><td>${s.network}</td><td>${s.first}</td><td>${s.last}</td><td>${s.usable}</td></tr>`).join("");
+  } catch (e) { st("splitstatus", e.message, "bad"); }
+};
+$("calc").click();
+
+// VLAN plan
+let plan = null;
+function vrow(name = "", id = "", hosts = "") {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td><input type="text" class="n"></td><td><input type="text" class="i" size="5"></td><td><input type="text" class="h" size="6"></td>` +
+                 `<td><button type="button" class="small danger">Remove</button></td>`;
+  tr.querySelector(".n").value = name; tr.querySelector(".i").value = id; tr.querySelector(".h").value = hosts;
+  tr.querySelector("button").onclick = () => tr.remove();
+  $("vrows").append(tr);
+}
+[["MGMT", 10, 30], ["USERS", 20, 400], ["VOICE", 30, 200], ["WIFI", 40, 600], ["CAMERAS", 50, 60]].forEach(r => vrow(...r));
+$("vadd").onclick = () => vrow();
+$("vplan").onclick = async () => {
+  const vlans = [...$("vrows").children].map(tr => ({name: tr.querySelector(".n").value, id: tr.querySelector(".i").value, hosts: tr.querySelector(".h").value}));
+  try {
+    plan = await call("/tools/calc/vlans", {supernet: $("super").value, gateway: $("gw").value, spare: $("spare").value, vlans});
+    st("vstatus", `${plan.vlans.length} VLAN(s) planned, ${plan.used.toLocaleString()} of ${plan.total.toLocaleString()} addresses used.`, "ok");
+    $("vout").innerHTML = plan.vlans.map(v => `<tr><td>${esc(v.id)} ${esc(v.name)}</td><td>${v.hosts}</td><td>${v.subnet}</td><td>${v.gateway}</td><td>${v.range}</td><td>${v.usable - v.hosts}</td></tr>`).join("");
+    $("verr").innerHTML = plan.errors.map(e => `<li>${esc(e)}</li>`).join("");
+    $("vfree").textContent = plan.free.length ? "Still free: " + plan.free.join(", ") : "";
+    $("vres").hidden = false;
+  } catch (e) { st("vstatus", e.message, "bad"); }
+};
+fetch("/projects").then(r => r.ok ? r.json() : {projects: []}).then(d => {
+  $("vproj").append(new Option(d.projects.length ? "Pick a project…" : "No saved projects here", ""));
+  d.projects.forEach(p => $("vproj").append(new Option(p.name, p.id)));
+});
+$("vapply").onclick = async () => {
+  if (!$("vproj").value) { st("vapplystatus", "Pick a project.", "bad"); return; }
+  try {
+    const d = await call("/tools/calc/vlans/apply", {project_id: $("vproj").value, vlans: plan.vlans, with_irb: $("virb").checked});
+    st("vapplystatus", `Added ${d.added.length} VLAN(s) to ${d.project}` + (d.skipped.length ? `; already there: ${d.skipped.join(", ")}` : "") + ".", "ok");
+  } catch (e) { st("vapplystatus", e.message, "bad"); }
+};
+
+// PoE
+function prow(dev = {device: "", class: "4", watts: ""}, count = "") {
+  const tr = document.createElement("tr");
+  const opts = Object.keys(POE_CLASSES).map(c => `<option value="${c}">${c} (${POE_CLASSES[c]} W)</option>`).join("");
+  tr.innerHTML = `<td><input type="text" class="d"></td><td><input type="text" class="c" size="4"></td><td><input type="text" class="w" size="6"></td>` +
+                 `<td><select class="k">${opts}</select></td><td><button type="button" class="small danger">Remove</button></td>`;
+  tr.querySelector(".d").value = dev.device; tr.querySelector(".c").value = count; tr.querySelector(".w").value = dev.watts;
+  tr.querySelector(".k").value = dev.class;
+  tr.querySelector("button").onclick = () => tr.remove();
+  $("prows").append(tr);
+}
+prow(POE_DEVICES[0], 24); prow(POE_DEVICES[2], 6); prow(POE_DEVICES[4], 4);
+$("padd").onclick = () => prow();
+$("pcalc").onclick = async () => {
+  const devices = [...$("prows").children].map(tr => ({device: tr.querySelector(".d").value, count: tr.querySelector(".c").value,
+                                                       watts: tr.querySelector(".w").value, class: tr.querySelector(".k").value}));
+  try {
+    const d = await call("/tools/calc/poe", {budget: $("budget").value, reserve: $("reserve").value, devices});
+    st("pstatus", "");
+    const use = d.use ?? 0;
+    $("pmeter").className = "meter " + (use > 100 ? "bad" : use > 80 ? "warn" : "");
+    $("pmeter").firstElementChild.style.width = Math.min(100, use) + "%";
+    $("psum").innerHTML = `<b>${use}%</b> of ${d.budget} W: ${d.ports} PoE port(s), devices draw ${d.draw} W, the switch reserves ${d.reserved} W. ` +
+      (d.left >= 0 ? `<span class="ok-text">${d.left} W left.</span>` : `<span class="bad-text">${-d.left} W short.</span>`);
+    $("pnote").textContent = d.note;
+    $("pres").hidden = false;
+  } catch (e) { st("pstatus", e.message, "bad"); }
+};
+{% endraw %}
+</script>
+{% endblock %}
