@@ -39,6 +39,9 @@ TOOLS = [
      "versions."),
     ("netbox.page", "&#8645;", "NetBox sync",
      "Pull a NetBox site's switches into projects, or push your projects' devices, VLANs and IPs to NetBox."),
+    ("audit.page", "&#9776;", "Audit log & API",
+     "Who changed what and when, with sign-ins, for admins. And the scripting API: projects, configs and backups "
+     "over HTTPS with your API token."),
 ]
 
 
