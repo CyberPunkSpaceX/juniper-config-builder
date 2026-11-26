@@ -582,5 +582,13 @@ Converter's readers where the brand has one, plus text checks; a rule that canno
   <li><b>PoE budget</b>: the switch's PoE budget and the devices on it. Most switches reserve power by PoE class, so the
     reserved total can run out before the devices actually draw it all.</li>
 </ul>
+<h3>Firmware tracker</h3>
+<p>Lists the software version of every switch, read from its latest config backup (SSH fetch, nightly backups or
+uploads), and checks it against the client's policy. A client admin adds one line per brand, or per model family when
+they differ, with a minimum version, a recommended version and known-bad versions (<code>22.2R1</code>,
+<code>&lt; 21.4R3</code>, <code>17.9.1 - 17.9.3</code> or <code>16.12*</code>, each with a note such as the advisory
+number). Each switch shows as Known bad, Below minimum, Update, OK or Unknown. Nothing is looked up on the internet, so
+keep the policy current from the vendors' security advisories. You can also paste <code>show version</code> output for
+switches that have no backup.</p>
 </div>
 {% endblock %}
