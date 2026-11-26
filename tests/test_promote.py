@@ -43,7 +43,9 @@ def test_request_approve_promote_and_undo(app, admin):
     pick_space(admin, "lab")
     broken = _save(admin, "Broken", {"vendor": "arista"})
     r = _post(admin, "/promote/request", {"project_id": broken})
-    assert r.status_code == 400 and "error(s) to fix" in r.json["error"]
+    assert r.status_code == 400 and r.json["error"].startswith("Broken has ") and "to fix before it can be approved" in r.json["error"]
+    assert r.json["project_id"] == broken and r.json["name"] == "Broken"
+    assert r.json["errors"] and all(e["section"] and e["message"] for e in r.json["errors"])
 
     rid = _post(admin, "/promote/request", {"project_id": lab_id, "note": "Tested in EVE"}).json["id"]
     assert _post(admin, f"/promote/{rid}/promote").status_code == 400          # not approved yet

@@ -116,8 +116,11 @@ def request_approval():
     from ..generator import build
     res = build(data)
     if res.errors:
-        return {"error": f"The project has {len(res.errors)} error(s) to fix before it can be approved, first: "
-                         f"{res.errors[0].get('section')}: {res.errors[0].get('message')}"}, 400
+        n = len(res.errors)
+        return {"error": f"{p['name']} has {n} error{'s' if n > 1 else ''} to fix before it can be approved, first: "
+                         f"{res.errors[0].get('section')}: {res.errors[0].get('message')}",
+                "project_id": pid, "name": p["name"],
+                "errors": [{k: e.get(k) for k in ("section", "message", "field", "row")} for e in res.errors]}, 400
     who = auth.current_user()["username"]
     now = auth._now()
     db.execute("UPDATE project_reviews SET status = 'replaced', decision_note = 'A newer request replaced this one.' "
