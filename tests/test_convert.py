@@ -355,3 +355,42 @@ def test_create_client_needs_server_admin(app, admin):
     bob = _bob(app, admin, "editor")
     assert _post(bob, "/convert/client", {"name": "Nope"}).status_code in (302, 403)
     assert "Create a new client" not in bob.get("/convert").get_data(as_text=True)
+
+
+ARISTA_OSPF = """hostname A
+!
+vlan 99
+!
+interface Vlan99
+   ip address 192.168.99.2/24
+!
+router ospf 1
+   router-id 1.1.1.1
+   area 0.0.0.10 range 192.168.99.0/24
+   network 192.168.99.0/24 area 0.0.0.10
+!
+route-map RM-OUT permit 10
+   set community 65001:100
+!
+router bgp 65001
+   neighbor 198.51.100.1 remote-as 65100
+   neighbor 198.51.100.1 route-map RM-OUT out
+!
+"""
+
+
+def test_arista_ospf_range_and_cidr_network():
+    r = convert.convert(ARISTA_OSPF, "arista", "juniper", "EX4100-48P")
+    assert "set protocols ospf area 0.0.0.10 area-range 192.168.99.0/24" in r["config"]
+    assert "set protocols ospf area 0.0.0.10 interface irb.99" in r["config"]
+    assert not any("range" in n for n in r["notes"])
+
+
+def test_notes_name_the_source_vendor():
+    notes = " ".join(convert.convert(ARISTA_OSPF, "arista", "juniper", "EX4100-48P")["notes"])
+    assert "Cisco" not in notes and "on Arista" in notes
+
+
+def test_report_sits_above_config(app, admin):
+    page = admin.get("/convert").get_data(as_text=True)
+    assert page.index('id="report"') < page.index('id="config"') and 'class="split"' not in page
