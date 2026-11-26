@@ -394,3 +394,23 @@ def test_notes_name_the_source_vendor():
 def test_report_sits_above_config(app, admin):
     page = admin.get("/convert").get_data(as_text=True)
     assert page.index('id="report"') < page.index('id="config"') and 'class="split"' not in page
+
+
+ARISTA_L3 = (DATA / "convert" / "arista-core-l3.txt").read_text()
+
+
+def test_arista_core_reads_everything():
+    r = convert.convert(ARISTA_L3, "", "juniper", "EX4100-48P")
+    cfg, q = r["config"], r["project"]
+    assert r["source"] == "arista" and r["not_read"] == []
+    assert "set policy-options prefix-list PL-OUT-ADVERTISE 192.168.99.0/24" in cfg
+    assert "set policy-options prefix-list PL-IN-DEFAULT 0.0.0.0/0" in cfg
+    assert "set policy-options prefix-list ACL-OSPF-REDIST 192.168.99.0/24" in cfg
+    assert "set protocols ospf area 0.0.0.0 interface lo0.0 passive" in cfg
+    assert "set protocols ospf area 0.0.0.0 interface ge-0/0/3.0 metric 10" in cfg
+    assert "set protocols ospf area 0.0.0.10 interface irb.99 passive" in cfg
+    assert "set protocols bgp group ISP-Edge-Peer multipath multiple-as" in cfg
+    assert q["routing"]["router_id"] == "10.255.255.1"
+    assert q["access"]["ssh_from"] == "192.168.99.0/24, 10.255.255.0/24"
+    notes = " ".join(r["notes"])
+    assert "max-lsa" in notes and "matches every route" not in notes and "not matched by export" not in notes

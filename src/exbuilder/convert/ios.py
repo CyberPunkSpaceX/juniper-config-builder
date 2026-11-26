@@ -162,6 +162,7 @@ def parse(text: str, vendor: str = "cisco") -> dict:
     redist: list[tuple[str, str, str]] = []   # (into protocol, from protocol, route-map)
     vty_acls: list[str] = []
     bgp_nets: list[str] = []
+    bgp_multipath = False
     acls: dict[str, list[str]] = {}
     plists: dict[str, list[str]] = {}
     rmaps: list[dict] = []
@@ -172,6 +173,13 @@ def parse(text: str, vendor: str = "cisco") -> dict:
         w = head.split()
         k = w[0].lower()
         try:
+            if head.strip() == "management ssh":
+                # Arista: 'ip access-group ACL [vrf X] in' limits who may SSH in.
+                for kid in kids:
+                    kw = kid.split()
+                    if kw[:2] == ["ip", "access-group"] and len(kw) > 2:
+                        vty_acls.append(kw[2])
+                continue
             if QUIET.match(head):
                 continue
             if k == "hostname" and len(w) > 1:
@@ -357,6 +365,9 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                         redist.append(("ospf", REDIST[kw[1]], kw[kw.index("route-map") + 1] if "route-map" in kw else ""))
                     elif kid.startswith(("area ", "redistribute ", "default-information", "summary-address")):
                         r.later.append(f"OSPF: '{kid}' was not converted; set it up by hand on the new switch.")
+                    elif kid.startswith("max-lsa "):
+                        r.later.append(f"OSPF: '{kid}' (a limit on the LSA database) has no Junos equivalent in the "
+                                       "builder and was left out. It is a safety limit, not needed for routing.")
                     elif kid.startswith(("log-adjacency-changes", "no passive-interface")):
                         if kid.startswith("no passive-interface"):
                             ospf_area.setdefault("active", []).append(kw[2])
@@ -368,6 +379,10 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                     kw = kid.split()
                     if kid.startswith("bgp router-id "):
                         rt["router_id"] = kw[2]
+                    elif kid.startswith("router-id ") and len(kw) > 1:
+                        rt["router_id"] = rt.get("router_id") or kw[1]
+                    elif kid.startswith("maximum-paths ") and len(kw) > 1 and kw[1].isdigit():
+                        bgp_multipath = int(kw[1]) > 1
                     elif kid.startswith("neighbor ") and len(kw) > 3 and kw[2] == "remote-as":
                         peers.setdefault(kw[1], {})["as"] = kw[3]
                     elif kid.startswith("neighbor ") and len(kw) > 3 and kw[2] == "description":
@@ -419,6 +434,14 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                 else:
                     acls.setdefault(w[3], []).extend(kids)
                 r.skip(head + (f"  (+{len(kids)} lines)" if kids else ""))
+            elif head.startswith("ip prefix-list ") and len(w) == 3:
+                # Arista: 'ip prefix-list NAME' with 'seq 10 permit 10.0.0.0/8' lines under it.
+                for kid in kids:
+                    kw = kid.split()
+                    if kw[:1] == ["seq"]:
+                        kw = kw[2:]
+                    if kw and kw[0] in ("permit", "deny"):
+                        plists.setdefault(w[2], []).append(" ".join(kw))
             elif head.startswith("ip prefix-list ") and len(w) > 4:
                 rest = w[2:]
                 name = rest[0]
@@ -461,11 +484,18 @@ def parse(text: str, vendor: str = "cisco") -> dict:
         elif into == "bgp":
             r.redist_bgp.append(name)
     _bgp(r, peers, bgp_nets)
+    if bgp_multipath:
+        for g in rt["bgp_groups"]:
+            g["multipath"] = True
+        if rt["bgp_groups"]:
+            r.notes.append("BGP 'maximum-paths' became 'multipath' on the BGP group. To put several paths in the "
+                           "forwarding table, Junos also needs a load-balance policy (routing-options forwarding-table "
+                           "export); add it by hand if you rely on ECMP.")
     for acl in dict.fromkeys(vty_acls):
         good, bad = _acl_prefixes(acls.get(acl, []))
         if good:
             a["ssh_from"] = ", ".join(dict.fromkeys(filter(None, [*a.get("ssh_from", "").split(", "), *good])))
-            r.notes.append(f"SSH access list {acl} on the vty lines became 'SSH only from {a['ssh_from']}' "
+            r.notes.append(f"SSH access list {acl} became 'SSH only from {a['ssh_from']}' "
                            "(a filter on the loopback on Juniper). Check that your own address is in it.")
         for b in bad:
             r.later.append(f"Access list {acl}: '{b}' was not converted.")
@@ -701,6 +731,8 @@ def _if_ospf(r: Reader, ifname: str, kw: list[str]) -> None:
     """Interface lines: 'ip ospf 1 area 0', 'ip ospf network point-to-point', 'ip ospf cost 10'."""
     if len(kw) >= 5 and kw[3] == "area":
         r.ospf_if[ifname] = kw[4]
+    elif len(kw) == 4 and kw[2] == "area":  # Arista: ip ospf area 0.0.0.0
+        r.ospf_if[ifname] = kw[3]
     elif kw[2:4] == ["network", "point-to-point"]:
         r.ospf_p2p.add(ifname)
     elif kw[2] == "cost" and len(kw) > 3 and kw[3].isdigit():
@@ -847,8 +879,9 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> N
                 if kid.startswith("match ip address prefix-list "):
                     t["prefix_list"] = kw[4]
                 elif kid.startswith("match ip address ") and len(kw) > 3:
-                    t["prefix_list"] = kw[3]
-                    used_acls.add(kw[3])
+                    acl = kw[4] if kw[3] == "access-list" and len(kw) > 4 else kw[3]  # Arista: '... access-list NAME'
+                    t["prefix_list"] = acl
+                    used_acls.add(acl)
                 elif kid.startswith("set local-preference "):
                     t["local_pref"] = kw[2]
                 elif kid.startswith("set metric ") and kw[2].isdigit():
