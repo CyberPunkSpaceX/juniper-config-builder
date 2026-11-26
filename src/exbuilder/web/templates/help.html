@@ -401,6 +401,14 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     Every step is listed with who did it and when.</li>
   <li>Your unsaved work is kept in the browser per client, space and vendor, so it never follows you into another
     client, and Arista work doesn't overwrite Juniper work.</li>
+  <li><b>Global</b> (on the Home page, the vendor screen and the top bar): one client's whole network on one page.
+    Every switch the client has in the space you're in (from config backups, nightly backups, saved maps and saved
+    projects) is drawn as a diagram with the cables between them; click a switch, or pick it in <b>Go to a switch</b>.
+    Configurators can drag switches to tidy the picture (saved for everyone), and a client admin can click
+    <b>Find cables with LLDP / CDP</b> to read the real cables over SSH. A switch's page has a <b>Changes</b> list on
+    the side: every config version, push, project save and Lab to Production step, newest first, with who and when.
+    Click one to see exactly what changed. Client admins also see the switch's audit log entries there. Read-only
+    people see everything with passwords and keys hidden.</li>
   <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>Read-only</b>
     (look, with passwords, keys and SNMP communities hidden), <b>Configurator</b> (build, save and delete) or
     <b>Admin</b> (also manage people, SSH and EVE-NG settings, approve Lab work). A <b>Super Admin</b> manages every

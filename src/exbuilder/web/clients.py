@@ -314,7 +314,9 @@ def set_space():
 @bp.get("/clients/pick")
 def pick_page():
     """After sign-in: pick the client to work on."""
-    return render_template("pick_client.html", space=space(), spaces=SPACES)
+    want = request.args.get("next") or ""
+    next_url = want if want.startswith("/") and not want.startswith("//") and "\\" not in want else ""
+    return render_template("pick_client.html", space=space(), spaces=SPACES, next_url=next_url)
 
 
 def need_lab(role: str) -> dict:

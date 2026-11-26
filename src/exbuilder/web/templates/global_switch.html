@@ -1,0 +1,169 @@
+{% extends "auth/base.html" %}
+{% block title %}{{ sw.host }} · Global · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+{% include "tools/_style.html" %}
+<style>
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: 1fr; } .side { order: -1; } }
+.side { position: sticky; top: 12px; max-height: calc(100vh - 24px); display: flex; flex-direction: column; }
+.side .panel { display: flex; flex-direction: column; min-height: 0; margin: 0; padding: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chips label { font-weight: 400; font-size: 13px; display: inline-flex; gap: 4px; align-items: center;
+  border: 1px solid var(--border); border-radius: 12px; padding: 2px 8px; margin: 0; cursor: pointer; }
+#events { list-style: none; margin: 0; padding: 0; overflow-y: auto; min-height: 120px; max-height: 70vh; }
+#events li button { all: unset; box-sizing: border-box; display: block; width: 100%; padding: 8px 10px; cursor: pointer;
+  border-left: 3px solid var(--border); border-bottom: 1px solid var(--border); font-size: 14px; }
+#events li button:hover, #events li button:focus-visible { background: var(--bg); }
+#events li button[aria-current=true] { background: var(--bg); border-left-color: var(--accent); }
+#events .k { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); }
+#events .k-config { color: var(--accent); } #events .k-push { color: var(--warn); } #events .k-review { color: #a855f7; }
+#events .k-project { color: var(--ok); }
+#events .t { display: block; font-weight: 600; }
+#events .m { display: block; font-size: 12.5px; color: var(--muted); }
+.facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px 16px; margin: 0; }
+.facts dt { font-size: 12px; color: var(--muted); } .facts dd { margin: 0; font-weight: 600; word-break: break-word; }
+.diff { font: 12.5px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; border: 1px solid var(--border);
+  border-radius: 6px; overflow: auto; max-height: 560px; background: var(--bg); }
+.diff .sec { padding: 4px 10px; font-weight: 700; background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; }
+.diff .ln { white-space: pre; padding: 0 10px; }
+.diff .add { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
+.diff .del { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
+.diff .skip { color: var(--muted); font-style: italic; }
+.crumbs select { width: auto; display: inline-block; padding: 3px 6px; font-size: 13px; margin-left: 6px; }
+</style>
+<div class="crumbs"><a href="{{ url_for('overview.global_page') }}">Global: {{ client.name }}</a> ›
+  <label for="jump" class="hint" style="display:inline">another switch</label>
+  <select id="jump">{% for o in others %}<option value="{{ o.url }}"{% if o.host == sw.host %} selected{% endif %}>{{ o.host }}</option>{% endfor %}</select>
+</div>
+<h1>{{ sw.host }} <span class="badge space-badge space-{{ client.space }}">{{ spaces[client.space] }}</span></h1>
+{% if redacted %}<p class="flash info">You are Read-only in {{ client.name }}: passwords and keys are hidden in configs and diffs.</p>{% endif %}
+
+<div class="layout">
+  <div>
+    <div class="panel">
+      <dl class="facts">
+        <div><dt>Address</dt><dd>{{ sw.address or "not known" }}</dd></div>
+        <div><dt>Brand</dt><dd>{{ sw.vendor or "not known" }}</dd></div>
+        <div><dt>Last config version</dt><dd>{{ sw.last_backup or "none yet" }}{% if sw.last_backup_by %} · {{ sw.last_backup_by }}{% endif %}</dd></div>
+        <div><dt>Config versions kept</dt><dd>{{ sw.versions }}</dd></div>
+        <div><dt>Projects</dt><dd>{% for p in sw.projects %}{{ p.name }}{{ ", " if not loop.last }}{% else %}none{% endfor %}</dd></div>
+      </dl>
+    </div>
+    <div class="panel" id="detail">
+      <h2 id="dtitle">Pick a change</h2>
+      <p class="muted" id="dmeta">Choose a change in the list to see what changed and who made it.</p>
+      <div id="dbody"></div>
+    </div>
+    <div class="panel">
+      <details>
+        <summary><strong>Current config</strong> <span class="hint">(the last version kept)</span></summary>
+        {% if config %}<pre class="out">{{ config }}</pre>{% else %}<p class="muted">No config of this switch has been kept yet.</p>{% endif %}
+      </details>
+    </div>
+  </div>
+  <aside class="side" aria-label="Changes">
+    <div class="panel">
+      <h2>Changes</h2>
+      <div class="chips" id="chips">
+        {% for k, label in kinds.items() %}{% if k != 'audit' or audit %}
+        <label><input type="checkbox" value="{{ k }}" checked> {{ label }}</label>
+        {% endif %}{% endfor %}
+      </div>
+      <ul id="events"><li class="muted">Loading…</li></ul>
+    </div>
+  </aside>
+</div>
+
+<script>
+const CHANGES = {{ changes_url|tojson }}, CHANGE = {{ change_url|tojson }};
+const KINDS = {{ kinds|tojson }};
+{% raw %}
+const $ = id => document.getElementById(id);
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}[c])); }
+async function get(url) {
+  const resp = await fetch(url, {headers: {"Accept": "application/json"}});
+  let d; try { d = await resp.json(); } catch (e) { d = {error: resp.status === 404 ? "Not found." : resp.statusText}; }
+  if (!resp.ok) throw new Error(d.error || "Request failed");
+  return d;
+}
+let events = [];
+
+function list() {
+  const on = new Set([...$("chips").querySelectorAll("input:checked")].map(x => x.value));
+  const shown = events.filter(e => on.has(e.kind));
+  $("events").innerHTML = shown.length ? shown.map(e =>
+    `<li><button type="button" data-kind="${e.kind}" data-id="${e.id}">` +
+    `<span class="k k-${e.kind}">${esc(KINDS[e.kind] || e.kind)}</span><span class="t">${esc(e.title)}</span>` +
+    `<span class="m">${esc(e.when)}${e.who ? " · " + esc(e.who) : ""}</span>` +
+    (e.detail ? `<span class="m">${esc(e.detail)}</span>` : "") + `</button></li>`).join("")
+    : '<li class="muted" style="padding:8px">No changes of these kinds yet.</li>';
+}
+
+function diffHtml(r) {
+  if (!r) return "";
+  if (r.error) return `<p class="muted">${esc(r.error)}</p>`;
+  if (r.identical) return '<p class="muted">No differences (lines that change on every read, like timestamps, are ignored).</p>';
+  let out = `<p class="muted">${r.only_b} line(s) added, ${r.only_a} removed.</p><div class="diff">`;
+  for (const s of r.sections) {
+    out += `<div class="sec">${esc(s.name)} <span class="hint">+${s.added} −${s.removed}</span></div>`;
+    for (const l of s.lines) {
+      const cls = l.op === "+" ? "add" : l.op === "-" ? "del" : l.op === "…" ? "skip" : "";
+      out += `<div class="ln ${cls}">${esc(l.op === "…" ? "  … " + l.text : l.op + " " + l.text)}</div>`;
+    }
+  }
+  return out + "</div>";
+}
+
+function textDiff(text) {
+  return '<div class="diff">' + String(text || "").split("\n").map(l => {
+    const t = l.trimStart(); const cls = t.startsWith("+") ? "add" : t.startsWith("-") ? "del" : "";
+    return `<div class="ln ${cls}">${esc(l)}</div>`;
+  }).join("") + "</div>";
+}
+
+async function show(kind, id) {
+  document.querySelectorAll("#events button").forEach(b => b.setAttribute("aria-current", b.dataset.kind === kind && b.dataset.id === String(id)));
+  $("dtitle").textContent = "Loading…"; $("dmeta").textContent = ""; $("dbody").innerHTML = "";
+  let d;
+  try { d = await get(`${CHANGE}?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`); }
+  catch (e) { $("dtitle").textContent = "Could not load that change"; $("dmeta").textContent = e.message; return; }
+  $("dtitle").textContent = d.title;
+  const meta = [`${d.when || ""}${d.who ? " by " + d.who : ""}`];
+  let body = "";
+  if (kind === "config") {
+    if (d.first) { meta.push("the first version kept of this switch"); body = `<pre class="out">${esc(d.text)}</pre>`; }
+    else { meta.push(`compared with the version before: ${d.before.when} (${d.before.source}${d.before.who ? ", " + d.before.who : ""})`); body = diffHtml(d.result); }
+  } else if (kind === "push") {
+    meta.push(`${d.mode} · ${d.status.replace("_", " ")}`);
+    if (d.message) body += `<p>${esc(d.message)}</p>`;
+    if (d.diff) body += "<h3>What was sent</h3>" + textDiff(d.diff);
+    if (d.result) body += "<h3>Config before and after the push</h3>" + diffHtml(d.result);
+  } else if (kind === "project" || kind === "review") {
+    if (kind === "review") {
+      meta.push(`status: ${d.status}`);
+      const steps = [["Requested", d.when, d.who, d.note], ["Decided", d.decided_at, d.decided_by, d.decision_note],
+                     ["Promoted", d.promoted_at, d.promoted_by, ""]].filter(s => s[2]);
+      body += "<table><tbody>" + steps.map(s => `<tr><th>${s[0]}</th><td>${esc(s[1])}</td><td>${esc(s[2])}</td><td>${esc(s[3])}</td></tr>`).join("") + "</tbody></table>";
+    }
+    if (d.result) body += `<h3>Compared with ${esc(d.against)}</h3>` + diffHtml(d.result);
+    else if (d.text) body += `<h3>The config it builds</h3><pre class="out">${esc(d.text)}</pre>`;
+  } else if (kind === "audit") {
+    body = "<table><tbody>" + Object.entries(d.audit).map(([k, v]) => `<tr><th>${esc(k)}</th><td>${esc(v)}</td></tr>`).join("") + "</tbody></table>";
+  }
+  if (d.redacted) meta.push("passwords and keys hidden");
+  $("dmeta").textContent = meta.filter(Boolean).join(" · ");
+  $("dbody").innerHTML = body;
+}
+
+$("events").onclick = e => { const b = e.target.closest("button[data-kind]"); if (b) show(b.dataset.kind, b.dataset.id); };
+$("chips").onchange = list;
+$("jump").onchange = e => { if (e.target.value) location.href = e.target.value; };
+
+(async () => {
+  try { events = (await get(CHANGES)).events; } catch (e) { $("events").innerHTML = `<li class="bad-text">${esc(e.message)}</li>`; return; }
+  list();
+  if (events.length) show(events[0].kind, events[0].id);
+})();
+{% endraw %}
+</script>
+{% endblock %}

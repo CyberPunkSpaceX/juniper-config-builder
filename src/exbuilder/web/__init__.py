@@ -146,6 +146,9 @@ def create_app() -> Flask:
         resp.headers["X-Frame-Options"] = "DENY"
         return resp
 
+    from . import overview   # Global: the client's switches on one page, and each switch's history
+    overview.init_app(app)
+
     @app.get("/")
     def index():
         """The vendor screen, once Production / Lab and the client are picked."""
