@@ -97,7 +97,12 @@ def to_set_lines(text: str) -> list[str]:
         ln = re.sub(r"^set\s+", "", ln)
         if ln.startswith(("inactive: ", "protect: ")):
             ln = ln.split(" ", 1)[1]
-        out.append(ln)
+        # 'vlan members [ A B ]' is shorthand for one line per value.
+        m = re.match(r"^(.*?)\[\s*(.*?)\s*\](.*)$", ln)
+        if m and m.group(2):
+            out.extend(f"{m.group(1)}{v}{m.group(3)}" for v in m.group(2).split())
+        else:
+            out.append(ln)
     return out
 
 
@@ -149,6 +154,8 @@ def parse(text: str, model: str = "", detected: dict | None = None) -> dict:
     areas: dict[str, dict] = {}
     groups: dict[str, dict] = {}
     plists: dict[str, list] = {}
+    pcomms: dict[str, list] = {}
+    terms: dict[tuple, dict] = {}
     members: dict[int, dict] = {}
     edge_ports: set[str] = set()
     ifs_flags: list = []
@@ -519,6 +526,11 @@ def parse(text: str, model: str = "", detected: dict | None = None) -> dict:
                         cos_trust.add(w[2])
             elif w[0] == "policy-options" and n > 3 and w[1] == "prefix-list":
                 plists.setdefault(w[2], []).append(w[3])
+            elif w[0] == "policy-options" and n > 4 and w[1] == "community" and w[3] == "members":
+                pcomms.setdefault(w[2], []).extend(w[4:])
+            elif w[0] == "policy-options" and n > 5 and w[1] == "policy-statement" and w[3] == "term" \
+                    and w[2] != "ECMP-LOAD-BALANCE":
+                ok = _term(terms.setdefault((w[2], w[4]), {"policy": w[2], "term": w[4]}), w[5:])
             elif w[0] == "policy-options" and n > 2 and w[2] == "ECMP-LOAD-BALANCE":
                 r["ecmp"] = True
             else:
@@ -683,11 +695,16 @@ def parse(text: str, model: str = "", detected: dict | None = None) -> dict:
     if areas:
         r["ospf"]["enabled"] = True
         r["ospf"]["areas"] = [{"area": k, "type": v["type"], "interfaces": ", ".join(v["interfaces"]),
-                               "passive": ", ".join(v["passive"]), "p2p": ", ".join(v["p2p"]), "md5_key": ""}
+                               "passive": ", ".join(v["passive"]), "p2p": ", ".join(v["p2p"]), "md5_key": "",
+                               "metrics": ", ".join(v.get("metrics", [])), "ranges": ", ".join(v.get("ranges", []))}
                               for k, v in areas.items()]
     r["bgp_groups"] = [dict(g, neighbors="\n".join(f"{ip} {asn}".strip() for ip, asn in g["neighbors"].items()))
                        for g in groups.values()]
     p["policy"]["prefix_lists"] = [{"name": k, "prefixes": ", ".join(v)} for k, v in plists.items()]
+    p["policy"]["communities"] = [{"name": k, "members": ", ".join(v)} for k, v in pcomms.items()]
+    p["policy"]["terms"] = [{"protocol": "", "prefix_list": "", "match": "exact", "route_filter": "", "community": "",
+                             "action": "next", "local_pref": "", "med": "", "community_add": "", "next_hop_self": False,
+                             **t} for t in terms.values()]
     if members:
         p["switch"]["members"] = [dict(m, model=model or DEFAULTS["switch"]["members"][0]["model"])
                                   for _, m in sorted(members.items())]
@@ -793,6 +810,41 @@ def _iface_line(name: str, w: list[str], d: dict, irb_units: dict) -> bool:
     return True
 
 
+def _term(t: dict, x: list[str]) -> bool:
+    """One 'policy-statement P term T ...' line (after the term name) -> the builder's term fields."""
+    if x[:1] == ["from"] and len(x) > 2:
+        k, v = x[1], x[2]
+        if k == "protocol":
+            t["protocol"] = v
+        elif k == "prefix-list":
+            t["prefix_list"] = v
+        elif k == "prefix-list-filter" and len(x) > 3:
+            t["prefix_list"], t["match"] = v, x[3]
+        elif k == "route-filter":
+            t["route_filter"] = ", ".join(filter(None, [t.get("route_filter", ""), " ".join(x[2:])]))
+        elif k == "community":
+            t["community"] = v
+        else:
+            return False
+    elif x[:1] == ["then"] and len(x) > 1:
+        k = x[1]
+        if k in ("accept", "reject"):
+            t["action"] = k
+        elif k == "local-preference" and len(x) > 2:
+            t["local_pref"] = x[2]
+        elif k == "metric" and len(x) > 2:
+            t["med"] = x[2]
+        elif k == "community" and len(x) > 3 and x[2] in ("add", "set"):
+            t["community_add"] = x[3]
+        elif x[1:3] == ["next-hop", "self"]:
+            t["next_hop_self"] = True
+        else:
+            return False
+    else:
+        return False
+    return True
+
+
 def _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts, ifs_flags) -> bool:
     sv, r = p["services"], p["routing"]
     n = len(w)
@@ -836,6 +888,11 @@ def _protocols(w, p, areas, groups, edge_ports, relay_ifaces, facts, ifs_flags) 
                 a["passive"].append(ifn)
             if "p2p" in w[6:] and ifn not in a["p2p"]:
                 a["p2p"].append(ifn)
+            if "metric" in w[6:-1]:
+                a.setdefault("metrics", []).append(f"{ifn} {w[w.index('metric') + 1]}")
+        elif n > 5 and w[2] == "area" and w[4] == "area-range":
+            areas.setdefault(w[3], {"type": "normal", "interfaces": [], "passive": [], "p2p": []}) \
+                .setdefault("ranges", []).append(w[5])
         elif n > 4 and w[2] == "area" and w[4] in ("stub", "nssa"):
             areas.setdefault(w[3], {"type": "normal", "interfaces": [], "passive": [], "p2p": []})["type"] = w[4]
         else:

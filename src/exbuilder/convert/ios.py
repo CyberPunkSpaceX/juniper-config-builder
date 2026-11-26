@@ -42,7 +42,7 @@ QUIET = re.compile(
     r"ip ssh rsa keypair-name|ip ssh source-interface|ip ssh dh |no ip http)", re.I)
 
 IFACE_QUIET = re.compile(
-    r"^(?:no ip address|no shutdown|switchport$|switchport nonegotiate|switchport trunk encapsulation|"
+    r"^(?:no ip address|no shutdown|spanning-tree port type network|switchport$|switchport nonegotiate|switchport trunk encapsulation|"
     r"negotiation auto|load-interval|no cdp |cdp |no keepalive|keepalive|no switchport$|ip route-cache|"
     r"no ip redirects|no ip proxy-arp|no ip unreachables|dot1x timeout|authentication host-mode|"
     r"authentication order|authentication priority|authentication periodic|authentication timer|"
@@ -54,7 +54,7 @@ IFACE_QUIET = re.compile(
 
 PRIV_CLASS = {15: "super-user", 1: "read-only"}
 # Cisco 'redistribute X' -> the protocol name in a routing policy term.
-REDIST = {"ospf": "ospf", "bgp": "bgp", "static": "static", "connected": "direct"}
+REDIST = {"ospf": "ospf", "bgp": "bgp", "static": "static", "connected": "direct", "direct": "direct"}
 LEVELS = {"emergencies": "emergency", "alerts": "alert", "critical": "critical", "errors": "error",
           "warnings": "warning", "notifications": "notice", "informational": "info", "debugging": "any",
           "0": "emergency", "1": "alert", "2": "critical", "3": "error", "4": "warning", "5": "notice",
@@ -179,6 +179,12 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                     kw = kid.split()
                     if kw[:2] == ["ip", "access-group"] and len(kw) > 2:
                         vty_acls.append(kw[2])
+                continue
+            if head.startswith(("aaa authentication login", "aaa authorization exec")) and \
+                    any(x in w for x in ("radius", "tacacs+", "tacacs")):
+                if head.startswith("aaa authentication login"):
+                    r.later.append(f"'{head}': logging in to the switch through RADIUS/TACACS+ is not written by the "
+                                   "builder. The new config uses the local users; add RADIUS/TACACS+ login by hand.")
                 continue
             if QUIET.match(head):
                 continue
@@ -330,8 +336,10 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                             r.skip(head)
                     elif vrf:
                         r.skip(head)
-                    elif re.match(r"^\d+\.\d+\.\d+\.\d+$", hop):
-                        rt["static"].append({"prefix": pfx, "next_hop": hop})
+                    elif re.match(r"^\d+\.\d+\.\d+\.\d+$", hop) or hop.lower() in ("null0", "null 0"):
+                        pref = rest[3] if len(rest) > 3 and rest[3].isdigit() else ""
+                        rt["static"].append({"prefix": pfx, "next_hop": "discard" if hop.lower() == "null0" else hop,
+                                             **({"preference": pref} if pref else {})})
                     else:
                         r.skip(head)
             elif k == "interface" and (w[1].lower() == "range" or re.search(r"\d-|,", " ".join(w[1:]))):
@@ -375,8 +383,26 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                         r.skip(f"router ospf / {kid}")
             elif head.startswith("router bgp "):
                 rt["asn"] = w[2]
+                cur = ""  # NX-OS / OS10 put a neighbor's settings in a block under 'neighbor IP'
                 for kid in kids:
                     kw = kid.split()
+                    if not kw or kid == "!":
+                        continue
+                    if kw[0] == "neighbor" and len(kw) == 2:
+                        cur = kw[1]
+                        peers.setdefault(cur, {})
+                        continue
+                    if cur and kw[0] in ("remote-as", "description", "password", "route-map", "update-source",
+                                         "send-community", "shutdown", "no", "activate", "ebgp-multihop", "timers"):
+                        if kw[0] == "no" or kw[0] in ("shutdown", "timers", "ebgp-multihop"):
+                            if kid == "shutdown":
+                                r.later.append(f"BGP neighbor {cur} was shut down on the old switch; it is active "
+                                               "in the new config.")
+                            elif kid != "no shutdown":
+                                r.later.append(f"BGP neighbor {cur}: '{kid}' was not converted.")
+                            continue
+                        kid = f"neighbor {cur} {kid}"
+                        kw = kid.split()
                     if kid.startswith("bgp router-id "):
                         rt["router_id"] = kw[2]
                     elif kid.startswith("router-id ") and len(kw) > 1:
@@ -388,7 +414,7 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                     elif kid.startswith("neighbor ") and len(kw) > 3 and kw[2] == "description":
                         peers.setdefault(kw[1], {})["description"] = kid.split(None, 3)[3]
                     elif kid.startswith("neighbor ") and len(kw) > 3 and kw[2] == "password":
-                        peers.setdefault(kw[1], {})["password"] = _secret(kw[3:], r, "BGP password")
+                        peers.setdefault(kw[1], {})["password"] = _secret(kw[3:], r, f"BGP neighbor {kw[1]} password")
                     elif kid.startswith("neighbor ") and len(kw) > 4 and kw[2] == "route-map":
                         peers.setdefault(kw[1], {})["import" if kw[4] == "in" else "export"] = kw[3]
                     elif kid.startswith("neighbor ") and len(kw) > 3 and kw[2] == "update-source":
@@ -400,6 +426,7 @@ def parse(text: str, vendor: str = "cisco") -> dict:
                     elif kid.startswith("redistribute "):
                         r.later.append(f"BGP: '{kid}' was not converted; add an export policy term for it by hand.")
                     elif kid.startswith(("bgp log-neighbor", "address-family", "exit-address", "no bgp default",
+                                         "log-neighbor-changes", "router-id",
                                          "bgp send-community")) or \
                             (kid.startswith("neighbor ") and (kw[-1] == "activate" or "send-community" in kw)):
                         pass
@@ -470,7 +497,7 @@ def parse(text: str, vendor: str = "cisco") -> dict:
     sl.pop("_level", None)
     if mgmt_port:
         s["mgmt_interface"] = ""
-    _ospf(r, ospf_nets, ospf_passive, ospf_area, ospf_ranges)
+    _ospf(r, ospf_nets, ospf_passive + r.ospf_if_passive, ospf_area, ospf_ranges)
     uses = [(x, x, "") for pr in peers.values() for x in (pr.get("import"), pr.get("export")) if x]
     for into, frm, rm in redist:
         if into == "bgp" and not peers:
@@ -543,6 +570,9 @@ def _secret(rest: list[str], r: Reader, label: str) -> str:
         return type7(rest[1])
     if rest[0] in ("5", "8", "9") and len(rest) > 1:
         return rest[1]
+    if rest[0] == "3" and len(rest) > 1:  # NX-OS: encrypted with a key on the switch, can't be read back
+        r.later.append(f"{label}: it was stored encrypted (type 3) and can't be carried over; type it again.")
+        return ""
     return rest[0]
 
 
@@ -557,7 +587,7 @@ def _interface(r: Reader, name: str, kids: list[str]) -> str:
             kw = kid.split()
             if kid.startswith("ip address ") and len(kw) >= 3 and kw[2] != "dhcp":
                 svi["addr"].append(_addr(kw))
-            elif kid.startswith("ip ospf "):
+            elif kid.startswith(("ip ospf ", "ip router ospf ")):
                 _if_ospf(r, f"Vlan{vid}", kw)
             elif kid.startswith(("ip helper-address ", "ip dhcp relay address ")):
                 svi["relay"] = True
@@ -580,7 +610,7 @@ def _interface(r: Reader, name: str, kids: list[str]) -> str:
             kw = kid.split()
             if kid.startswith("ip address ") and len(kw) >= 3 and not r.p["routing"]["loopback"]:
                 r.p["routing"]["loopback"] = _addr(kw)
-            elif kid.startswith("ip ospf "):
+            elif kid.startswith(("ip ospf ", "ip router ospf ")):
                 _if_ospf(r, "Loopback0", kw)
             elif not IFACE_QUIET.match(kid) and not kid.startswith("description"):
                 r.skip(f"interface {name} / {kid}")
@@ -668,7 +698,7 @@ def _port_kids(r: Reader, name: str, d: dict, kids: list[str]) -> None:
             d["lacp_fast"] = True
         elif low.startswith("port-channel min-links ") or low.startswith("lacp min-bundle "):
             d["min_links"] = kw[-1]
-        elif low.startswith("ip ospf "):
+        elif low.startswith(("ip ospf ", "ip router ospf ")):
             _if_ospf(r, _canon_port(name, r.vendor) or name, kw)
         elif low == "no switchport":
             d["no_switchport"] = True   # routed only with an address (OS10 LAG members say it too)
@@ -729,6 +759,11 @@ def _port_kids(r: Reader, name: str, d: dict, kids: list[str]) -> None:
 
 def _if_ospf(r: Reader, ifname: str, kw: list[str]) -> None:
     """Interface lines: 'ip ospf 1 area 0', 'ip ospf network point-to-point', 'ip ospf cost 10'."""
+    if kw[1:2] == ["router"]:  # NX-OS: ip router ospf 1 area 0.0.0.0
+        kw = ["ip", "ospf", *kw[3:]]
+    if kw[2:3] == ["passive-interface"]:  # NX-OS: ip ospf passive-interface
+        r.ospf_if_passive.append(ifname)
+        return
     if len(kw) >= 5 and kw[3] == "area":
         r.ospf_if[ifname] = kw[4]
     elif len(kw) == 4 and kw[2] == "area":  # Arista: ip ospf area 0.0.0.0
@@ -758,8 +793,17 @@ def _ospf(r: Reader, nets, passive, opts, ranges=None) -> None:
     rt = r.p["routing"]
     rt["ospf"]["enabled"] = True
     areas: dict[str, dict] = {}
+    def lagname(x):  # 'port-channel20' / 'Po1' -> the reader's LAG name, so all references agree
+        n = portmap.lag_number(r.vendor, x)
+        return portmap.lag_name(r.vendor, n) if n is not None else x
+    r.ospf_cost = {lagname(k): v for k, v in r.ospf_cost.items()}
+    r.ospf_p2p = {lagname(k) for k in r.ospf_p2p}
+    r.ospf_if = {lagname(k): v for k, v in r.ospf_if.items()}
+    passive = [lagname(x) for x in passive]
+    opts["active"] = [lagname(x) for x in opts.get("active", [])]
     cands = [(f"Vlan{vid}", s["addr"]) for vid, s in r.svis.items()]
     cands += [(n, d.get("addr", [])) for n, d in r.ifs.items() if d.get("addr")]
+    cands += [(portmap.lag_name(r.vendor, n), d.get("addr", [])) for n, d in r.lags.items() if d.get("addr")]
     if rt["loopback"]:
         cands.append(("Loopback0", [rt["loopback"]]))
     for pfx, area in nets:
@@ -835,6 +879,21 @@ def _acl_prefixes(lines: list[str]) -> tuple[list[str], list[str]]:
     return out, bad
 
 
+def _range_filter(prefix: str, rest: list[str]) -> str:
+    """'10.0.0.0/8' + ['le', '24'] -> '10.0.0.0/8 upto /24' (a Junos route-filter); '' if it can't be."""
+    try:
+        length = ipaddress.ip_network(prefix, strict=False).prefixlen
+        opts = dict(zip(rest[::2], (int(x) for x in rest[1::2])))
+    except ValueError:
+        return ""
+    if not opts or set(opts) - {"le", "ge"} or len(rest) % 2:
+        return ""
+    ge, le = opts.get("ge", length), opts.get("le", 32 if "ge" in opts else length)
+    if ge == length:
+        return f"{prefix} upto /{le}"
+    return f"{prefix} prefix-length-range /{ge}-/{le}"
+
+
 def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> None:
     """Prefix lists, and the route-maps that BGP neighbors and redistribution use -> routing policies.
 
@@ -843,6 +902,7 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> N
     """
     pol = r.p["policy"]
     made: dict[str, list[str]] = {}
+    filters: dict[str, list[str]] = {}  # 'permit P le N' lines -> Junos route-filters on the terms that use the list
     for name, entries in plists.items():
         good = []
         for e in entries:
@@ -851,6 +911,8 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> N
                 continue  # the deny-everything line at the end: Junos policies end the same way below
             if kw[0] == "permit" and len(kw) == 2:
                 good.append(kw[1])
+            elif kw[0] == "permit" and _range_filter(kw[1], kw[2:]):
+                filters.setdefault(name, []).append(_range_filter(kw[1], kw[2:]))
             else:
                 r.later.append(f"Prefix list {name}: '{e}' was not converted (only plain permit lines are).")
         if good:
@@ -915,14 +977,43 @@ def _policies(r: Reader, acls: dict, plists: dict, rmaps: list, uses: list) -> N
         if name not in acls:
             r.later.append(f"Route-maps use access list {name}, but it is not in the config.")
     r.acls_used |= used_acls
+    for t in terms:
+        if t["prefix_list"] in filters:
+            t["route_filter"] = ", ".join(filters[t["prefix_list"]])
     for name in {t["prefix_list"] for t in terms if t["prefix_list"]} - set(made):
         for t in terms:
             if t["prefix_list"] == name:
                 t["prefix_list"] = ""
+                if t["route_filter"]:
+                    continue
                 r.later.append(f"Policy {t['policy']}: prefix list {name} has no entries the builder can write, "
                                "so that term now matches every route. Check it.")
     pol["prefix_lists"] = [{"name": k, "prefixes": ", ".join(v)} for k, v in made.items()]
     pol["terms"] = terms
+
+
+def _rf_covers(rf: str, prefix: str) -> bool:
+    """Does Junos route-filter '10.0.0.0/8 upto /24' (or exact/orlonger/prefix-length-range) match prefix?"""
+    try:
+        parts = rf.split()
+        base, n = ipaddress.ip_network(parts[0], strict=False), ipaddress.ip_network(prefix, strict=False)
+        mode = parts[1] if len(parts) > 1 else "exact"
+        if not n.subnet_of(base):
+            return False
+        if mode == "exact":
+            return n == base
+        if mode == "orlonger":
+            return True
+        if mode == "longer":
+            return n.prefixlen > base.prefixlen
+        if mode == "upto":
+            return n.prefixlen <= int(parts[2].lstrip("/"))
+        if mode == "prefix-length-range":
+            lo, hi = (int(x.lstrip("/")) for x in parts[2].split("-"))
+            return lo <= n.prefixlen <= hi
+    except (ValueError, IndexError, TypeError):
+        pass
+    return False
 
 
 def _bgp(r: Reader, peers: dict, nets: list[str]) -> None:
@@ -947,7 +1038,7 @@ def _bgp(r: Reader, peers: dict, nets: list[str]) -> None:
                                "address on the Routing tab.")
         g["neighbors"].append(f"{ip} {pr.get('as', '')}".strip() if typ == "external" else ip)
     pol = r.p["policy"]
-    if nets:
+    if nets and any(not g["export"] for g in groups.values()):
         # Cisco announces 'network' prefixes that are in the routing table; Junos announces what the export
         # policy accepts. A group with its own export route-map already decides; others get BGP-NETWORKS.
         pol["terms"].append({"policy": "BGP-NETWORKS", "term": "networks", "protocol": "", "prefix_list": "",
@@ -959,9 +1050,11 @@ def _bgp(r: Reader, peers: dict, nets: list[str]) -> None:
         if nets and not g["export"]:
             out.append("BGP-NETWORKS")
         elif nets:
-            plist = {t["prefix_list"] for t in pol["terms"] if t["policy"] == g["export"] and t["action"] == "accept"}
+            acc = [t for t in pol["terms"] if t["policy"] == g["export"] and t["action"] == "accept"]
+            plist = {t["prefix_list"] for t in acc}
             have = {p for pl in pol["prefix_lists"] if pl["name"] in plist for p in pl["prefixes"].split(", ")}
-            missing = [n for n in nets if n not in have]
+            rfs = [x.strip() for t in acc for x in t["route_filter"].split(",") if x.strip()]
+            missing = [n for n in nets if n not in have and not any(_rf_covers(rf, n) for rf in rfs)]
             if missing:
                 r.later.append(f"BGP group {g['name']}: 'network' {', '.join(missing)} is not matched by export "
                                f"policy {g['export']}, so Junos won't announce it. Add it to that policy if needed.")

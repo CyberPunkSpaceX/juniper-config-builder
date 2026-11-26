@@ -414,3 +414,69 @@ def test_arista_core_reads_everything():
     assert q["access"]["ssh_from"] == "192.168.99.0/24, 10.255.255.0/24"
     notes = " ".join(r["notes"])
     assert "max-lsa" in notes and "matches every route" not in notes and "not matched by export" not in notes
+
+
+# ---------------------------------------------------------------- sweep: complex core configs to every vendor
+SWEEP = sorted((DATA / "convert" / "sweep").iterdir()) + [DATA / "convert" / "arista-core-l3.txt",
+                                                           DATA / "convert" / "cisco-ios15-l3.txt"]
+TARGETS = ["juniper", "arista", "cisco", "nexus", "dell", "extreme", "fortiswitch", "mikrotik", "unifi", "ruckus",
+           "aruba", "procurve"]
+
+
+def _only_password_errors(r):
+    return [e["message"] for e in r["errors"]
+            if not any(x in e["message"].lower() for x in ("password", "ssh key"))]
+
+
+@pytest.mark.parametrize("path", SWEEP, ids=lambda p: p.name)
+def test_sweep_every_line_is_read(path):
+    r = convert.convert(path.read_text(), "", "juniper")
+    assert r["not_read"] == []
+    notes = " ".join(r["notes"])
+    assert "matches every route" not in notes and "not matched by export" not in notes
+
+
+@pytest.mark.parametrize("target", TARGETS)
+@pytest.mark.parametrize("path", SWEEP, ids=lambda p: p.name)
+def test_sweep_converts_to_every_vendor(path, target):
+    r = convert.convert(path.read_text(), "", target)
+    assert r["config"] and _only_password_errors(r) == []
+
+
+def test_sweep_nexus_details():
+    r = convert.convert((DATA / "convert" / "sweep" / "nexus-core.txt").read_text(), "", "juniper")
+    cfg = r["config"]
+    assert "from route-filter 10.255.1.0/24 upto /32" in cfg
+    assert "set protocols ospf area 0.0.0.1 interface irb.100 passive" in cfg
+    assert "BGP-NETWORKS" not in cfg  # both peers have their own export route-map
+    assert "authentication-key 3" not in cfg and any("type 3" in n for n in r["notes"])
+    assert "neighbor 172.31.0.2 peer-as 65000" in cfg and "import RM-FROM-WAN" in cfg
+
+
+def test_sweep_cisco_routed_lag_runs_ospf():
+    r = convert.convert((DATA / "convert" / "sweep" / "cisco-xe-dist.txt").read_text(), "", "juniper")
+    cfg = r["config"]
+    assert "set protocols ospf area 0.0.0.0 interface ae0.0 metric 5" in cfg
+    assert "set protocols ospf area 0.0.0.0 interface ae0.0 interface-type p2p" in cfg
+    assert "set routing-options static route 192.0.2.0/24 discard" in cfg
+    assert "set routing-options static route 0.0.0.0/0 preference 250" in cfg
+
+
+def test_sweep_juniper_policies_round_trip():
+    r = convert.convert((DATA / "convert" / "sweep" / "juniper-core.conf").read_text(), "", "juniper")
+    cfg = r["config"]
+    for line in ("set policy-options community CM-OUT members 65090:10",
+                 "set policy-options policy-statement EXPORT-ISP term t1 then community add CM-OUT",
+                 "set policy-options policy-statement IMPORT-ISP term t1 then local-preference 120",
+                 "set protocols ospf area 0.0.0.1 area-range 10.1.0.0/16",
+                 "set protocols ospf area 0.0.0.0 interface xe-0/2/2.0 metric 15",
+                 "set interfaces ae0 unit 0 family ethernet-switching vlan members SERVERS"):
+        assert line in cfg
+
+
+@pytest.mark.parametrize("target", ["extreme", "fortiswitch", "procurve", "mikrotik"])
+def test_routed_ports_become_vlans_where_needed(target):
+    r = convert.convert((DATA / "convert" / "sweep" / "nexus-core.txt").read_text(), "", target)
+    v = {x["name"]: x for x in r["project"]["vlans"]}
+    assert v["RT-WAN-RTR-1"]["irb"] == "172.31.0.1/31" and v["RT-WAN-RTR-1"]["id"] == "3999"
+    assert any("was a routed port" in c["text"] for c in r["changes"])

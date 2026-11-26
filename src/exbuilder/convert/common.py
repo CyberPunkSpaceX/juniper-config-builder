@@ -94,6 +94,7 @@ class Reader:
         self.ospf_cost: dict[str, str] = {}
         self.redist_bgp: list[str] = []      # policies that stand for 'redistribute X' under router bgp
         self.acls_used: set[str] = set()
+        self.ospf_if_passive: list[str] = []
         self.later: list[str] = []           # notes for things read but not carried over
 
     def vlan(self, vid: int, name: str = "") -> dict:
