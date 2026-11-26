@@ -319,6 +319,26 @@ image and data volume, same node). Email needs `EXB_SMTP_HOST`, `EXB_SMTP_PORT`,
 `EXB_SMTP_PASSWORD_FILE` and `EXB_SMTP_FROM`; `EXB_PUBLIC_URL` adds a link to
 the alerts.
 
+### Switch logs (built-in syslog server)
+
+The jobs service is also a syslog server (UDP and TCP port 514, published in
+host mode so the switches' real addresses are seen). On a client's page, **Set
+up switch logs** (client admins): turn logs on, list the networks the switches
+send from (empty = the client's SSH switch networks), and the days to keep
+(default 30). A message goes to the client whose networks contain the sender
+(the most specific network wins); messages from addresses no client lists are
+dropped, so clients never see each other's logs. Logs live in their own
+database, `/data/syslog.db`.
+
+The **Logs** page (top bar) shows the current client's logs, newest first, with
+search, switch, level and time filters, a live view and a CSV download. An
+optional alert sends serious messages (for example "error or worse", optionally
+only those containing a word) to the nightly backup alert targets, at most once
+every 5 minutes. The settings page lists the syslog commands for each vendor.
+Limits: `EXB_SYSLOG_RATE` messages a second per sender (200),
+`EXB_SYSLOG_MAX_ROWS` messages per client (2 million), 8 KB per message.
+`EXB_SYSLOG_ADDRESS` is the address shown on the settings page.
+
 ![Comparing a backup with the builder's config](docs/screenshots/11-backups-compare.png)
 
 ### Back up and restore a client

@@ -120,6 +120,11 @@ set system login user {{ c['ssh_user'] or 'switchbuilder-ro' }} class switchbuil
   <p class="hint">Back up every switch of {{ c['name'] }} each night with the SSH key, keep the version history, and
     get an email or a Teams / Slack message when a config changes or a switch cannot be read.</p>
   <p><a href="{{ url_for('nightly.nightly_page', cid=c['id']) }}">Set up nightly backups →</a></p>
+
+  <h2 style="margin-top: 22px">Switch logs (syslog)</h2>
+  <p class="hint">Point {{ c['name'] }}'s switches at this server's syslog port. Their logs are kept for {{ c['name'] }} only,
+    searchable on the Logs page, with optional alerts for serious messages.</p>
+  <p><a href="{{ url_for('logs.settings_page', cid=c['id']) }}">Set up switch logs →</a></p>
 </section>
 
 <section class="panel" id="eve">

@@ -1,0 +1,66 @@
+{% extends "auth/base.html" %}
+{% block title %}Logs · {{ c['name'] }} · Multi-Vendor Switch Config Builder{% endblock %}
+{% block content %}
+<h1>Switch logs of {{ c['name'] }}</h1>
+{% if not s['enabled'] %}
+<section class="panel"><p>Logs are not turned on for {{ c['name'] }}.
+  {% if is_admin %}<a href="{{ url_for('logs.settings_page', cid=c['id']) }}">Set up switch logs</a>.{% else %}A client admin turns them on on the client page.{% endif %}</p></section>
+{% endif %}
+<section class="panel">
+  <form method="get" id="lf" class="row" style="grid-template-columns: 2fr 1.2fr 1fr 1fr auto; align-items: end">
+    <div><label for="q">Search</label><input id="q" type="text" name="q" value="{{ f['q'] }}" placeholder="LINK-3-UPDOWN ge-0/0/12"></div>
+    <div><label for="host">Switch</label><select id="host" name="host"><option value="">All switches</option>
+      {% for h in hosts %}<option {% if h == f['host'] %}selected{% endif %}>{{ h }}</option>{% endfor %}</select></div>
+    <div><label for="sev">Level</label><select id="sev" name="sev">
+      {% for s_ in severities %}<option value="{{ loop.index0 }}" {% if loop.index0|string == f['sev'] %}selected{% endif %}>{{ s_ }}{% if loop.index0 < 7 %} or worse{% else %} (everything){% endif %}</option>{% endfor %}</select></div>
+    <div><label for="range">Time</label><select id="range" name="range">
+      {% for k in ranges %}<option value="{{ k }}" {% if k == f['range'] %}selected{% endif %}>{{ 'all kept' if k == 'all' else 'last ' + k }}</option>{% endfor %}</select></div>
+    <div><button type="submit">Show</button></div>
+  </form>
+  <p class="hint" style="margin-top:10px">
+    <label style="display:inline; font-weight:400"><input type="checkbox" id="live"> Live (new messages every 5 seconds)</label>
+    · <a href="{{ download }}">Download as CSV</a>
+    · Newest first, {{ page }} at most. Times are UTC.
+    {% if is_admin %}· <a href="{{ url_for('logs.settings_page', cid=c['id']) }}">Settings</a>{% endif %}</p>
+  <div class="scroll"><table class="logs">
+    <thead><tr><th>Time</th><th>Switch</th><th>Level</th><th>Message</th></tr></thead>
+    <tbody id="rows">
+    {% for r in rows %}
+      <tr class="sev{{ r.sev }}"><td style="white-space:nowrap">{{ r.time }}</td>
+        <td title="{{ r.source }}">{{ r.host or r.source }}</td>
+        <td><span class="badge sevb{{ r.sev }}">{{ r.severity }}</span></td>
+        <td style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-word">{% if r.tag %}<b>{{ r.tag }}</b>: {% endif %}{{ r.message }}</td></tr>
+    {% else %}
+      <tr><td colspan="4" class="muted">No messages{% if f['q'] or f['host'] %} match{% endif %}.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% if older %}<p><a href="{{ older }}">Older →</a></p>{% endif %}
+</section>
+<style>
+.sevb0, .sevb1, .sevb2, .sevb3 { color: var(--bad); border-color: var(--bad); }
+.sevb4 { color: #b7791f; border-color: #b7791f; }
+tr.sev0 td, tr.sev1 td, tr.sev2 td { background: color-mix(in srgb, var(--bad) 8%, transparent); }
+</style>
+<script>
+(() => {
+  const live = document.getElementById("live"), tbody = document.getElementById("rows");
+  let timer = null;
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"})[c]);
+  async function refresh() {
+    const params = new URLSearchParams(new FormData(document.getElementById("lf")));
+    const resp = await fetch("{{ url_for('logs.logs_data') }}?" + params, {headers: {"Accept": "application/json"}});
+    if (!resp.ok) return;
+    const data = await resp.json();
+    tbody.innerHTML = data.rows.map(r => `<tr class="sev${r.sev}"><td style="white-space:nowrap">${esc(r.time)}</td><td title="${esc(r.source)}">${esc(r.host || r.source)}</td><td><span class="badge sevb${r.sev}">${esc(r.severity)}</span></td><td style="font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; word-break: break-word">${r.tag ? `<b>${esc(r.tag)}</b>: ` : ""}${esc(r.message)}</td></tr>`).join("")
+      || `<tr><td colspan="4" class="muted">No messages.</td></tr>`;
+  }
+  live.addEventListener("change", () => {
+    clearInterval(timer);
+    try { localStorage.setItem("logs-live", live.checked ? "1" : ""); } catch (e) {}
+    if (live.checked) { refresh(); timer = setInterval(refresh, 5000); }
+  });
+  try { if (localStorage.getItem("logs-live")) { live.checked = true; live.dispatchEvent(new Event("change")); } } catch (e) {}
+})();
+</script>
+{% endblock %}

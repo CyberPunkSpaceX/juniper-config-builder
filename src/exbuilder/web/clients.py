@@ -124,10 +124,11 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
     from . import backups, eve
     eve.migrate(conn)
     backups.migrate(conn)
-    from . import nightly, promote, push
+    from . import logs, nightly, promote, push
     promote.migrate(conn)
     push.migrate(conn)
     nightly.migrate(conn)
+    logs.migrate(conn)
     old_known = folder / "ssh_known_hosts"
     if old_known.exists() and first:
         dest = client_folder(first[0], folder)
