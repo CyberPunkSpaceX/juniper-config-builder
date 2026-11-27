@@ -390,3 +390,15 @@ def test_forced_password_page_says_why(app, admin):
     login(bob, "bob", "bob-password-1")
     assert "/account" in bob.get("/start").location
     assert b"Choose a new password to continue" in bob.get("/account").data
+
+
+def test_theme_toggle_on_every_page(app, admin):
+    # Signed out: the early theme script runs and a floating toggle is there.
+    page = app.test_client().get("/login").get_data(as_text=True)
+    assert 'localStorage.getItem("exbuilder-theme")' in page and 'class="theme-float"' in page
+    # Signed in: the toggle sits in the nav, the early script is in <head>, and dark can be forced by hand.
+    for path in ("/help", "/build/juniper"):
+        page = admin.get(path, follow_redirects=True).get_data(as_text=True)
+        assert page.index('localStorage.getItem("exbuilder-theme")') < page.index("</head>")
+        assert 'id="theme-toggle"' in page and 'class="theme-float"' not in page
+        assert ':root[data-theme="dark"]' in page

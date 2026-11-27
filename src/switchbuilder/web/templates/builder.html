@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+{% include "_theme_head.html" %}
 <title>{{ vendor.name }} builder · Multi-Vendor Switch Config Builder</title>
 <style>
 * { box-sizing: border-box; }
@@ -131,7 +132,8 @@ code { font-size: 12.5px; }
 body.basic .adv { display: none !important; }
 /* Advanced options: purple, grouped in a box at the end of each card or table row */
 :root { --advc: #7c3aed; --advbg: rgba(124, 58, 237, .06); }
-@media (prefers-color-scheme: dark) { :root { --advc: #a78bfa; --advbg: rgba(167, 139, 250, .08); } }
+:root[data-theme="dark"] { --advc: #a78bfa; --advbg: rgba(167, 139, 250, .08); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --advc: #a78bfa; --advbg: rgba(167, 139, 250, .08); } }
 .advbox { grid-column: 1 / -1; flex-basis: 100%; border: 1px dashed var(--advc); background: var(--advbg); border-radius: 8px; padding: 10px 12px 12px; margin-top: 8px; }
 .advbox > .advtitle { grid-column: 1 / -1; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--advc); margin-bottom: 8px; }
 .advbox > .inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 14px; align-items: end; }
