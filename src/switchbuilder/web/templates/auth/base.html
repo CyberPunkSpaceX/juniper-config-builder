@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
+{% include "_theme_head.html" %}
 <title>{% block title %}Multi-Vendor Switch Config Builder{% endblock %}</title>
 <style>
 * { box-sizing: border-box; }
@@ -44,5 +45,6 @@ th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border);
 {% include "auth/_nav.html" %}
 {% block content %}{% endblock %}
 </main>
+{% if not current_user %}<div class="theme-float">{% include "_theme_toggle.html" %}</div>{% endif %}
 </body>
 </html>

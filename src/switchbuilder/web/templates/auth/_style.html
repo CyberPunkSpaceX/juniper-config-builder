@@ -1,10 +1,18 @@
 <style>
 :root {
+  color-scheme: light;
   --bg: #f6f7f9; --panel: #ffffff; --text: #1d2430; --muted: #5b6676; --border: #d9dee6;
   --accent: #2f6fdf; --accent-text: #ffffff; --ok: #1f7a4d; --warn: #9a6200; --bad: #b42318;
 }
+/* Dark: picked by hand (data-theme="dark"), or Auto while the OS is dark. Keep the two blocks identical. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #12151a; --panel: #1b2028; --text: #e4e8ee; --muted: #9aa5b4; --border: #2d3440;
+  --accent: #5b8ff0; --accent-text: #0b0e12; --ok: #5cc48f; --warn: #e3a944; --bad: #f07a70;
+}
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #12151a; --panel: #1b2028; --text: #e4e8ee; --muted: #9aa5b4; --border: #2d3440;
     --accent: #5b8ff0; --accent-text: #0b0e12; --ok: #5cc48f; --warn: #e3a944; --bad: #f07a70;
   }
@@ -28,6 +36,9 @@
 .fw-nav .space-switch .seg.on { background: var(--accent); color: var(--accent-text); }
 .fw-nav .space-switch .seg-lab.on { background: #a855f7; color: #fff; }
 .fw-nav button.link { background: none; border: 0; color: var(--accent); padding: 0; font: inherit; cursor: pointer; }
+.theme-toggle { white-space: nowrap; }
+.theme-float { position: fixed; right: 14px; bottom: 12px; }
+.theme-float .theme-toggle { background: var(--panel); color: var(--muted); border-color: var(--border); font-size: 13px; font-weight: 500; padding: 4px 10px; }
 .flash { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; border: 1px solid var(--border); }
 .flash.error { border-color: var(--bad); color: var(--bad); }
 .flash.ok { border-color: var(--ok); color: var(--ok); }

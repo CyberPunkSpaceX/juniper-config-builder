@@ -1,0 +1,23 @@
+{#- One button that cycles Auto -> Light -> Dark. The choice is kept in this browser (localStorage). -#}
+<button type="button" class="theme-toggle link" id="theme-toggle" title="Colour theme: Auto follows your computer's setting">&#9680; <span>Auto</span></button>
+<script>
+(function () {
+  var btn = document.getElementById("theme-toggle"), root = document.documentElement;
+  var ORDER = ["auto", "light", "dark"], LABEL = {auto: "Auto", light: "Light", dark: "Dark"},
+      ICON = {auto: "◐", light: "☀", dark: "☾"},
+      TIP = {auto: "Colour theme: Auto follows your computer's setting", light: "Colour theme: Light", dark: "Colour theme: Dark"};
+  function current() { return root.dataset.theme || "auto"; }
+  function paint() {
+    var t = current();
+    btn.firstChild.nodeValue = ICON[t] + " "; btn.lastChild.textContent = LABEL[t]; btn.title = TIP[t] + " (click to change)";
+  }
+  btn.addEventListener("click", function () {
+    var next = ORDER[(ORDER.indexOf(current()) + 1) % ORDER.length];
+    if (next === "auto") delete root.dataset.theme; else root.dataset.theme = next;
+    try { if (next === "auto") localStorage.removeItem("exbuilder-theme"); else localStorage.setItem("exbuilder-theme", next); } catch (e) {}
+    paint();
+    document.dispatchEvent(new CustomEvent("themechange", {detail: next}));
+  });
+  paint();
+})();
+</script>

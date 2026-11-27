@@ -1,0 +1,7 @@
+{#- Runs in <head> before anything paints, so a saved Light/Dark choice never flashes the other theme first.
+    No saved choice (or "auto") leaves data-theme off and the page follows the OS setting. -#}
+<script>
+(function () {
+  try { var t = localStorage.getItem("exbuilder-theme"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+})();
+</script>
