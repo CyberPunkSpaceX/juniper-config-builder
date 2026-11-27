@@ -23,7 +23,7 @@ exbuilder = "switchbuilder.cli:main"   # old name, kept so scripts keep working
 where = ["src"]
 
 [tool.setuptools.package-data]
-switchbuilder = ["web/templates/*.html", "web/static/*.png", "web/templates/*/*.html", "map_examples/*.conf", "vendor_examples/*.json"]
+switchbuilder = ["web/templates/*.html", "web/static/*.png", "web/templates/*/*.html", "map_examples/*.conf", "vendor_examples/*.json", "samples/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

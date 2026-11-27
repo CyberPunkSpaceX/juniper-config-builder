@@ -129,6 +129,8 @@ def migrate(conn: sqlite3.Connection, folder: Path) -> None:
     push.migrate(conn)
     nightly.migrate(conn)
     logs.migrate(conn)
+    from . import samples   # after every table exists: ready-made training clients, added once
+    samples.migrate(conn)
     old_known = folder / "ssh_known_hosts"
     if old_known.exists() and first:
         dest = client_folder(first[0], folder)
@@ -170,17 +172,19 @@ def my_clients() -> list[dict]:
     if user is None:
         return []
     if _is_server_admin(user):
-        rows = auth.db().execute("SELECT id, name, 'admin' AS role FROM clients ORDER BY name COLLATE NOCASE")
+        rows = auth.db().execute("SELECT id, name, 'admin' AS role, sample FROM clients ORDER BY name COLLATE NOCASE")
         g.my_clients = [dict(r) for r in rows]
         return g.my_clients
     everywhere = user["all_clients"] if "all_clients" in user.keys() and user["all_clients"] in RANK else None
     rows = auth.db().execute(
-        "SELECT c.id, c.name, m.role FROM clients c LEFT JOIN client_members m ON m.client_id = c.id AND m.user_id = ? "
-        "WHERE m.user_id IS NOT NULL OR ? ORDER BY c.name COLLATE NOCASE", (user["id"], everywhere is not None))
+        "SELECT c.id, c.name, c.sample, m.role FROM clients c LEFT JOIN client_members m ON m.client_id = c.id "
+        "AND m.user_id = ? WHERE m.user_id IS NOT NULL OR ? OR c.sample IS NOT NULL ORDER BY c.name COLLATE NOCASE",
+        (user["id"], everywhere is not None))
     out = []
     for r in rows:
-        roles = [x for x in (r["role"], everywhere) if x in RANK]
-        out.append({"id": r["id"], "name": r["name"], "role": max(roles, key=RANK.get)})
+        # Sample clients (training labs that ship with the app) are open to everyone, Read-only.
+        roles = [x for x in (r["role"], everywhere, "viewer" if r["sample"] else None) if x in RANK]
+        out.append({"id": r["id"], "name": r["name"], "role": max(roles, key=RANK.get), "sample": r["sample"]})
     g.my_clients = out
     return g.my_clients
 
@@ -350,7 +354,30 @@ def clients_page():
             for cid, n in auth.db().execute(f"SELECT client_id, COUNT(*) FROM {what} WHERE client_id IN ({q}) "
                                             "GROUP BY client_id", ids):
                 counts.setdefault(cid, {})[what] = n
-    return render_template("auth/clients.html", clients=mine, counts=counts, server_admin=_is_server_admin())
+    from . import samples
+    return render_template("auth/clients.html", clients=mine, counts=counts, server_admin=_is_server_admin(),
+                           sample_notes=samples.descriptions(),
+                           samples_missing=samples.missing(auth.db()) if _is_server_admin() else [])
+
+
+@bp.post("/clients/samples")
+@auth.admin_required
+def samples_add():
+    """Add a sample client back (after it was deleted), or every missing one."""
+    from . import samples
+    want = request.form.get("key", "")
+    todo = [s for s in samples.missing(auth.db()) if want in ("all", s["key"])]
+    if not todo:
+        flash("That sample client is already here.", "error")
+        return redirect(url_for("clients.clients_page"))
+    for s in todo:
+        samples.add(auth.db(), s)
+    auth.db().commit()
+    g.pop("my_clients", None)
+    log.warning("audit: %r added the sample client(s) %s", auth.current_user()["username"],
+                ", ".join(repr(s["name"]) for s in todo))
+    flash(f"Added {', '.join(s['name'] for s in todo)}. Everyone can open sample clients as Read-only.", "ok")
+    return redirect(url_for("clients.clients_page"))
 
 
 def create(name: str) -> tuple[int | None, str]:
@@ -452,7 +479,10 @@ def client_update(cid: int):
         except Exception:   # noqa: BLE001 - the client is gone either way; old logs expire with retention
             log.exception("could not delete the switch logs of client %s", cid)
         audit("deleted the client with its projects, maps and config backups")
-        flash(f"Client {r['name']} deleted.", "ok")
+        if r["sample"]:
+            flash(f"Sample client {r['name']} deleted. It stays gone; add it back on this page any time.", "ok")
+        else:
+            flash(f"Client {r['name']} deleted.", "ok")
         return redirect(url_for("clients.clients_page"))
     elif action == "member_add":
         username = request.form.get("username", "").strip()

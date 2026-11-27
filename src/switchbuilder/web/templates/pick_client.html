@@ -25,7 +25,7 @@ projects, maps and backups are kept apart.</p>
     <input type="hidden" name="next" value="{{ next_url or url_for('index') }}">
     <button class="card" type="submit" data-client="{{ c.id }}">
       <span class="icon initials" aria-hidden="true">{{ c.name[:2]|upper }}</span>
-      <h2>{{ c.name }}</h2>
+      <h2>{{ c.name }}</h2>{% if c.sample %}<span class="tag sample">Sample</span>{% endif %}
       <span class="muted">Your role: {{ c.role }}</span>
       {% if current_client and current_client.id == c.id %}<span class="tag last">Last used</span>{% endif %}
     </button>
@@ -44,6 +44,7 @@ projects, maps and backups are kept apart.</p>
 </div>
 {% if not my_clients and not server_admin %}<p>You are not in any client yet. Ask an admin to add you to one.</p>{% endif %}
 <style>
+.card .tag.sample { color: var(--accent); border-color: var(--accent); }
 .card.add-client { border-style: dashed; cursor: default; }
 .card.add-client:hover, .card.add-client:focus-within { border-color: var(--accent); }
 .card.add-client .icon.add { background: transparent; color: var(--accent); border: 2px dashed var(--accent); font-size: 22px; }
