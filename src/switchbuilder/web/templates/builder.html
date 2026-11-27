@@ -3123,13 +3123,22 @@ window.addEventListener("popstate", () => {
   if (activeTab === "Projects") refreshProjects();
   if (activeTab === "Backups & compare") openBackups();
   if (activeTab === "EVPN-VXLAN") generateFabric();
-  // Opened from the Converter: load that saved project, then drop ?project= from the address.
-  const fromConverter = new URLSearchParams(location.search).get("project");
-  if (fromConverter && /^\d+$/.test(fromConverter)) {
+  // Opened from the Converter or from Global: load that saved project (or config backup), then drop the
+  // ?project= / ?backup= from the address so a reload doesn't load it over your edits again.
+  const qs = new URLSearchParams(location.search);
+  const fromProject = qs.get("project"), fromBackup = qs.get("backup"), viaGlobal = qs.get("via") === "global";
+  const spaceName = CLIENT ? (CLIENT.space === "lab" ? "Lab" : "Production") : "";
+  if ((fromProject && /^\d+$/.test(fromProject)) || (fromBackup && /^\d+$/.test(fromBackup))) {
     history.replaceState({tab: activeTab}, "", location.pathname + "#" + encodeURIComponent(activeTab));
-    api("projects/" + fromConverter).then(p => { load(p.data); saveDraft(); showTab("Switch");
-      setStatus(`Opened ${p.name} from the Converter. Check it, then use Ask for approval on the Projects tab to promote it.`, "ok"); })
-      .catch(e => setStatus(`Couldn't open the converted project: ${e.message}`, "bad"));
+    const url = fromProject ? "projects/" + fromProject : "/global/backup/" + fromBackup + "/project";
+    api(url).then(p => {
+      load(p.data); saveDraft(); showTab("Switch");
+      const hidden = p.redacted ? " Passwords and keys are hidden (you are Read-only)." : "";
+      if (fromBackup) setStatus(`Opened ${p.name} from its last config backup (${p.when}, ${spaceName}).` +
+        (p.not_read ? ` ${p.not_read} line(s) couldn't be read into the builder; the full config is on the switch's Global page.` : "") + hidden, "ok");
+      else if (viaGlobal) setStatus(`Opened project ${p.name} (${spaceName}) from Global.` + hidden, "ok");
+      else setStatus(`Opened ${p.name} from the Converter. Check it, then use Ask for approval on the Projects tab to promote it.`, "ok");
+    }).catch(e => setStatus(`Couldn't open that ${fromBackup ? "config backup" : "project"}: ${e.message}`, "bad"));
   }
 })();
 </script>

@@ -28,9 +28,9 @@ import logging
 import re
 import sqlite3
 
-from flask import Blueprint, abort, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, session, url_for
 
-from .. import __version__, redact, topology
+from .. import __version__, redact, topology, vendors
 from .. import compare as cmp
 from ..generator import build
 from . import auth, backups, clients
@@ -239,11 +239,13 @@ def global_data():
                             "ORDER BY id", (c["id"],)):
             pushes[r["host"]] = r
     switches = []
+    index = {sp: _openable(db, c["id"], sp) for sp in clients.SPACES}
     for k, s in sorted(inv["switches"].items(), key=lambda kv: kv[1]["host"].lower()):
         p = pushes.get(s["address"]) or pushes.get(s["host"])
         switches.append({"key": k, **s, "planned": not s["versions"] and "maps" not in s["sources"],
                          "last_push": (p["pushed_at"] or p["created_at"]) if p else "",
-                         "url": url_for("overview.switch_page", host=s["host"])})
+                         "url": url_for("overview.switch_page", host=s["host"]),
+                         "open": _open_links(db, c, k, index)})
     return {"client": c["name"], "space": c["space"], "space_name": clients.SPACES[c["space"]],
             "switches": switches, "links": _links(inv, layout), "pos": layout["pos"],
             "discovered": {"at": layout.get("found_at", ""), "by": layout.get("found_by", ""),
@@ -315,8 +317,102 @@ def switch_page(host: str):
     return render_template("global_switch.html", client=c, sw={k: v for k, v in s.items() if k not in ("all", "text")},
                            config=text, others=others, version=__version__, kinds=KINDS,
                            redacted=not clients.can_see_secrets(c), audit=c["role"] == "admin",
+                           open_links=_open_links(auth.db(), c, s["key"]),
                            changes_url=url_for("overview.switch_changes", host=s["host"]),
                            change_url=url_for("overview.switch_change", host=s["host"]))
+
+
+# ------------------------------------------------- open in the builder
+def _openable(db, cid: int, space: str) -> dict:
+    """{switch key: {"project": row, "backup": id}} for one space: what the builder can open for each switch.
+
+    The newest saved project with the switch's host name wins (it is what people edit); a switch with only
+    config backups opens its newest backup, read back into the builder.
+    """
+    out: dict[str, dict] = {}
+    for p in db.execute("SELECT id, name, data, updated_at FROM projects WHERE client_id = ? AND space = ? "
+                        "ORDER BY updated_at DESC, id DESC", (cid, space)):
+        try:
+            data = json.loads(p["data"])
+        except ValueError:
+            continue
+        k = _key(_project_host(data))
+        if k and "project" not in out.get(k, {}):
+            out.setdefault(k, {})["project"] = {"id": p["id"], "name": p["name"],
+                                                "vendor": str(data.get("vendor") or "juniper")}
+    for r in db.execute("SELECT id, host FROM config_backups WHERE client_id = ? AND space = ? ORDER BY id DESC",
+                        (cid, space)):
+        k = _key(r["host"])
+        if k:
+            out.setdefault(k, {}).setdefault("backup", r["id"])
+    return out
+
+
+def _open_links(db, c: dict, key: str, index: dict | None = None) -> dict:
+    """For each space: {"url", "what"} to open this switch's config in the builder, or {"url": "", "what": why not}."""
+    links = {}
+    for sp, name in clients.SPACES.items():
+        got = (index[sp] if index else _openable(db, c["id"], sp)).get(key) or {}
+        if got.get("project"):
+            what = f"Opens project {got['project']['name']} ({name})"
+        elif got.get("backup"):
+            what = f"Opens the last config backup ({name}) in the builder"
+        else:
+            links[sp] = {"url": "", "what": f"Nothing saved for this switch in {name} yet"}
+            continue
+        links[sp] = {"url": url_for("overview.open_config", key=key, space=sp), "what": what}
+    return links
+
+
+@bp.get("/global/open/<key>/<space>")
+def open_config(key: str, space: str):
+    """Jump from Global to the builder with this switch's config, in Lab or Production."""
+    if space not in clients.SPACES:
+        abort(404)
+    c = clients.need("viewer")
+    key = _key(key)
+    got = _openable(auth.db(), c["id"], space).get(key) or {}
+    back = url_for("overview.global_page")
+    if not got:
+        flash(f"There is nothing saved for {key} in {clients.SPACES[space]} yet.", "info")
+        return redirect(back)
+    session["space"] = space   # the builder (and its draft) follow the space picked here
+    if got.get("project"):
+        p = got["project"]
+        vendor = p["vendor"] if vendors.known(p["vendor"]) else "juniper"
+        return redirect(url_for("builder", vendor=vendor, project=p["id"], via="global"))
+    row = auth.db().execute("SELECT text FROM config_backups WHERE id = ?", (got["backup"],)).fetchone()
+    from ..convert import READERS, detect
+    vendor = detect(row["text"] if row else "")
+    if vendor not in READERS:
+        name = vendors.get(vendor).name if vendor and vendors.known(vendor) else "this brand of"
+        flash(f"The builder can't read {name} configs back yet. The config is on the switch's Global page.", "info")
+        return redirect(back)
+    return redirect(url_for("builder", vendor=vendor, backup=got["backup"], via="global"))
+
+
+@bp.get("/global/backup/<int:bid>/project")
+def backup_project(bid: int):
+    """A config backup read back into a builder project (for opening a switch from Global)."""
+    c = clients.need("viewer")
+    r = auth.db().execute("SELECT id, host, created_at, text FROM config_backups WHERE id = ? AND client_id = ? "
+                          "AND space = ?", (bid, c["id"], c["space"])).fetchone()
+    if r is None:
+        abort(404)
+    from .. import convert
+    vendor = convert.detect(r["text"])
+    if vendor not in convert.READERS:
+        return {"error": "The builder can't read this brand's configs back yet."}, 400
+    try:
+        got = convert.read(r["text"], vendor)
+    except ValueError as e:
+        return {"error": str(e)}, 400
+    data = dict(got["project"], vendor=vendor)
+    secrets = clients.can_see_secrets(c)
+    if not secrets:
+        data = redact.project(data)
+    return {"id": r["id"], "name": r["host"], "when": r["created_at"], "vendor": vendor, "data": data,
+            "redacted": not secrets, "not_read": len(got.get("unparsed") or [])}
 
 
 # --------------------------------------------------------------- history

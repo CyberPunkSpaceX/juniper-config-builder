@@ -408,7 +408,11 @@ numbers. The wire VLAN (120) must not also be a VLAN on this switch.</p>
     <b>Find cables with LLDP / CDP</b> to read the real cables over SSH. A switch's page has a <b>Changes</b> list on
     the side: every config version, push, project save and Lab to Production step, newest first, with who and when.
     Click one to see exactly what changed. Client admins also see the switch's audit log entries there. Read-only
-    people see everything with passwords and keys hidden.</li>
+    people see everything with passwords and keys hidden. <b>Open in Lab</b> and <b>Open in Production</b> (on the
+    switch's page, and as Lab / Prod in the Switches list) open that switch's config in the builder, in that space:
+    its newest saved project, or if it has none, its last config backup read back into the builder (Junos, Cisco
+    IOS, Arista, NX-OS and Dell OS10 for now). A greyed-out button means there is nothing for that switch in that
+    space yet.</li>
   <li>A <b>client</b> is a customer or network. People only see the clients they're added to, as <b>Read-only</b>
     (look, with passwords, keys and SNMP communities hidden), <b>Configurator</b> (build, save and delete) or
     <b>Admin</b> (also manage people, SSH and EVE-NG settings, approve Lab work). A <b>Super Admin</b> manages every

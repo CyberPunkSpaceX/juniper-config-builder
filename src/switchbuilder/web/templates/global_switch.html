@@ -29,6 +29,7 @@
 .diff .add { color: var(--ok); background: color-mix(in srgb, var(--ok) 10%, transparent); }
 .diff .del { color: var(--bad); background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .diff .skip { color: var(--muted); font-style: italic; }
+.openbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 12px; }
 .crumbs select { width: auto; display: inline-block; padding: 3px 6px; font-size: 13px; margin-left: 6px; }
 </style>
 <div class="crumbs"><a href="{{ url_for('overview.global_page') }}">Global: {{ client.name }}</a> ›
@@ -36,6 +37,14 @@
   <select id="jump">{% for o in others %}<option value="{{ o.url }}"{% if o.host == sw.host %} selected{% endif %}>{{ o.host }}</option>{% endfor %}</select>
 </div>
 <h1>{{ sw.host }} <span class="badge space-badge space-{{ client.space }}">{{ spaces[client.space] }}</span></h1>
+<div class="actions openbar" aria-label="Open this switch's config">
+  <span class="hint">Open the config of {{ sw.host }} in the builder:</span>
+  {% for sp, name in spaces.items() %}{% set o = open_links[sp] %}
+  {% if o.url %}<a class="btn{{ '' if sp == client.space else ' secondary' }}" id="open-{{ sp }}" href="{{ o.url }}" title="{{ o.what }}">Open in {{ name }}</a>
+  {% else %}<button type="button" class="secondary" id="open-{{ sp }}" disabled title="{{ o.what }}">Open in {{ name }}</button>
+  <span class="hint">{{ o.what }}.</span>{% endif %}
+  {% endfor %}
+</div>
 {% if redacted %}<p class="flash info">You are Read-only in {{ client.name }}: passwords and keys are hidden in configs and diffs.</p>{% endif %}
 
 <div class="layout">
