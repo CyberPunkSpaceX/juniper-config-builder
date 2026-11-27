@@ -155,8 +155,24 @@ def create_app() -> Flask:
         """The vendor screen, once Production / Lab and the client are picked."""
         if (step := clients.start_redirect()) is not None:
             return step
+        here, elsewhere = _project_counts()
         return render_template("vendors.html", vendors=vendors.VENDORS.values(), version=__version__,
-                               last=session.get("vendor"))
+                               last=session.get("vendor"), here=here, elsewhere=elsewhere)
+
+    def _project_counts() -> tuple[dict, dict]:
+        """Saved projects per vendor for the current client: in this space, and in the other one."""
+        c = clients.current()
+        here, elsewhere = {}, {}
+        if c is None:
+            return here, elsewhere
+        for row in auth.db().execute("SELECT space, data FROM projects WHERE client_id = ?", (c["id"],)):
+            try:
+                key = vendors.get(json.loads(row["data"]).get("vendor")).key
+            except (TypeError, ValueError, AttributeError):
+                key = vendors.DEFAULT
+            into = here if row["space"] == c["space"] else elsewhere.setdefault(row["space"], {})
+            into[key] = into.get(key, 0) + 1
+        return here, elsewhere
 
     @app.get("/help")
     def help_page():

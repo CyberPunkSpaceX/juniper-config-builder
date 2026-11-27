@@ -12,17 +12,32 @@ a.vendor:hover, a.vendor:focus { border-color: var(--accent); outline: 2px solid
 .vendor.soon { opacity: .6; }
 .vendor .tag { align-self: flex-start; font-size: 12px; padding: 2px 8px; border-radius: 10px; border: 1px solid var(--border); }
 .vendor .tag.last { border-color: var(--ok); color: var(--ok); }
+.vendor.has { border-color: var(--accent); box-shadow: inset 3px 0 0 var(--accent); }
+.vendor .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.vendor .tag.has { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.vendor .tag.other { color: var(--muted); }
+.space-hint { border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; }
 </style>
 <h1>Which switches are you configuring?</h1>
 <p class="muted">Pick a vendor to open its builder. Your clients, saved projects, network maps and backups stay the same whichever you pick.</p>
 {% if current_client %}<p><a class="global-link" href="{{ url_for('overview.global_page') }}">&#127760; Global view of {{ current_client.name }}</a>
   <span class="muted">: all its switches in a diagram, and each switch's history of changes.</span></p>{% endif %}
+{% if current_client and not here and elsewhere %}
+<p class="space-hint" data-space-hint>Nothing saved for {{ current_client.name }} in {{ spaces[current_space] }} yet.
+  Its projects are in {% for sp in elsewhere %}<b>{{ spaces[sp] }}</b>{% if not loop.last %} and {% endif %}{% endfor %}.
+  Switch with the Production / Lab button at the top to see them.</p>
+{% endif %}
 <div class="vendors">
 {% for v in vendors %}
   {% if v.ready %}
-  <a class="vendor" href="{{ url_for('builder', vendor=v.key) }}" data-vendor="{{ v.key }}">
+  {% set n = here.get(v.key, 0) %}
+  <a class="vendor{% if n %} has{% endif %}" href="{{ url_for('builder', vendor=v.key) }}" data-vendor="{{ v.key }}">
     <h2>{{ v.name }}</h2><span class="os">{{ v.os }}</span><span class="models">{{ v.blurb }}</span>
-    {% if last == v.key %}<span class="tag last">Last used</span>{% endif %}
+    <span class="tags">
+      {% if n %}<span class="tag has" data-projects="{{ n }}">{{ n }} project{{ 's' if n != 1 }} here</span>{% endif %}
+      {% for sp, counts in elsewhere.items() %}{% if counts.get(v.key) %}<span class="tag other">{{ counts[v.key] }} in {{ spaces[sp] }}</span>{% endif %}{% endfor %}
+      {% if last == v.key %}<span class="tag last">Last used</span>{% endif %}
+    </span>
   </a>
   {% else %}
   <div class="vendor soon" data-vendor="{{ v.key }}" aria-disabled="true">

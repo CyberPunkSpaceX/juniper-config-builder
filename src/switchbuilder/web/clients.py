@@ -290,13 +290,20 @@ def select():
     session["client_id"] = cid
     session["client_chosen"] = True
     back = request.form.get("next") or url_for("index")
+    if back.split("?")[0] == url_for("clients.start_page"):
+        # Picked in the top bar while on the Production/Lab page: remember it, so the page
+        # reloading itself doesn't forget the choice and send you to "Which client?" anyway.
+        session["client_picked_on_start"] = True
+    else:
+        session.pop("client_picked_on_start", None)
     return redirect(auth._safe_next(back))
 
 
 @bp.get("/start")
 def start_page():
     """After sign-in (and Home in the top bar): Production or Lab, then the client again."""
-    session.pop("client_chosen", None)
+    if not session.get("client_picked_on_start"):
+        session.pop("client_chosen", None)
     return render_template("start.html", spaces=SPACES, space=session.get("space"))
 
 
@@ -307,6 +314,7 @@ def set_space():
     if want not in SPACES:
         abort(400)
     session["space"] = want
+    session.pop("client_picked_on_start", None)  # used up: the next Home visit asks for the client again
     back = request.form.get("next")
     return redirect(auth._safe_next(back) if back else url_for("index"))
 
