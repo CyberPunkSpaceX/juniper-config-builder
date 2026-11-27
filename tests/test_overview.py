@@ -228,3 +228,39 @@ def test_open_the_switch_config_in_lab_or_production(app, admin):
     pick_space(bob, "production")
     body = bob.get(f"/global/backup/{bid}/project").get_data(as_text=True)
     assert "newsecrethash" not in body and json.loads(body)["redacted"] is True
+
+
+def test_picking_a_client_lands_on_its_network_map(app, admin):
+    """After Production / Lab and the client: Global, also for a client with no switches yet."""
+    r = admin.post("/space", data={"csrf_token": csrf(admin, "/start"), "space": "production"})
+    assert r.location.endswith("/global")                          # one client: straight to its map
+    _form(admin, "/clients", name="Acme")
+    admin.get("/start")
+    r = admin.post("/space", data={"csrf_token": csrf(admin, "/start"), "space": "production"})
+    assert r.location.endswith("/global")
+    r = admin.get("/global")                                       # several clients: which one first
+    assert "/clients/pick?next=/global" in r.location
+    pick = admin.get(r.location).get_data(as_text=True)
+    assert 'name="next" value="/global"' in pick
+    r = admin.post("/clients/select", data={"csrf_token": csrf(admin, "/start"), "client_id": "2"})
+    assert r.location.endswith("/global")                          # no next given: Global too
+    page = admin.get("/global").get_data(as_text=True)
+    assert "Global: Acme" in page and 'id="empty"' in page and "Build a switch config" in page
+    assert 'href="/"' in page                                      # the vendor screen is one click away
+    # A new client: nothing in either space.
+    d = admin.get("/global/data").json
+    assert d["switches"] == [] and d["other_space"] == {"key": "lab", "name": "Lab", "switches": 0}
+    # Switches only in Lab: Production says so and links there. (The top-bar switch keeps the client.)
+    def top_bar(space):
+        admin.post("/space", data={"csrf_token": csrf(admin, "/help"), "space": space, "next": "/global"})
+    top_bar("lab")
+    admin.post("/projects", json={"name": "Lab core", "data": dict(GOOD, system=dict(GOOD["system"], hostname="labsw"))},
+               headers={"X-CSRF-Token": token(admin)})
+    top_bar("production")
+    assert admin.get("/global/data").json["client"] == "Acme"
+    assert admin.get("/global/data").json["other_space"]["switches"] == 1
+    assert admin.get("/global?space=lab").status_code == 200
+    assert [s["host"] for s in admin.get("/global/data").json["switches"]] == ["labsw"]
+    # The space switch in the top bar on Home goes to Global as well.
+    nav = admin.get("/clients/pick").get_data(as_text=True)
+    assert 'name="next" value="/global"' in nav

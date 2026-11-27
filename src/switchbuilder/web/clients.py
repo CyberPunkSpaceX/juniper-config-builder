@@ -289,7 +289,7 @@ def select():
         abort(403)
     session["client_id"] = cid
     session["client_chosen"] = True
-    back = request.form.get("next") or url_for("index")
+    back = request.form.get("next") or landing()
     if back.split("?")[0] == url_for("clients.start_page"):
         # Picked in the top bar while on the Production/Lab page: remember it, so the page
         # reloading itself doesn't forget the choice and send you to "Which client?" anyway.
@@ -316,7 +316,7 @@ def set_space():
     session["space"] = want
     session.pop("client_picked_on_start", None)  # used up: the next Home visit asks for the client again
     back = request.form.get("next")
-    return redirect(auth._safe_next(back) if back else url_for("index"))
+    return redirect(auth._safe_next(back) if back else landing())
 
 
 @bp.get("/clients/pick")
@@ -334,6 +334,15 @@ def need_lab(role: str) -> dict:
     if c["space"] != "lab":
         _json_abort(409, "EVE-NG labs are in the Lab space. Switch to Lab at the top of the page.")
     return c
+
+
+def landing() -> str:
+    """Where you land once Production / Lab and the client are picked: the client's network on Global.
+
+    It shows what the client already has at a glance (or how to start, for a new client). The vendor
+    screen stays one click away (Vendors in the top bar).
+    """
+    return url_for("overview.global_page")
 
 
 def start_redirect():

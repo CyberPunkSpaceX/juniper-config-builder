@@ -44,7 +44,10 @@ switch configuration appears live on the right, ready to copy or download and pa
     <b>Production | Lab</b> button in the top bar.</li>
   <li><b>Pick the client</b> you're working for (if you're in more than one). Change it later with the
     <b>Client</b> list in the top bar.</li>
-  <li><b>Pick a vendor</b> (<a href="{{ url_for('index') }}">Vendors</a> in
+  <li><b>You land on Global</b>: the client's network map, with every switch it already has in that space. A new
+    client shows how to start (build a config, read existing switches over SSH, find cables with LLDP / CDP, or
+    convert a config).</li>
+  <li><b>Pick a vendor</b> to build a config (<a href="{{ url_for('index') }}">Vendors</a> in
     the top bar takes you back). The builder only offers what that vendor's switches can do, so options
     that would give config the switch can't load are hidden.</li>
   <li><b>Pick Basic or Advanced</b> (top left of the builder). Basic shows what a normal access switch needs.
