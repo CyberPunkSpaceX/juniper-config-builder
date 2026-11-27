@@ -316,7 +316,8 @@ def pick_page():
     """After sign-in: pick the client to work on."""
     want = request.args.get("next") or ""
     next_url = want if want.startswith("/") and not want.startswith("//") and "\\" not in want else ""
-    return render_template("pick_client.html", space=space(), spaces=SPACES, next_url=next_url)
+    return render_template("pick_client.html", space=space(), spaces=SPACES, next_url=next_url,
+                           server_admin=_is_server_admin())
 
 
 def need_lab(role: str) -> dict:
@@ -369,10 +370,15 @@ def create(name: str) -> tuple[int | None, str]:
 @auth.admin_required
 def clients_create():
     name = request.form.get("name", "").strip()
+    from_pick = request.form.get("from") == "pick"
     cid, error = create(name)
     if error:
         flash(error, "error")
-        return redirect(url_for("clients.clients_page"))
+        return redirect(url_for("clients.pick_page") if from_pick else url_for("clients.clients_page"))
+    if from_pick:
+        # Made from the "Which client?" picker: that new client is the one you're working on now.
+        session["client_id"] = cid
+        session["client_chosen"] = True
     flash(f"Client {name} created. Add its people and switch networks below.", "ok")
     return redirect(url_for("clients.client_page", cid=cid))
 
