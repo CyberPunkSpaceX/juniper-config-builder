@@ -223,3 +223,29 @@ def test_projects_from_before_spaces_move_to_production(tmp_path):
     assert conn.execute("SELECT id, space, name FROM projects").fetchall() == [(1, "production", "Old")]
     conn.execute("INSERT INTO projects (client_id, space, name, data, updated_at) VALUES (1, 'lab', 'Old', '{}', 'now')")
     assert conn.execute("SELECT COUNT(*) FROM projects").fetchone()[0] == 2
+
+
+def test_add_client_from_the_picker(app, admin):
+    """Super Admins get an Add client card on the picker; it makes the client and opens it right away."""
+    _form(admin, "/clients", name="Acme")
+    pick_space(admin, "production")
+    page = admin.get("/clients/pick").get_data(as_text=True)
+    assert "data-add-client" in page and "Add client" in page and 'name="from" value="pick"' in page
+    resp = _form(admin, "/clients", name="Globex", **{"from": "pick"})
+    assert resp.status_code == 302 and resp.location.endswith("/clients/3")
+    assert ">Globex</option>" in admin.get("/help").get_data(as_text=True)
+    assert "Which switches are you configuring?" in admin.get("/").get_data(as_text=True)  # no second pick
+    # A bad name goes back to the picker with the reason, not off to the Clients page.
+    resp = _form(admin, "/clients", name="globex", **{"from": "pick"})
+    assert resp.status_code == 302 and resp.location.endswith("/clients/pick")
+    assert "already exists" in admin.get("/clients/pick").get_data(as_text=True)
+
+
+def test_no_add_client_card_for_ordinary_people(app, admin):
+    _form(admin, "/clients", name="Acme")
+    bob = _bob(app, admin, role="admin", client_id=1)
+    _form(admin, "/clients/2", action="member_add", username="bob", role="viewer")
+    pick_space(bob, "production")
+    page = bob.get("/clients/pick").get_data(as_text=True)
+    assert "Which client?" in page and "data-add-client" not in page
+    assert _form(bob, "/clients", name="Sneaky", **{"from": "pick"}).status_code == 403
