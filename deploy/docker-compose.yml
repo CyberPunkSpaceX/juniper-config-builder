@@ -1,21 +1,70 @@
-# Multi-Vendor Switch Config Builder on a single Docker host:  docker compose -f deploy/docker-compose.yml up -d
+# Multi-Vendor Switch Config Builder on a single Docker host:
+#   docker compose up -d        (run it in the folder that has this file)
 # Then open http://<host>:8088 and sign in as admin / admin (you'll be asked
-# for a new password straight away). See INSTALL.md.
+# for a new password straight away). Step-by-step guide: INSTALL.md.
+#
+# Run it from a folder called "switchbuilder" and the data volume is named
+# switchbuilder_switchbuilder_data, as in the backup steps of INSTALL.md.
+
+x-settings: &settings
+  # Set to "true" once you only reach the UI over HTTPS.
+  EXB_SECURE_COOKIES: "false"
+  EXB_REQUIRE_2FA: "false"
+  # The address people use, for links in alerts, e.g. https://switchbuilder.example.com
+  EXB_PUBLIC_URL: ""
+  # Email alerts (optional). Put the password in a file and use EXB_SMTP_PASSWORD_FILE.
+  EXB_SMTP_HOST: ""
+  EXB_SMTP_PORT: "587"
+  EXB_SMTP_TLS: "starttls"
+  EXB_SMTP_USER: ""
+  EXB_SMTP_FROM: ""
+  # master key: encrypts the SSH keys stored for your switches. Make the file
+  # with INSTALL.md step 4.2, then remove the # here and in the secrets parts.
+  # EXB_MASTER_KEY_FILE: /run/secrets/master_key
+
 services:
-  switchbuilder:
+  # The web page.
+  web:
     image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
     restart: unless-stopped
     ports:
       - "8088:8080"
     environment:
-      # Set to "true" once you only reach the UI over HTTPS.
-      EXB_SECURE_COOKIES: "false"
-      EXB_REQUIRE_2FA: "false"
+      <<: *settings
+      # The address switches send syslog to, shown on the log settings page.
+      EXB_SYSLOG_ADDRESS: ""
     read_only: true
     tmpfs:
       - /tmp:size=64m
     volumes:
       - switchbuilder_data:/data
+    # secrets: [master_key]          # master key
+
+  # Nightly config backups, alerts and the built-in syslog server.
+  # Same image and data as "web". No syslog wanted? Delete its "ports:" part.
+  jobs:
+    image: ghcr.io/cyberpunkspacex/switch-config-builder:latest
+    command: ["switchbuilder", "jobs"]
+    restart: unless-stopped
+    ports:
+      - "514:5514/udp"
+      - "514:5514/tcp"
+    environment:
+      <<: *settings
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    volumes:
+      - switchbuilder_data:/data
+    depends_on:
+      - web
+    # secrets: [master_key]          # master key
 
 volumes:
   switchbuilder_data:
+
+# secrets:                           # master key
+#   master_key:                      # master key
+#     file: ./master_key             # master key

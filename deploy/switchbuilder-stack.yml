@@ -1,4 +1,5 @@
 # Docker Swarm stack for the Multi-Vendor Switch Config Builder web UI.
+# Step-by-step guide: INSTALL.md.
 # Deploy in Portainer (Stacks > Add stack > Web editor) or with:
 #   docker stack deploy -c deploy/switchbuilder-stack.yml --with-registry-auth switchbuilder
 #
@@ -42,7 +43,7 @@ services:
       EXB_SYSLOG_ADDRESS: ${EXB_SYSLOG_ADDRESS:-}
     ports:
       # Published on every node through the swarm routing mesh.
-      # The reverse proxy (switchbuilder.cyberpunkx.ca) forwards here.
+      # Your reverse proxy (HTTPS) forwards here.
       - target: 8080
         published: ${EXB_PORT:-8088}
         protocol: tcp
