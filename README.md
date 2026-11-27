@@ -497,7 +497,9 @@ you only want to add to an existing config.
 
 ## Running it
 
-See [INSTALL.md](INSTALL.md). Quick start with Docker:
+**New here? Follow the step-by-step [install guide](INSTALL.md)**: installing Docker,
+one server or Docker Swarm, first sign-in, HTTPS, upgrades and backups.
+Quick start if you already have Docker:
 
 ```
 docker compose -f deploy/docker-compose.yml up -d
