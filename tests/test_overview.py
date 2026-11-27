@@ -177,3 +177,54 @@ def test_layout_and_discovery_and_client_isolation(app, admin):
     admin.post("/clients/select", data={"csrf_token": csrf(admin, "/start"), "client_id": "1", "next": "/global"})
     assert admin.get("/global/data").json["switches"] == []
     assert len(admin.get("/global/data?space=production").json["switches"]) == len(d["switches"])
+
+
+def test_open_the_switch_config_in_lab_or_production(app, admin):
+    """A switch on Global opens in the builder: its project, else its last config backup, in Lab or Production."""
+    _seed(admin)
+    d = {s["host"]: s for s in admin.get("/global/data").json["switches"]}
+    # sw3 has a Production project, sw1 only backups, and nothing is in Lab yet.
+    assert d["sw3"]["open"]["production"]["url"].endswith("/global/open/sw3/production")
+    assert "Branch" in d["sw3"]["open"]["production"]["what"]
+    assert d["sw1"]["open"]["production"]["url"] and "backup" in d["sw1"]["open"]["production"]["what"]
+    assert d["sw1"]["open"]["lab"]["url"] == "" and "Lab" in d["sw1"]["open"]["lab"]["what"]
+    page = admin.get("/global/switch/sw3").get_data(as_text=True)
+    assert 'id="open-production"' in page and "Open in Lab" in page and "Open in Production" in page
+
+    # A project opens with ?project=, and the session moves to that space.
+    r = admin.get("/global/open/sw3/production")
+    assert r.status_code == 302 and "/build/arista" in r.location and "project=" in r.location
+    pid = r.location.split("project=")[1].split("&")[0]
+    assert admin.get(f"/projects/{pid}").json["name"] == "Branch"
+    # A switch with only backups opens the newest one, read back into a project.
+    r = admin.get("/global/open/sw1/production")
+    assert "/build/juniper" in r.location and "backup=" in r.location
+    bid = r.location.split("backup=")[1].split("&")[0]
+    p = admin.get(f"/global/backup/{bid}/project").json
+    assert p["name"] == "sw1" and p["data"]["system"]["hostname"] == "sw1" and p["vendor"] == "juniper"
+    assert any(v.get("name") == "voice" for v in p["data"]["vlans"])                  # the newest version
+    # Nothing in Lab: back to Global with a note, and the space is not changed.
+    r = admin.get("/global/open/sw1/lab")
+    assert r.location.endswith("/global")
+    assert admin.get("/global/data").json["space"] == "production"
+    assert admin.get("/global/open/sw1/nowhere").status_code == 404
+
+    # Once sw1 has a Lab project, Open in Lab opens it and switches to Lab.
+    pick_space(admin, "lab")
+    lab = dict(GOOD, name="sw1 lab")
+    lab["system"] = dict(GOOD["system"], hostname="sw1")
+    admin.post("/projects", json={"name": "sw1 lab", "data": lab}, headers={"X-CSRF-Token": token(admin)})
+    pick_space(admin, "production")
+    d = {s["host"]: s for s in admin.get("/global/data").json["switches"]}
+    assert "sw1 lab" in d["sw1"]["open"]["lab"]["what"]
+    r = admin.get(d["sw1"]["open"]["lab"]["url"])
+    assert "/build/arista" in r.location and "project=" in r.location
+    assert admin.get("/global/data").json["space"] == "lab"
+    # The backup reader only reads the current space and client.
+    assert admin.get(f"/global/backup/{bid}/project").status_code == 404
+
+    # Read-only people can open too, with passwords and keys hidden.
+    bob = _bob(app, admin, "viewer")
+    pick_space(bob, "production")
+    body = bob.get(f"/global/backup/{bid}/project").get_data(as_text=True)
+    assert "newsecrethash" not in body and json.loads(body)["redacted"] is True

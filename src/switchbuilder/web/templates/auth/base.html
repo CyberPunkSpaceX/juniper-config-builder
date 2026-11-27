@@ -26,6 +26,11 @@ button { border: 1px solid var(--accent); background: var(--accent); color: var(
 button.secondary { background: transparent; color: var(--accent); }
 button.danger { background: transparent; border-color: var(--bad); color: var(--bad); }
 button.small { padding: 4px 10px; font-size: 13px; }
+a.btn { display: inline-block; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-text);
+  padding: 8px 14px; border-radius: 6px; font-weight: 600; text-decoration: none; }
+a.btn.secondary { background: transparent; color: var(--accent); }
+a.btn.small { padding: 4px 10px; font-size: 13px; }
+button:disabled { opacity: .5; cursor: not-allowed; }
 .row { display: grid; grid-template-columns: 2fr 2fr 1fr auto; gap: 10px; align-items: end; }
 @media (max-width: 700px) { .row { grid-template-columns: 1fr; } }
 table { width: 100%; border-collapse: collapse; font-size: 14px; }

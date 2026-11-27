@@ -70,8 +70,8 @@ td a { color: var(--accent); }
 <div class="panel">
   <h2>Switches</h2>
   <div class="scroll"><table>
-    <thead><tr><th>Switch</th><th>Address</th><th>Brand</th><th>Last config version</th><th>Versions</th><th>Last push</th></tr></thead>
-    <tbody id="list"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+    <thead><tr><th>Switch</th><th>Address</th><th>Brand</th><th>Last config version</th><th>Versions</th><th>Last push</th><th>Open config</th></tr></thead>
+    <tbody id="list"><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
   </table></div>
 </div>
 
@@ -189,14 +189,22 @@ if ($("discover")) $("discover").onclick = async () => {
   } catch (e) { st("dstatus", e.message, "bad"); }
 };
 
+// "Open in Lab" / "Open in Production": the switch's project (or last config backup) in the builder.
+function openBtns(s) {
+  return [["lab", "Lab"], ["production", "Prod"]].map(([sp, label]) => {
+    const o = (s.open || {})[sp] || {};
+    return o.url ? `<a class="btn small${sp === data.space ? "" : " secondary"}" href="${esc(o.url)}" title="${esc(o.what)}">${label}</a>`
+                 : `<button type="button" class="secondary small" disabled title="${esc(o.what)}">${label}</button>`;
+  }).join(" ");
+}
 function table() {
   $("jump").innerHTML = `<option value="">Choose a switch… (${data.switches.length})</option>` +
     data.switches.map(s => `<option value="${esc(s.key)}">${esc(s.host)}${s.address ? " (" + esc(s.address) + ")" : ""}${s.planned ? " · planned" : ""}</option>`).join("");
   $("list").innerHTML = data.switches.length ? data.switches.map(s =>
     `<tr><td><a href="${esc(s.url)}">${esc(s.host)}</a>${s.planned ? ' <span class="badge">planned</span>' : ""}</td>` +
     `<td>${esc(s.address)}</td><td>${esc(s.vendor)}</td><td>${esc(s.last_backup)}${s.last_backup_by ? " · " + esc(s.last_backup_by) : ""}</td>` +
-    `<td>${s.versions}</td><td>${esc(s.last_push)}</td></tr>`).join("")
-    : '<tr><td colspan="6" class="muted">No switches yet.</td></tr>';
+    `<td>${s.versions}</td><td>${esc(s.last_push)}</td><td style="white-space:nowrap">${openBtns(s)}</td></tr>`).join("")
+    : '<tr><td colspan="7" class="muted">No switches yet.</td></tr>';
 }
 
 async function load() {
