@@ -457,6 +457,9 @@ def evpn(ctx) -> None:
     if not re.match(r"^target:[\d.]+:\d+$", target):
         ctx.error("EVPN", "VRF target looks like target:65000:1.")
     cfg.add(("switch-options",), f"vrf-target {target}")
+    # Type-5 (L3 VNI) targets use the AS of the fabric-wide target, not this switch's own AS:
+    # with an eBGP underlay every leaf has its own AS, but all of them must import the same VRF routes.
+    t_as = target.split(":")[1] if re.match(r"^target:[\d.]+:\d+$", target) else str(asn)
 
     vnis: dict[int, str] = {}
     any_vga = False
@@ -533,8 +536,11 @@ def evpn(ctx) -> None:
             cfg.add(base, f"interface {irb}")
         if not vrf_irbs[name]:
             ctx.warn("EVPN", f"VRF {name} has no VLANs; pick it in the VRF column of a VLAN.")
+        if int(rid) == 1:
+            ctx.warn("EVPN", f"VRF {name}: ID 1 gives route distinguisher {lo}:1, the same as the switch's own "
+                             "EVPN instance. Use another ID (11 and up) so every RD on the switch is unique.")
         cfg.add(base, f"route-distinguisher {lo}:{rid}")
-        cfg.add(base, f"vrf-target target:{asn}:{l3vni}")
+        cfg.add(base, f"vrf-target target:{t_as}:{l3vni}")
         t5 = (*base, "protocols", "evpn", "ip-prefix-routes")
         cfg.add(t5, "advertise direct-nexthop")
         cfg.add(t5, "encapsulation vxlan")

@@ -50,6 +50,19 @@ def test_erb_ebgp_addressing():
     assert "set interfaces xe-0/2/3 unit 0 family inet address 10.254.0.12/31" in spine["set"]
 
 
+def test_erb_ebgp_leaves_share_vrf_targets_and_unique_rds():
+    """Every leaf has its own AS, but VRF (type-5) routes must import everywhere: same target on all leaves.
+    VRF RDs must not reuse loopback:1, the RD of the switch's own EVPN instance."""
+    sw = by_name(generate(TEMPLATES["campus-erb"]["fabric"], BASE))
+    targets = {tuple(lines(sw[f"campus-leaf{i}"], "routing-instances CORP vrf-target")) for i in range(1, 5)}
+    assert targets == {("set routing-instances CORP vrf-target target:65000:9001",)}
+    leaf = sw["campus-leaf1"]["set"]
+    assert "set switch-options route-distinguisher 10.255.0.3:1" in leaf
+    assert "set routing-instances CORP route-distinguisher 10.255.0.3:11" in leaf
+    assert "set routing-instances CORP interface lo0.11" in leaf
+    assert not [w for w in sw["campus-leaf1"]["warnings"] if "route distinguisher" in w["message"]]
+
+
 def test_crb_ebgp_spines_get_their_own_as():
     spec = dict(TEMPLATES["campus-crb"]["fabric"], design="ebgp")
     sw = by_name(generate(spec, BASE))
