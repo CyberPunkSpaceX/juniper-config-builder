@@ -105,11 +105,18 @@ def test_switched_off(make_app, tmp_path, monkeypatch):
 
 
 def test_shipped_samples_are_valid():
+    from switchbuilder.generator import build, normalize
     from switchbuilder.web import samples
     shipped = samples.available()
+    assert {"evpn-vxlan-erb", "evpn-vxlan-crb"} <= {s["key"] for s in shipped}
     keys = [s["key"] for s in shipped]
     assert len(keys) == len(set(keys))
     for s in shipped:
         assert s["name"].startswith("Training Lab") and s["projects"] and s["maps"]
         text = json.dumps(s)
         assert "$6$" not in text or samples.SAMPLE_PASSWORD_NOTE in s["description"]
+        for p in s["projects"]:
+            assert p["space"] in ("lab", "production")
+            if p["data"].get("vendor", "juniper") == "juniper":
+                r = build(normalize(p["data"]))
+                assert r.set_text.strip() and not r.errors, (p["name"], r.errors)
