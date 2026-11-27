@@ -273,7 +273,8 @@ def plan(spec: dict) -> dict:
         name = _s(v["name"])
         if not NAME.match(name):
             raise FabricError(f"VRF name '{name}' must start with a letter.")
-        vrfs.append({"name": name, "id": str(i + 1), "l3vni": str(vni_base - 1000 + i + 1 if vni_base > 1000 else 9000 + i + 1)})
+        vrfs.append({"name": name, "id": str(i + 11),   # 11+: RD loopback:1 is the switch EVPN instance
+                      "l3vni": str(vni_base - 1000 + i + 1 if vni_base > 1000 else 9000 + i + 1)})
     vrf_names = {v["name"] for v in vrfs}
     vlans = []
     seen = set()
