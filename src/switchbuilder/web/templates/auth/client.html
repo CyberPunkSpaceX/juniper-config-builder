@@ -192,6 +192,10 @@ set system login user {{ c['ssh_user'] or 'switchbuilder-ro' }} class switchbuil
 {% if server_admin %}
 <section class="panel">
   <h2>Rename or delete</h2>
+  {% if c['sample'] %}<p class="hint"><span class="badge sample">sample</span> This is a sample client that ships with the
+    app, and everyone can open it as Read-only. Don't need it? Delete it below: it stays deleted, and you can add it back
+    on the <a href="{{ url_for('clients.clients_page') }}#samples">Clients</a> page any time.</p>
+  <style>.badge.sample { color: var(--accent); border-color: var(--accent); }</style>{% endif %}
   <form method="post" class="row" style="grid-template-columns: 1fr auto; margin-bottom: 16px">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="action" value="rename">

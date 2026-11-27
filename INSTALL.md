@@ -397,6 +397,7 @@ Set these in the compose file (`environment:`) or in front of the
 | `EXB_REQUIRE_2FA` | `false` | Everyone must set up an authenticator app |
 | `EXB_REQUIRE_2FA_ADMINS` | `true` | Server admins must set up an authenticator app |
 | `EXB_2FA_ISSUER` | `Multi-Vendor Switch Config Builder` | Name shown in the authenticator app |
+| `EXB_SAMPLES` | `on` | Add the sample clients (training labs: EVPN-VXLAN ERB and CRB, Common Mistakes; see docs/samples.md) once on start. Everyone can open them Read-only; a Super Admin can delete them for good or add them back on the Clients page. `off` never adds them on its own |
 | `EXB_SESSION_HOURS` | `12` | How long a sign-in lasts |
 | `EXB_LOCKOUT_ATTEMPTS` / `EXB_LOCKOUT_MINUTES` | `5` / `15` | Wrong passwords for one user name from one address before that address is blocked, and for how long |
 | `EXB_LOCKOUT_IP_ATTEMPTS` | `20` | Wrong passwords for any user names from one address before that address is blocked |

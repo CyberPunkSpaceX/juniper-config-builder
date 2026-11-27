@@ -34,7 +34,8 @@
     {% for c in clients %}
     {% set n = counts.get(c.id, {}) %}
     <tr>
-      <td><b>{{ c.name }}</b>{% if current_client and c.id == current_client.id %} <span class="badge on">current</span>{% endif %}</td>
+      <td><b>{{ c.name }}</b>{% if c.sample %} <span class="badge sample" title="A training lab that ships with the app. Everyone can open it as Read-only. A Super Admin can delete it on its Settings page.">sample</span>{% endif %}{% if current_client and c.id == current_client.id %} <span class="badge on">current</span>{% endif %}
+        {% if c.sample and sample_notes.get(c.sample) %}<div class="hint">{{ sample_notes[c.sample] }}</div>{% endif %}</td>
       <td>{{ c.role|role_label }}{% if server_admin %} <span class="muted">(Super Admin)</span>{% endif %}</td>
       <td>{{ n.get('projects', 0) }}</td><td>{{ n.get('maps', 0) }}</td><td>{{ n.get('config_backups', 0) }}</td><td>{{ n.get('client_members', 0) }}</td>
       <td>{% if c.role == 'admin' %}<a href="{{ url_for('clients.client_page', cid=c.id) }}">Settings</a>{% endif %}</td>
@@ -44,4 +45,27 @@
     {% endfor %}
   </table>
 </section>
+
+{% if server_admin and samples_missing %}
+<section class="panel" id="samples">
+  <h2>Sample clients</h2>
+  <p class="hint">Training labs that ship with the app, with ready-made projects and network maps in Lab and Production.
+    Everyone can open them as Read-only. These are not here right now (deleted, or switched off with <code>EXB_SAMPLES=off</code>).
+    Deleted samples never come back on their own.</p>
+  <table>
+    {% for s in samples_missing %}
+    <tr><td><b>{{ s.name }}</b>{% if s.description %}<div class="hint">{{ s.description }}</div>{% endif %}</td>
+      <td><form method="post" action="{{ url_for('clients.samples_add') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key" value="{{ s.key }}">
+        <button type="submit" class="secondary">Add back</button></form></td></tr>
+    {% endfor %}
+  </table>
+  {% if samples_missing|length > 1 %}
+  <form method="post" action="{{ url_for('clients.samples_add') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}"><input type="hidden" name="key" value="all">
+    <button type="submit">Add all sample clients</button></form>
+  {% endif %}
+</section>
+{% endif %}
+<style>.badge.sample { color: var(--accent); border-color: var(--accent); }</style>
 {% endblock %}
