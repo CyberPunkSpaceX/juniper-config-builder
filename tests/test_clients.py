@@ -249,3 +249,35 @@ def test_no_add_client_card_for_ordinary_people(app, admin):
     page = bob.get("/clients/pick").get_data(as_text=True)
     assert "Which client?" in page and "data-add-client" not in page
     assert _form(bob, "/clients", name="Sneaky", **{"from": "pick"}).status_code == 403
+
+
+def test_client_picked_in_top_bar_on_start_page_is_kept(app, admin):
+    """Choosing the client in the top bar on the Production/Lab page, then Production, skips "Which client?"."""
+    _form(admin, "/clients", name="Acme")
+    admin.get("/start")
+    resp = _form(admin, "/clients/select", client_id="2", next="/start")
+    assert resp.location.endswith("/start")
+    assert "What are you working on?" in admin.get("/start").get_data(as_text=True)
+    pick_space(admin, "production")
+    page = admin.get("/").get_data(as_text=True)
+    assert "Which switches are you configuring?" in page and ">Acme</option>" in page
+    # Home later still asks again, as before.
+    admin.get("/start")
+    pick_space(admin, "production")
+    assert admin.get("/").location.endswith("/clients/pick")
+
+
+def test_vendor_screen_shows_where_the_projects_are(app, admin):
+    """Vendor cards say how many projects the client has for that vendor, and where the others live."""
+    hdr = {"X-CSRF-Token": token(admin)}
+    pick_space(admin, "lab")
+    admin.post("/projects", json={"name": "Leaf 1", "data": {"vendor": "arista"}}, headers=hdr)
+    admin.post("/projects", json={"name": "Leaf 2", "data": {"vendor": "arista"}}, headers=hdr)
+    admin.post("/projects", json={"name": "Old", "data": {}}, headers=hdr)  # no vendor: Juniper
+    page = admin.get("/").get_data(as_text=True)
+    assert 'data-projects="2">2 projects here' in page and 'data-projects="1">1 project here' in page
+    assert "data-space-hint" not in page
+    pick_space(admin, "production")
+    page = admin.get("/").get_data(as_text=True)
+    assert "data-projects" not in page and "data-space-hint" in page and "<b>Lab</b>" in page
+    assert "2 in Lab" in page and "1 in Lab" in page
