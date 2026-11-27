@@ -12,7 +12,7 @@
   {% if current_space and request.endpoint != 'clients.start_page' %}
   <form class="space-switch" method="post" action="{{ url_for('clients.set_space') }}" title="Switch between the Production and Lab spaces">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="next" value="{{ request.path if request.endpoint not in ('clients.start_page', 'clients.pick_page') else url_for('index') }}">
+    <input type="hidden" name="next" value="{{ request.path if request.endpoint not in ('clients.start_page', 'clients.pick_page') else url_for('overview.global_page') }}">
     {% for key, label in spaces.items() %}<button type="submit" name="space" value="{{ key }}" class="seg{% if key == current_space %} on{% endif %} seg-{{ key }}"{% if key == current_space %} aria-pressed="true"{% endif %}>{{ label }}</button>{% endfor %}
   </form>
   {% endif %}

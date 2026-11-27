@@ -246,7 +246,10 @@ def global_data():
                          "last_push": (p["pushed_at"] or p["created_at"]) if p else "",
                          "url": url_for("overview.switch_page", host=s["host"]),
                          "open": _open_links(db, c, k, index)})
+    other = next(sp for sp in clients.SPACES if sp != c["space"])
+    other_count = len(inventory(db, {**c, "space": other})["switches"]) if not switches else 0
     return {"client": c["name"], "space": c["space"], "space_name": clients.SPACES[c["space"]],
+            "other_space": {"key": other, "name": clients.SPACES[other], "switches": other_count},
             "switches": switches, "links": _links(inv, layout), "pos": layout["pos"],
             "discovered": {"at": layout.get("found_at", ""), "by": layout.get("found_by", ""),
                            "links": len(layout["links"])}}

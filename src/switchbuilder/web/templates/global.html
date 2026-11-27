@@ -22,6 +22,12 @@
 .legend i.box { width: 16px; height: 11px; border: 1.5px solid var(--accent); border-radius: 3px; }
 .legend i.box.planned { border-style: dashed; border-color: var(--muted); }
 td a { color: var(--accent); }
+.starts { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 16px; }
+.start { all: unset; box-sizing: border-box; display: block; cursor: pointer; border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; background: var(--panel); color: var(--text); text-align: left; }
+.start:hover, .start:focus-visible { border-color: var(--accent); }
+.start b { display: block; color: var(--accent); margin-bottom: 4px; }
+.start span { display: block; font-size: 13px; color: var(--muted); line-height: 1.4; }
 </style>
 {% if not client %}
 <h1>Global</h1>
@@ -57,8 +63,23 @@ td a { color: var(--accent); }
     <div class="actions"><button type="button" id="discover">Discover and save</button><span class="status" id="dstatus"></span></div>
   </div>
   {% endif %}
+  <div id="empty" hidden>
+    <h2>{{ client.name }} has no switches in {{ spaces[client.space] }} yet</h2>
+    <p class="muted" id="otherspace" hidden></p>
+    <p class="muted">Switches show up here by themselves as soon as the app knows about them. Pick a way to start:</p>
+    <div class="starts">
+      <a class="start" href="{{ url_for('index') }}"><b>Build a switch config</b><span>Pick the brand, fill in the
+        tabs and save it as a project with a host name. It shows here as "planned" until it is live.</span></a>
+      <a class="start" href="{{ url_for('toolkit.map_page') }}"><b>Read the switches you already have</b><span>The Toolkit's
+        auto map logs in over SSH, saves each config and follows the LLDP / CDP cables.</span></a>
+      {% if can_discover %}<button type="button" class="start" id="emptydisc"><b>Find cables with LLDP / CDP</b><span>Start from
+        one switch address; the cables and switches found are saved on this page.</span></button>{% endif %}
+      <a class="start" href="{{ url_for('converter.page') }}"><b>Convert a config from another brand</b><span>Paste a
+        Cisco, Arista, Junos, NX-OS or Dell config and get it rebuilt for another vendor.</span></a>
+    </div>
+  </div>
   <div id="gwrap" role="img" aria-label="Diagram of the client's switches"></div>
-  <div class="legend">
+  <div class="legend" id="legend">
     <span><i class="box"></i>switch with a config backup or map</span>
     <span><i class="box planned"></i>planned (only in a project)</span>
     <span><i></i>cable found in the configs</span>
@@ -118,8 +139,15 @@ function layout() {
 
 function draw() {
   const wrap = $("gwrap");
+  $("empty").hidden = data.switches.length > 0;
+  wrap.hidden = $("legend").hidden = !data.switches.length;
   if (!data.switches.length) {
-    wrap.innerHTML = '<p class="muted" style="padding:16px">No switches yet. Fetch configs over SSH, turn on nightly backups, save a network map or save a project with a host name, and they show up here.</p>';
+    const o = data.other_space || {};
+    if (o.switches) {
+      $("otherspace").hidden = false;
+      $("otherspace").innerHTML = `${esc(o.name)} has ${o.switches} switch${o.switches === 1 ? "" : "es"} for this client: ` +
+        `<a href="?space=${esc(o.key)}">see ${esc(o.name)}</a>.`;
+    }
     return;
   }
   data.switches.forEach(s => { if (!pos[s.key]) pos[s.key] = {x: 100, y: 50}; });
@@ -177,6 +205,7 @@ if ($("relayout")) $("relayout").onclick = async () => {
   try { await call("/global/layout", {pos}); st("status", "Arranged and saved.", "ok"); } catch (e) { st("status", e.message, "bad"); }
 };
 if ($("showdisc")) $("showdisc").onclick = () => { $("disc").hidden = !$("disc").hidden; };
+if ($("emptydisc")) $("emptydisc").onclick = () => { $("disc").hidden = false; $("seeds").focus(); };
 if ($("discover")) $("discover").onclick = async () => {
   st("dstatus", "Logging in and reading neighbours… this can take a minute.");
   try {
