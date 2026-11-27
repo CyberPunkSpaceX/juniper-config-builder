@@ -37,7 +37,15 @@ a { color: var(--accent); }
 .rows .row.problem { border-color: var(--bad); box-shadow: inset 3px 0 0 var(--bad); }
 .problem-note { color: var(--bad); font-size: 12px; margin-top: 3px; }
 @keyframes flash { 0%, 100% { box-shadow: 0 0 0 2px rgba(220, 38, 38, .25); } 50% { box-shadow: 0 0 0 5px rgba(220, 38, 38, .45); } }
-.problem.flash { animation: flash .5s ease 3; }
+.problem.flash, .flash-box.flash { animation: flash .5s ease 3; }
+/* Error counts you can click: they open the details and jump to where the fix goes. */
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; text-decoration: underline dotted; text-underline-offset: 3px; }
+.linkbtn.bad { color: var(--bad); } .linkbtn.warn { color: var(--warn, #d97706); } .linkbtn:hover { text-decoration-style: solid; }
+.msgs li[data-goto]:hover, .msgs li[data-fgoto]:hover, .msgs li[data-impgoto]:hover, .msgs li[data-map-edge]:hover, .msgs li[data-map-node]:hover { filter: brightness(1.15); text-decoration: underline dotted; }
+.msgs li .where { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.msgs.fixlist { max-height: 260px; }
+.backbar { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 50; background: var(--panel); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 6px 8px 6px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.3); display: flex; gap: 10px; align-items: center; font-size: 13px; max-width: calc(100% - 32px); }
 .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
 .section { display: none; }
 .section.active { display: block; }
@@ -503,6 +511,9 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
   </section>
 
   <!-- ===================================================== EVPN -->
+  <div class="backbar hide" id="fab-back"><span id="fab-back-text">Fixed it? The fabric picks up the change by itself.</span>
+    <button class="small" type="button" id="fab-back-go">Back to the fabric</button>
+    <button class="secondary small" type="button" id="fab-back-x" title="Hide">✕</button></div>
   <section class="section" data-tab="EVPN-VXLAN">
     <div class="modebar">
       <button type="button" data-evmode="wizard">Fabric wizard (recommended)</button>
@@ -533,7 +544,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="fab-step3">
       <h2>3. Switches and cabling</h2>
       <div class="grid">
         <div class="field"><label>Name prefix</label><input type="text" data-fbind="prefix" placeholder="campus"></div>
@@ -552,7 +563,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       <div class="cards two" id="fab-designs"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="fab-step4">
       <h2>4. VLANs and VRFs</h2>
       <p class="hint" id="fab-vlan-hint">Give each VLAN a subnet: the wizard makes <b>.1</b> the anycast gateway and gives each gateway switch its own address at the top of the subnet. VLANs in the same VRF can route to each other; different VRFs stay apart (send them through a firewall to connect them).</p>
       <div class="rows compact" id="fab-vlans"></div>
@@ -564,14 +575,14 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
       </div>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="fab-step5">
       <h2>5. User ports and addressing</h2>
       <div class="grid">
         <div class="field"><label>User ports on each leaf / core</label><input type="text" data-fbind="access_ports" placeholder="ge-0/0/0-39"></div>
         <div class="field"><label>Port mode</label><select data-fbind="access_mode"><option value="access">Access (one VLAN)</option><option value="trunk">Trunk (all fabric VLANs)</option></select></div>
         <div class="field fab-acc"><label>VLAN for access ports</label><select data-fbind="access_vlan" id="fab-access-vlan"></select></div>
       </div>
-      <details class="explain"><summary>Addressing and numbers (the defaults are fine for most networks)</summary>
+      <details class="explain" id="fab-addressing"><summary>Addressing and numbers (the defaults are fine for most networks)</summary>
         <div class="grid">
           <div class="field"><label>Loopback pool (one /32 per switch)</label><input type="text" data-fbind="loopback_pool" placeholder="10.255.0.0/24"></div>
           <div class="field"><label>Fabric link pool (one /31 per cable)</label><input type="text" data-fbind="p2p_pool" placeholder="10.254.0.0/24"></div>
@@ -592,6 +603,7 @@ pre.cfg { margin: 0; max-height: 520px; min-height: 160px; overflow: auto; backg
         <button class="small" type="button" id="fab-zip">Download all configs (zip)</button>
       </div>
       <p class="status" id="fab-status">Pick a template to start.</p>
+      <ul class="msgs fixlist" id="fab-problems"></ul>
       <ul class="msgs" id="fab-notes"></ul>
       <div class="topo" id="fab-topo"></div>
       <div id="fab-tables"></div>
@@ -1332,6 +1344,7 @@ function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({"&": "&amp;"
 function load(project) {
   const other = project && project.vendor && project.vendor !== VENDOR.key;
   if (other && !confirm(`This project was made for ${project.vendor}. Open it in the ${VENDOR.name} builder anyway?`)) return;
+  impLoaded = null;   // a different config is open now
   REDACTED = false;   // set again by the caller when this is a Read-only copy with the secrets hidden
   state = merge(DEFAULTS, project || {});
   state.vendor = VENDOR.key;
@@ -1599,7 +1612,7 @@ function tabUrl(t) { return location.pathname + location.search + "#" + encodeUR
 function showTab(t, fromHistory) {
   if (!fromHistory && t !== activeTab) history.pushState({tab: t}, "", tabUrl(t));
   activeTab = t; updateTabs(); renderFabric();
-  if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual" && !fabResult) generateFabric();
+  if (t === "EVPN-VXLAN" && state.fabric.mode !== "manual") { generateFabric(); fabBack(false); }
   try { localStorage.setItem("exbuilder-tab", t); } catch (e) {}
   if (t === "Projects") refreshProjects();
   if (t === "Backups & compare") openBackups();
@@ -2116,15 +2129,18 @@ function renderFabricResult() {
   if (!r) { ids.forEach(id => document.getElementById(id).innerHTML = ""); document.getElementById("fab-output").textContent = ""; return; }
   const errs = r.switches.reduce((n, s) => n + s.errors.length, 0);
   fabStatus(`${r.switches.length} switches, ${r.links.length} fabric cables, ${r.vlans.length} VLANs. ` +
-    (errs ? `${errs} problem${errs > 1 ? "s" : ""} to fix (see each switch below).` : "Every config is ready."), errs ? "bad" : "ok");
+    (errs ? `${errs} problem${errs > 1 ? "s" : ""} to fix. Click one below to jump to where it's fixed.` : "Every config is ready."), errs ? "bad" : "ok");
+  document.getElementById("fab-problems").innerHTML = fabProblemList(r);
   document.getElementById("fab-notes").innerHTML = r.notes.map(n => `<li class="warn">${esc(n)}</li>`).join("");
   const sws = r.switches.map(s => ({...s, sub: `${s.loopback} · AS ${s.asn}`}));
   const access = r.flavor === "collapsed" ? (r.switches[0].project.lags || []).length : 0;
   document.getElementById("fab-topo").innerHTML = topoSvg(r.flavor, sws, {access, caption: `${FLAVOR_INFO[r.flavor].title}, ${DESIGN_INFO[r.design].title.replace(" (recommended)", "")}`});
   const tick = b => b ? "yes" : "";
   let html = "<h3>Switches</h3>" + table(["Switch", "Role", "Model", "Loopback", "AS", "Management", "Problems"],
-    r.switches.map(s => [esc(s.name), esc(roleText(s)), esc(s.model), esc(s.loopback), esc(s.asn), esc(s.mgmt || "-"),
-      s.errors.length ? `<span class="status bad">${s.errors.length} error${s.errors.length > 1 ? "s" : ""}</span>` : `<span class="status ok">none</span>`]));
+    r.switches.map((s, i) => [esc(s.name), esc(roleText(s)), esc(s.model), esc(s.loopback), esc(s.asn), esc(s.mgmt || "-"),
+      s.errors.length ? `<button type="button" class="linkbtn bad" data-fprob="${i}" title="Show ${esc(s.name)}'s problems">${s.errors.length} error${s.errors.length > 1 ? "s" : ""}</button>`
+      : s.warnings.length ? `<button type="button" class="linkbtn warn" data-fprob="${i}" title="Show ${esc(s.name)}'s warnings">${s.warnings.length} warning${s.warnings.length > 1 ? "s" : ""}</button>`
+      : `<span class="status ok">none</span>`]));
   html += "<h3>Cabling</h3>" + table(["From", "Port", "Address", "To", "Port", "Address"],
     r.links.map(l => [esc(l.a), `<code>${esc(l.a_port)}</code>`, esc(l.a_ip), esc(l.b), `<code>${esc(l.b_port)}</code>`, esc(l.b_ip)]));
   html += "<h3>VLAN plan</h3>" + table(["VLAN", "ID", "VNI", "Subnet", "Gateway", "VRF"],
@@ -2139,10 +2155,79 @@ function showFabricSwitch() {
   const s = fabResult && fabResult.switches[fabSel]; if (!s) return;
   document.getElementById("fab-output").textContent = fabFmt === "set" ? s.set : s.hierarchy;
   document.getElementById("fab-msgs").innerHTML =
-    s.errors.map(m => `<li class="err" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") +
-    s.warnings.map(m => `<li class="warn"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("");
+    s.errors.map(m => fabMsgItem(m, "err")).join("") + s.warnings.map(m => fabMsgItem(m, "warn")).join("");
   document.querySelectorAll("[data-fsw]").forEach(b => b.classList.toggle("sel", +b.dataset.fsw === fabSel));
 }
+
+// Where a fabric problem gets fixed. The System, Users, SNMP & logs and Services tabs are shared by every
+// switch in the fabric, so those problems go to the builder tab; the rest come from the wizard's own steps.
+const FAB_SHARED = ["system.", "access.", "snmp.", "syslog.", "services."];
+const FAB_STEPS = {
+  Switch: ["fab-step3", ["spine_model", "core_model", "leaf_model"]], LAGs: ["fab-step3", ["esi_links", "core_links"]],
+  BGP: ["fab-step3", []], OSPF: ["fab-step3", []], VLANs: ["fab-step4", []], EVPN: ["fab-step4", []],
+  Ports: ["fab-step5", ["access_ports"]], Routing: ["fab-step5", ["loopback_pool", "asn_base"]], Policies: ["fab-step5", ["loopback_pool"]],
+};
+function fabWhere(section, field, message) {
+  field = field || "";
+  if (/^system\.mgmt_/.test(field)) return {step: "fab-step5", fields: ["mgmt_pool", "mgmt_gateway"], label: "step 5"};
+  if (field === "system.hostname") return {step: "fab-step3", fields: ["prefix"], label: "step 3"};
+  if (section === "Ports" && !/^ACCESS\b/.test(message || "")) {  // the fabric links, not the user ports
+    const toSpine = /^TO-\S*SPINE|^TO-\S*CORE/i.test(message || "");
+    return {step: "fab-step3", fields: toSpine ? ["leaf_ports", "core_links"] : ["spine_ports", "core_links"], label: "step 3"};
+  }
+  if (FAB_STEPS[section] && !FAB_SHARED.some(p => field.startsWith(p))) {
+    const [step, fields] = FAB_STEPS[section]; return {step, fields, label: "step " + step.slice(-1)};
+  }
+  const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(section));
+  return {tab, label: tab ? `the ${tab} tab` : ""};
+}
+function fabMsgItem(m, cls, extra = "") {
+  const w = fabWhere(m.section, m.field, m.message);
+  const where = w.label ? ` <span class="where">→ fix in ${esc(w.label)}</span>` : "";
+  return `<li class="${cls}" data-fgoto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}" data-msg="${esc(m.message)}" title="Click to go to where this is fixed">` +
+    `<b>${esc(m.section)}:</b> ${esc(m.message)}${extra}${where}</li>`;
+}
+// The same problem on six switches is one fix: list each once, with the switches it hits.
+function fabProblemList(r) {
+  const seen = new Map();
+  r.switches.forEach(s => s.errors.forEach(m => {
+    const k = `${m.section}|${m.field || ""}|${m.message}`;
+    if (!seen.has(k)) seen.set(k, {m, who: []});
+    seen.get(k).who.push(s.name);
+  }));
+  return [...seen.values()].map(({m, who}) => fabMsgItem(m, "err",
+    ` <span class="where">(${who.length === r.switches.length && who.length > 1 ? `all ${who.length} switches` : esc(who.join(", "))})</span>`)).join("");
+}
+function flashBox(el) { el.classList.add("flash-box"); el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash"); }
+function fabBack(show) { document.getElementById("fab-back").classList.toggle("hide", !show); }
+function fabGoto(section, field, row, message) {
+  const w = fabWhere(section, field, message);
+  if (w.tab) {
+    gotoProblem(section, field, row);
+    if (activeTab !== "EVPN-VXLAN") fabBack(true);
+    return;
+  }
+  const step = document.getElementById(w.step); if (!step) return;
+  let el = null;
+  for (const f of w.fields) {
+    const c = step.querySelector(`[data-fbind="${f}"]`); if (!c) continue;
+    const det = c.closest("details"); if (det) det.open = true;
+    if (c.offsetParent) { el = c; break; }
+  }
+  const target = el || step;
+  target.scrollIntoView({block: "center", behavior: "smooth"});
+  if (el) { el.focus({preventScroll: true}); flashBox(el.closest(".field") || el); } else flashBox(step);
+}
+document.addEventListener("click", ev => {
+  const t = ev.target.closest("[data-fgoto], [data-fprob]"); if (!t) return;
+  if (t.dataset.fprob != null) {
+    fabSel = +t.dataset.fprob; showFabricSwitch();
+    const list = document.getElementById("fab-msgs");
+    list.scrollIntoView({block: "center", behavior: "smooth"}); flashBox(list);
+  } else fabGoto(t.dataset.fgoto, t.dataset.field, t.dataset.row, t.dataset.msg);
+});
+document.getElementById("fab-back-go").onclick = () => { showTab("EVPN-VXLAN"); document.getElementById("fab-results").scrollIntoView({block: "start", behavior: "smooth"}); };
+document.getElementById("fab-back-x").onclick = () => fabBack(false);
 
 document.addEventListener("input", ev => {
   const el = ev.target; const path = el.dataset && el.dataset.fbind; if (!path) return;
@@ -2204,9 +2289,24 @@ function impStatus(text, cls) { const s = document.getElementById("imp-summary")
 function fillModelSelect(sel, value) {
   sel.innerHTML = optionHtml([["", "(detect automatically)"], ...CATALOG.map(m => [m.name, m.name])], value || "");
 }
+// Import problems belong to the config that was checked, not the switch open in the builder:
+// clicking one loads the checked config first (asking before it replaces anything), then jumps to the field.
 function msgItems(list, cls) {
-  return list.map(m => `<li class="${cls}" data-goto="${esc(m.section)}"><b>${esc(m.section)}:</b> ${esc(m.message)}</li>`).join("") || `<li class="note" style="border:0">None.</li>`;
+  return list.map(m => {
+    const tab = Object.keys(TAB_SECTION).find(k => TAB_SECTION[k].includes(m.section));
+    const go = tab ? ` data-impgoto="${esc(m.section)}" data-field="${esc(m.field || "")}" data-row="${esc(m.row || "")}" title="Load this config and go to where this is fixed"` : "";
+    return `<li class="${cls}"${go}><b>${esc(m.section)}:</b> ${esc(m.message)}${tab ? ` <span class="where">→ ${esc(tab)} tab</span>` : ""}</li>`;
+  }).join("") || `<li class="note" style="border:0">None.</li>`;
 }
+var impLoaded = null;  // the import result that is open in the builder right now (load() clears it)
+document.getElementById("imp-result").addEventListener("click", async ev => {
+  const li = ev.target.closest("[data-impgoto]"); if (!li || !impResult) return;
+  if (impLoaded !== impResult) {
+    if (!loadImported(false)) return;
+    await generate();
+  }
+  gotoProblem(li.dataset.impgoto, li.dataset.field, li.dataset.row);
+});
 function showImport(data, source) {
   impResult = data;
   document.getElementById("imp-result").classList.remove("hide");
@@ -2272,12 +2372,14 @@ async function importFile(file) {
   importText();
 }
 function loadImported(fixed) {
-  if (!impResult || !confirmReplace()) return;
+  if (!impResult || !confirmReplace()) return false;
   const p = clone(fixed && impResult.hardened ? impResult.hardened : impResult.project);
   p.fabric = state.fabric;
   load(p);
+  impLoaded = fixed ? null : impResult;
   showTab("Switch");
   setStatus(fixed ? "Loaded with the recommended fixes. Review each tab, then copy the config." : "Loaded. Review each tab, then copy the config.", "ok");
+  return true;
 }
 document.getElementById("btn-import").onclick = () => showTab("Import & check");
 document.getElementById("imp-check").onclick = importText;
@@ -2455,7 +2557,7 @@ function renderMapChecks() {
   const order = {error: 0, warn: 1, info: 2};
   const list = [...mapData.checks].sort((a, b) => order[a.level] - order[b.level]);
   document.getElementById("map-checks").innerHTML = list.map(c =>
-    `<li class="${c.level === "error" ? "err high" : c.level === "warn" ? "warn medium" : "low"}"${c.link != null ? ` data-map-edge="${c.link}"` : ""}>${esc(c.message)}</li>`).join("")
+    `<li class="${c.level === "error" ? "err high" : c.level === "warn" ? "warn medium" : "low"}"${c.link != null ? ` data-map-edge="${c.link}" title="Show this link on the map"` : (c.switches || []).length ? ` data-map-node="${c.switches[0]}" title="Show this switch on the map"` : ""}>${esc(c.message)}</li>`).join("")
     || `<li class="note" style="border:0">Nothing to report.</li>`;
 }
 function renderMapDetail() {
@@ -2526,10 +2628,11 @@ document.getElementById("map-list").addEventListener("input", ev => {
   mapItems[+i].lldp = ev.target.value; saveMap();
 });
 document.addEventListener("click", ev => {
-  const t = ev.target.closest("[data-map-rm], [data-map-lldp], [data-map-open], [data-map-edge]"); if (!t) return;
+  const t = ev.target.closest("[data-map-rm], [data-map-lldp], [data-map-open], [data-map-edge], [data-map-node]"); if (!t) return;
   if (t.dataset.mapRm != null) { mapItems.splice(+t.dataset.mapRm, 1); saveMap(); renderMapList(); }
   else if (t.dataset.mapLldp != null) { const it = mapItems[+t.dataset.mapLldp]; it.showLldp = !it.showLldp; renderMapList(); }
   else if (t.dataset.mapOpen != null) mapOpen(+t.dataset.mapOpen);
+  else if (t.dataset.mapNode != null) { mapSel = {type: "node", id: +t.dataset.mapNode}; renderMap(); renderMapDetail(); document.getElementById("map-canvas").scrollIntoView({block: "nearest", behavior: "smooth"}); }
   else if (t.dataset.mapEdge != null) { mapSel = {type: "edge", id: +t.dataset.mapEdge}; renderMap(); renderMapDetail(); document.getElementById("map-canvas").scrollIntoView({block: "nearest", behavior: "smooth"}); }
 });
 document.getElementById("map-file-btn").onclick = () => document.getElementById("map-file").click();

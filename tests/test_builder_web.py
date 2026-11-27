@@ -199,3 +199,12 @@ def test_aruba_builder_page_and_generate(admin):
                       headers={"X-CSRF-Token": token(admin)})
     assert resp.status_code == 200 and "hostname cx9" in resp.json["set"]
     assert "HPE Aruba CX (AOS-CX)" in admin.get("/help").get_data(as_text=True)
+
+
+def test_problem_counts_are_clickable(admin):
+    # Fabric wizard: the summary lists each problem once, the Problems column opens a switch's list,
+    # and every problem jumps to the wizard step or builder tab where it's fixed.
+    page = admin.get("/build/juniper").get_data(as_text=True)
+    for hook in ('id="fab-problems"', "data-fprob=", "data-fgoto=", 'id="fab-step3"', 'id="fab-step4"', 'id="fab-step5"',
+                 'id="fab-back"', "function fabWhere", "data-impgoto=", "data-map-node="):
+        assert hook in page, hook
