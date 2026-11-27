@@ -1,0 +1,1463 @@
+{
+ "key": "common-mistakes",
+ "name": "Training Lab - Common Mistakes",
+ "description": "Deliberately broken Juniper EX campus (core, 3 access, edge): 36 mistakes to find, from VLAN id and trunk mismatches, LACP passive on both ends and a contested STP root to overlapping subnets, SNMP public and a /24 loopback. Answer key: docs/samples.md in the repo. No peeking. Switch root and labadmin password: Sample-Lab-Root1.",
+ "projects": [
+  {
+   "space": "lab",
+   "name": "cm-acc-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX2300-48P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "",
+     "mgmt_gateway": ""
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10,
+      "irb": "10.10.10.11/24"
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "VOICE",
+      "id": 30
+     },
+     {
+      "name": "WIFI",
+      "id": 40
+     }
+    ],
+    "ports": [
+     {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-31",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "VOICE",
+      "edge": true
+     },
+     {
+      "name": "MYSTERY",
+      "ports": "ge-0/0/32-35",
+      "mode": "access",
+      "vlan": "",
+      "edge": true,
+      "description": "Spare desks"
+     },
+     {
+      "name": "APS",
+      "ports": "ge-0/0/40-43",
+      "mode": "trunk",
+      "vlans": "WIFI, USERS",
+      "native": "MGMT",
+      "voice": "VOICE",
+      "description": "Wi-Fi APs",
+      "edge": false
+     },
+     {
+      "name": "PRINTER",
+      "ports": "ge-0/0/52",
+      "mode": "access",
+      "vlan": "USERS",
+      "description": "Floor printer"
+     },
+     {
+      "name": "X-LINK",
+      "ports": "ge-0/0/47",
+      "mode": "access",
+      "vlan": "USERS",
+      "edge": false,
+      "description": "Cross-link to cm-acc-02 ge-0/0/47"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/1/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Uplink to cm-core-01 ae1"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": false,
+     "bridge_priority": "4k",
+     "lldp_med": false
+    },
+    "qos": {
+     "enabled": false
+    }
+   }
+  },
+  {
+   "space": "lab",
+   "name": "cm-acc-02",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-02",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX3400-48P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-02",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.12/24",
+     "mgmt_gateway": "10.10.10.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "",
+       "priv_password": ""
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": []
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "PHONES",
+      "id": 30
+     },
+     {
+      "name": "CCTV",
+      "id": 55
+     }
+    ],
+    "ports": [
+     {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-23",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "PHONES",
+      "edge": true
+     },
+     {
+      "name": "CAMERAS",
+      "ports": "ge-0/0/24-35",
+      "mode": "access",
+      "vlan": "CCTV",
+      "edge": true
+     },
+     {
+      "name": "X-LINK",
+      "ports": "ge-0/0/47",
+      "mode": "trunk",
+      "vlans": "all",
+      "edge": false,
+      "description": "Cross-link to cm-acc-01 ge-0/0/47"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/2/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, PHONES",
+      "native": "",
+      "description": "Uplink to cm-core-01 ae2"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k"
+    },
+    "qos": {
+     "enabled": true,
+     "preset": "voice-video"
+    }
+   }
+  },
+  {
+   "space": "lab",
+   "name": "cm-acc-03",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-03",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX2300-24P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-03",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.12/24",
+     "mgmt_gateway": "10.10.99.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "VOICE",
+      "id": 30
+     },
+     {
+      "name": "WIFI",
+      "id": 41
+     },
+     {
+      "name": "CCTV",
+      "id": 50
+     }
+    ],
+    "ports": [
+     {
+      "name": "LOBBY",
+      "ports": "ge-0/0/0-11",
+      "mode": "access",
+      "vlan": "USERS",
+      "edge": true,
+      "root_guard": true
+     },
+     {
+      "name": "CAMERAS",
+      "ports": "ge-0/0/12-15",
+      "mode": "access",
+      "vlan": "CCTV",
+      "edge": true
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/1/0",
+      "lacp": "passive",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Uplink to cm-core-01 ae3"
+     },
+     {
+      "name": "ae1",
+      "members": "ge-0/0/22-23",
+      "lacp": "static",
+      "mode": "trunk",
+      "vlans": "USERS",
+      "description": "ESXi host in the closet"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k",
+     "bpdu_block_on_edge": false,
+     "storm_control": false
+    }
+   }
+  },
+  {
+   "space": "lab",
+   "name": "cm-core-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-core-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX4100-24T",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-core-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "",
+     "ntp_servers": [
+      {
+       "address": "pool.ntp.org",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "",
+     "mgmt_gateway": ""
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ],
+     "web": true
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [
+      {
+       "name": "public",
+       "access": "read-only",
+       "clients": ""
+      }
+     ],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10,
+      "description": "Switch management",
+      "irb": "10.10.10.1/24"
+     },
+     {
+      "name": "USERS",
+      "id": 20,
+      "description": "Office PCs",
+      "irb": "10.10.20.1/24"
+     },
+     {
+      "name": "VOICE",
+      "id": 30,
+      "description": "IP phones",
+      "irb": "10.10.30.1/24"
+     },
+     {
+      "name": "WIFI",
+      "id": 40,
+      "description": "Access points",
+      "irb": "10.10.40.1/24"
+     },
+     {
+      "name": "CCTV",
+      "id": 50,
+      "description": "Cameras",
+      "irb": "10.10.50.1/24"
+     },
+     {
+      "name": "PRINTERS",
+      "id": 60,
+      "description": "Printers (M01: defined but tagged nowhere)",
+      "irb": "10.10.60.1/24"
+     },
+     {
+      "name": "GUEST",
+      "id": 70,
+      "description": "Guest Wi-Fi (M03: overlaps USERS)",
+      "irb": "10.10.20.129/25"
+     }
+    ],
+    "ports": [
+     {
+      "name": "TO-EDGE",
+      "ports": "ge-0/0/23",
+      "mode": "routed",
+      "address": "10.255.0.1/30",
+      "description": "Uplink to cm-edge-01 ge-0/0/0"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae1",
+      "members": "xe-0/2/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Downlink to cm-acc-01 ae0"
+     },
+     {
+      "name": "ae2",
+      "members": "xe-0/2/2-3",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI, CCTV",
+      "native": "MGMT",
+      "mtu": "9216",
+      "description": "Downlink to cm-acc-02 ae0"
+     },
+     {
+      "name": "ae3",
+      "members": "ge-0/0/20-21",
+      "lacp": "passive",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Downlink to cm-acc-03 ae0"
+     }
+    ],
+    "routing": {
+     "static": [
+      {
+       "prefix": "0.0.0.0/0",
+       "next_hop": "10.255.0.2"
+      },
+      {
+       "prefix": "10.99.0.0/16",
+       "next_hop": "10.250.9.1"
+      }
+     ]
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "4k"
+    }
+   }
+  },
+  {
+   "space": "lab",
+   "name": "cm-edge-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-edge-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX3400-24T",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-edge-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.30/24",
+     "mgmt_gateway": "10.10.99.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": []
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [],
+    "ports": [
+     {
+      "name": "TO-CORE",
+      "ports": "ge-0/0/0",
+      "mode": "routed",
+      "address": "10.255.0.6/30",
+      "description": "Downlink to cm-core-01 ge-0/0/23"
+     },
+     {
+      "name": "TO-ISP",
+      "ports": "ge-0/0/1",
+      "mode": "routed",
+      "address": "203.0.113.2/30",
+      "description": "ISP handoff"
+     }
+    ],
+    "lags": [],
+    "routing": {
+     "static": [
+      {
+       "prefix": "0.0.0.0/0",
+       "next_hop": "203.0.113.1"
+      },
+      {
+       "prefix": "10.10.0.0/16",
+       "next_hop": "10.255.0.5"
+      }
+     ],
+     "loopback": "10.254.0.1/24"
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k"
+    }
+   }
+  },
+  {
+   "space": "production",
+   "name": "cm-acc-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX2300-48P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "",
+     "mgmt_gateway": ""
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10,
+      "irb": "10.10.10.11/24"
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "VOICE",
+      "id": 30
+     },
+     {
+      "name": "WIFI",
+      "id": 40
+     }
+    ],
+    "ports": [
+     {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-31",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "VOICE",
+      "edge": true
+     },
+     {
+      "name": "MYSTERY",
+      "ports": "ge-0/0/32-35",
+      "mode": "access",
+      "vlan": "",
+      "edge": true,
+      "description": "Spare desks"
+     },
+     {
+      "name": "APS",
+      "ports": "ge-0/0/40-43",
+      "mode": "trunk",
+      "vlans": "WIFI, USERS",
+      "native": "MGMT",
+      "voice": "VOICE",
+      "description": "Wi-Fi APs",
+      "edge": false
+     },
+     {
+      "name": "PRINTER",
+      "ports": "ge-0/0/52",
+      "mode": "access",
+      "vlan": "USERS",
+      "description": "Floor printer"
+     },
+     {
+      "name": "X-LINK",
+      "ports": "ge-0/0/47",
+      "mode": "access",
+      "vlan": "USERS",
+      "edge": false,
+      "description": "Cross-link to cm-acc-02 ge-0/0/47"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/1/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Uplink to cm-core-01 ae1"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": false,
+     "bridge_priority": "4k",
+     "lldp_med": false
+    },
+    "qos": {
+     "enabled": false
+    }
+   }
+  },
+  {
+   "space": "production",
+   "name": "cm-acc-02",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-02",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX3400-48P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-02",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.12/24",
+     "mgmt_gateway": "10.10.10.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "",
+       "priv_password": ""
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": []
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "PHONES",
+      "id": 30
+     },
+     {
+      "name": "CCTV",
+      "id": 55
+     }
+    ],
+    "ports": [
+     {
+      "name": "DESKS",
+      "ports": "ge-0/0/0-23",
+      "mode": "access",
+      "vlan": "USERS",
+      "voice": "PHONES",
+      "edge": true
+     },
+     {
+      "name": "CAMERAS",
+      "ports": "ge-0/0/24-35",
+      "mode": "access",
+      "vlan": "CCTV",
+      "edge": true
+     },
+     {
+      "name": "X-LINK",
+      "ports": "ge-0/0/47",
+      "mode": "trunk",
+      "vlans": "all",
+      "edge": false,
+      "description": "Cross-link to cm-acc-01 ge-0/0/47"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/2/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, PHONES",
+      "native": "",
+      "description": "Uplink to cm-core-01 ae2"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k"
+    },
+    "qos": {
+     "enabled": true,
+     "preset": "voice-video"
+    }
+   }
+  },
+  {
+   "space": "production",
+   "name": "cm-acc-03",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-acc-03",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX2300-24P",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-acc-03",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.12/24",
+     "mgmt_gateway": "10.10.99.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ]
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10
+     },
+     {
+      "name": "USERS",
+      "id": 20
+     },
+     {
+      "name": "VOICE",
+      "id": 30
+     },
+     {
+      "name": "WIFI",
+      "id": 41
+     },
+     {
+      "name": "CCTV",
+      "id": 50
+     }
+    ],
+    "ports": [
+     {
+      "name": "LOBBY",
+      "ports": "ge-0/0/0-11",
+      "mode": "access",
+      "vlan": "USERS",
+      "edge": true,
+      "root_guard": true
+     },
+     {
+      "name": "CAMERAS",
+      "ports": "ge-0/0/12-15",
+      "mode": "access",
+      "vlan": "CCTV",
+      "edge": true
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae0",
+      "members": "xe-0/1/0",
+      "lacp": "passive",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Uplink to cm-core-01 ae3"
+     },
+     {
+      "name": "ae1",
+      "members": "ge-0/0/22-23",
+      "lacp": "static",
+      "mode": "trunk",
+      "vlans": "USERS",
+      "description": "ESXi host in the closet"
+     }
+    ],
+    "routing": {
+     "static": []
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k",
+     "bpdu_block_on_edge": false,
+     "storm_control": false
+    }
+   }
+  },
+  {
+   "space": "production",
+   "name": "cm-core-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-core-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX4100-24T",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-core-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "",
+     "ntp_servers": [
+      {
+       "address": "pool.ntp.org",
+       "prefer": true
+      }
+     ],
+     "banner": "TRAINING LAB - FAKE CONFIG - DO NOT PUSH",
+     "mgmt_interface": "",
+     "mgmt_address": "",
+     "mgmt_gateway": ""
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": [
+      {
+       "name": "netadmin",
+       "class": "super-user",
+       "password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+       "ssh_keys": ""
+      }
+     ],
+     "web": true
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [
+      {
+       "name": "public",
+       "access": "read-only",
+       "clients": ""
+      }
+     ],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [
+     {
+      "name": "MGMT",
+      "id": 10,
+      "description": "Switch management",
+      "irb": "10.10.10.1/24"
+     },
+     {
+      "name": "USERS",
+      "id": 20,
+      "description": "Office PCs",
+      "irb": "10.10.20.1/24"
+     },
+     {
+      "name": "VOICE",
+      "id": 30,
+      "description": "IP phones",
+      "irb": "10.10.30.1/24"
+     },
+     {
+      "name": "WIFI",
+      "id": 40,
+      "description": "Access points",
+      "irb": "10.10.40.1/24"
+     },
+     {
+      "name": "CCTV",
+      "id": 50,
+      "description": "Cameras",
+      "irb": "10.10.50.1/24"
+     },
+     {
+      "name": "PRINTERS",
+      "id": 60,
+      "description": "Printers (M01: defined but tagged nowhere)",
+      "irb": "10.10.60.1/24"
+     },
+     {
+      "name": "GUEST",
+      "id": 70,
+      "description": "Guest Wi-Fi (M03: overlaps USERS)",
+      "irb": "10.10.20.129/25"
+     }
+    ],
+    "ports": [
+     {
+      "name": "TO-EDGE",
+      "ports": "ge-0/0/23",
+      "mode": "routed",
+      "address": "10.255.0.1/30",
+      "description": "Uplink to cm-edge-01 ge-0/0/0"
+     }
+    ],
+    "lags": [
+     {
+      "name": "ae1",
+      "members": "xe-0/2/0-1",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Downlink to cm-acc-01 ae0"
+     },
+     {
+      "name": "ae2",
+      "members": "xe-0/2/2-3",
+      "lacp": "active",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI, CCTV",
+      "native": "MGMT",
+      "mtu": "9216",
+      "description": "Downlink to cm-acc-02 ae0"
+     },
+     {
+      "name": "ae3",
+      "members": "ge-0/0/20-21",
+      "lacp": "passive",
+      "mode": "trunk",
+      "vlans": "USERS, VOICE, WIFI",
+      "native": "MGMT",
+      "description": "Downlink to cm-acc-03 ae0"
+     }
+    ],
+    "routing": {
+     "static": [
+      {
+       "prefix": "0.0.0.0/0",
+       "next_hop": "10.255.0.2"
+      },
+      {
+       "prefix": "10.99.0.0/16",
+       "next_hop": "10.250.9.1"
+      }
+     ]
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "4k"
+    }
+   }
+  },
+  {
+   "space": "production",
+   "name": "cm-edge-01",
+   "data": {
+    "version": 1,
+    "vendor": "juniper",
+    "name": "cm-edge-01",
+    "switch": {
+     "members": [
+      {
+       "fpc": 0,
+       "model": "EX3400-24T",
+       "serial": "",
+       "role": "routing-engine"
+      }
+     ]
+    },
+    "system": {
+     "hostname": "cm-edge-01",
+     "domain": "lab.example",
+     "timezone": "America/Edmonton",
+     "name_servers": "10.10.10.53",
+     "ntp_servers": [
+      {
+       "address": "10.10.10.1",
+       "prefer": true
+      }
+     ],
+     "banner": "",
+     "mgmt_interface": "",
+     "mgmt_address": "10.10.99.30/24",
+     "mgmt_gateway": "10.10.99.1"
+    },
+    "access": {
+     "root_password": "$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/",
+     "users": []
+    },
+    "snmp": {
+     "location": "Training lab",
+     "contact": "noc@lab.example",
+     "communities": [],
+     "v3_users": [
+      {
+       "name": "nms",
+       "auth": "sha256",
+       "auth_password": "lab-auth-pass-1",
+       "priv": "aes128",
+       "priv_password": "lab-priv-pass-1"
+      }
+     ]
+    },
+    "syslog": {
+     "hosts": [
+      {
+       "address": "10.10.10.20",
+       "facility": "any",
+       "level": "info",
+       "port": "514"
+      }
+     ]
+    },
+    "vlans": [],
+    "ports": [
+     {
+      "name": "TO-CORE",
+      "ports": "ge-0/0/0",
+      "mode": "routed",
+      "address": "10.255.0.6/30",
+      "description": "Downlink to cm-core-01 ge-0/0/23"
+     },
+     {
+      "name": "TO-ISP",
+      "ports": "ge-0/0/1",
+      "mode": "routed",
+      "address": "203.0.113.2/30",
+      "description": "ISP handoff"
+     }
+    ],
+    "lags": [],
+    "routing": {
+     "static": [
+      {
+       "prefix": "0.0.0.0/0",
+       "next_hop": "203.0.113.1"
+      },
+      {
+       "prefix": "10.10.0.0/16",
+       "next_hop": "10.255.0.5"
+      }
+     ],
+     "loopback": "10.254.0.1/24"
+    },
+    "services": {
+     "disable_unused": true,
+     "bridge_priority": "32k"
+    }
+   }
+  }
+ ],
+ "maps": [
+  {
+   "space": "lab",
+   "name": "Common Mistakes network",
+   "data": {
+    "items": [
+     {
+      "name": "cm-core-01",
+      "text": "# Juniper EX configuration for cm-core-01\n# Hardware: EX4100-24T (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-core-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system ntp server pool.ntp.org prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\nset chassis alarm management-ethernet link-down ignore\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system services web-management https system-generated-certificate\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp community public authorization read-only\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT description \"Switch management\"\nset vlans MGMT vlan-id 10\nset vlans MGMT l3-interface irb.10\nset interfaces irb unit 10 family inet address 10.10.10.1/24\nset vlans USERS description \"Office PCs\"\nset vlans USERS vlan-id 20\nset vlans USERS l3-interface irb.20\nset interfaces irb unit 20 family inet address 10.10.20.1/24\nset vlans VOICE description \"IP phones\"\nset vlans VOICE vlan-id 30\nset vlans VOICE l3-interface irb.30\nset interfaces irb unit 30 family inet address 10.10.30.1/24\nset vlans WIFI description \"Access points\"\nset vlans WIFI vlan-id 40\nset vlans WIFI l3-interface irb.40\nset interfaces irb unit 40 family inet address 10.10.40.1/24\nset vlans CCTV description Cameras\nset vlans CCTV vlan-id 50\nset vlans CCTV l3-interface irb.50\nset interfaces irb unit 50 family inet address 10.10.50.1/24\nset vlans PRINTERS description \"Printers (M01: defined but tagged nowhere)\"\nset vlans PRINTERS vlan-id 60\nset vlans PRINTERS l3-interface irb.60\nset interfaces irb unit 60 family inet address 10.10.60.1/24\nset vlans GUEST description \"Guest Wi-Fi (M03: overlaps USERS)\"\nset vlans GUEST vlan-id 70\nset vlans GUEST l3-interface irb.70\nset interfaces irb unit 70 family inet address 10.10.20.129/25\n\n# Switch ports\nset interfaces ge-0/0/23 description \"Uplink to cm-edge-01 ge-0/0/0\"\nset interfaces ge-0/0/23 unit 0 family inet address 10.255.0.1/30\n\n# Link aggregation (LACP)\nset interfaces xe-0/2/0 ether-options 802.3ad ae1\nset interfaces xe-0/2/1 ether-options 802.3ad ae1\nset interfaces ae1 aggregated-ether-options lacp active\nset interfaces ae1 aggregated-ether-options lacp periodic fast\nset interfaces ae1 description \"Downlink to cm-acc-01 ae0\"\nset interfaces ae1 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae1 native-vlan-id 10\nset interfaces ae1 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae1 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae1 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae1 unit 0 family ethernet-switching vlan members MGMT\nset interfaces xe-0/2/2 ether-options 802.3ad ae2\nset interfaces xe-0/2/3 ether-options 802.3ad ae2\nset interfaces ae2 aggregated-ether-options lacp active\nset interfaces ae2 aggregated-ether-options lacp periodic fast\nset interfaces ae2 description \"Downlink to cm-acc-02 ae0\"\nset interfaces ae2 mtu 9216\nset interfaces ae2 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae2 native-vlan-id 10\nset interfaces ae2 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae2 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae2 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae2 unit 0 family ethernet-switching vlan members CCTV\nset interfaces ae2 unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/20 ether-options 802.3ad ae3\nset interfaces ge-0/0/21 ether-options 802.3ad ae3\nset interfaces ae3 aggregated-ether-options lacp passive\nset interfaces ae3 aggregated-ether-options lacp periodic fast\nset interfaces ae3 description \"Downlink to cm-acc-03 ae0\"\nset interfaces ae3 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae3 native-vlan-id 10\nset interfaces ae3 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae3 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae3 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae3 unit 0 family ethernet-switching vlan members MGMT\nset chassis aggregated-devices ethernet device-count 4\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.255.0.2\nset routing-options static route 10.99.0.0/16 next-hop 10.250.9.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 4k\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset interfaces interface-range UNUSED member-range ge-0/0/0 to ge-0/0/19\nset interfaces interface-range UNUSED member ge-0/0/22\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/2/0           -                   00:00:5e:00:53:01   xe-0/1/0           cm-acc-01\nxe-0/2/1           -                   00:00:5e:00:53:01   xe-0/1/1           cm-acc-01\nxe-0/2/2           -                   00:00:5e:00:53:01   xe-0/2/0           cm-acc-02\nxe-0/2/3           -                   00:00:5e:00:53:01   xe-0/2/1           cm-acc-02\nge-0/0/20          -                   00:00:5e:00:53:01   xe-0/1/0           cm-acc-03\nge-0/0/23          -                   00:00:5e:00:53:01   ge-0/0/0           cm-edge-01"
+     },
+     {
+      "name": "cm-acc-01",
+      "text": "# Juniper EX configuration for cm-acc-01\n# Hardware: EX2300-48P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-acc-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\nset chassis alarm management-ethernet link-down ignore\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans MGMT l3-interface irb.10\nset interfaces irb unit 10 family inet address 10.10.10.11/24\nset vlans USERS vlan-id 20\nset vlans VOICE vlan-id 30\nset vlans WIFI vlan-id 40\n\n# Switch ports\nset interfaces interface-range DESKS member-range ge-0/0/0 to ge-0/0/31\nset interfaces interface-range DESKS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range DESKS unit 0 family ethernet-switching vlan members USERS\nset switch-options voip interface ge-0/0/0.0 vlan VOICE\nset switch-options voip interface ge-0/0/0.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/1.0 vlan VOICE\nset switch-options voip interface ge-0/0/1.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/2.0 vlan VOICE\nset switch-options voip interface ge-0/0/2.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/3.0 vlan VOICE\nset switch-options voip interface ge-0/0/3.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/4.0 vlan VOICE\nset switch-options voip interface ge-0/0/4.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/5.0 vlan VOICE\nset switch-options voip interface ge-0/0/5.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/6.0 vlan VOICE\nset switch-options voip interface ge-0/0/6.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/7.0 vlan VOICE\nset switch-options voip interface ge-0/0/7.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/8.0 vlan VOICE\nset switch-options voip interface ge-0/0/8.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/9.0 vlan VOICE\nset switch-options voip interface ge-0/0/9.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/10.0 vlan VOICE\nset switch-options voip interface ge-0/0/10.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/11.0 vlan VOICE\nset switch-options voip interface ge-0/0/11.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/12.0 vlan VOICE\nset switch-options voip interface ge-0/0/12.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/13.0 vlan VOICE\nset switch-options voip interface ge-0/0/13.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/14.0 vlan VOICE\nset switch-options voip interface ge-0/0/14.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/15.0 vlan VOICE\nset switch-options voip interface ge-0/0/15.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/16.0 vlan VOICE\nset switch-options voip interface ge-0/0/16.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/17.0 vlan VOICE\nset switch-options voip interface ge-0/0/17.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/18.0 vlan VOICE\nset switch-options voip interface ge-0/0/18.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/19.0 vlan VOICE\nset switch-options voip interface ge-0/0/19.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/20.0 vlan VOICE\nset switch-options voip interface ge-0/0/20.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/21.0 vlan VOICE\nset switch-options voip interface ge-0/0/21.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/22.0 vlan VOICE\nset switch-options voip interface ge-0/0/22.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/23.0 vlan VOICE\nset switch-options voip interface ge-0/0/23.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/24.0 vlan VOICE\nset switch-options voip interface ge-0/0/24.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/25.0 vlan VOICE\nset switch-options voip interface ge-0/0/25.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/26.0 vlan VOICE\nset switch-options voip interface ge-0/0/26.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/27.0 vlan VOICE\nset switch-options voip interface ge-0/0/27.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/28.0 vlan VOICE\nset switch-options voip interface ge-0/0/28.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/29.0 vlan VOICE\nset switch-options voip interface ge-0/0/29.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/30.0 vlan VOICE\nset switch-options voip interface ge-0/0/30.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/31.0 vlan VOICE\nset switch-options voip interface ge-0/0/31.0 forwarding-class expedited-forwarding\nset interfaces interface-range DESKS unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range MYSTERY member-range ge-0/0/32 to ge-0/0/35\nset interfaces interface-range MYSTERY description \"Spare desks\"\nset interfaces interface-range MYSTERY unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range MYSTERY unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range APS member-range ge-0/0/40 to ge-0/0/43\nset interfaces interface-range APS description \"Wi-Fi APs\"\nset interfaces interface-range APS unit 0 family ethernet-switching interface-mode trunk\nset interfaces interface-range APS native-vlan-id 10\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members WIFI\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members USERS\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/52 description \"Floor printer\"\nset interfaces ge-0/0/52 unit 0 family ethernet-switching interface-mode access\nset interfaces ge-0/0/52 unit 0 family ethernet-switching vlan members USERS\nset interfaces ge-0/0/52 unit 0 family ethernet-switching storm-control storm-default\nset interfaces ge-0/0/47 description \"Cross-link to cm-acc-02 ge-0/0/47\"\nset interfaces ge-0/0/47 unit 0 family ethernet-switching interface-mode access\nset interfaces ge-0/0/47 unit 0 family ethernet-switching vlan members USERS\nset interfaces ge-0/0/47 unit 0 family ethernet-switching storm-control storm-default\n\n# Link aggregation (LACP)\nset interfaces xe-0/1/0 ether-options 802.3ad ae0\nset interfaces xe-0/1/1 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp active\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae1\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 native-vlan-id 10\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae0 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae0 unit 0 family ethernet-switching vlan members MGMT\nset chassis aggregated-devices ethernet device-count 1\n\n# Switching services\nset protocols lldp interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 4k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset protocols rstp interface ge-0/0/16 edge\nset protocols rstp interface ge-0/0/17 edge\nset protocols rstp interface ge-0/0/18 edge\nset protocols rstp interface ge-0/0/19 edge\nset protocols rstp interface ge-0/0/20 edge\nset protocols rstp interface ge-0/0/21 edge\nset protocols rstp interface ge-0/0/22 edge\nset protocols rstp interface ge-0/0/23 edge\nset protocols rstp interface ge-0/0/24 edge\nset protocols rstp interface ge-0/0/25 edge\nset protocols rstp interface ge-0/0/26 edge\nset protocols rstp interface ge-0/0/27 edge\nset protocols rstp interface ge-0/0/28 edge\nset protocols rstp interface ge-0/0/29 edge\nset protocols rstp interface ge-0/0/30 edge\nset protocols rstp interface ge-0/0/31 edge\nset protocols rstp interface ge-0/0/32 edge\nset protocols rstp interface ge-0/0/33 edge\nset protocols rstp interface ge-0/0/34 edge\nset protocols rstp interface ge-0/0/35 edge\nset protocols rstp interface ge-0/0/52 edge\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset poe interface all\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/1/0           -                   00:00:5e:00:53:01   xe-0/2/0           cm-core-01\nxe-0/1/1           -                   00:00:5e:00:53:01   xe-0/2/1           cm-core-01\nge-0/0/47          -                   00:00:5e:00:53:01   ge-0/0/47          cm-acc-02"
+     },
+     {
+      "name": "cm-acc-02",
+      "text": "# Juniper EX configuration for cm-acc-02\n# Hardware: EX3400-48P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\ndelete class-of-service\n\n# System\nset system host-name cm-acc-02\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.12/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level authentication read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans USERS vlan-id 20\nset vlans PHONES vlan-id 30\nset vlans CCTV vlan-id 55\n\n# Switch ports\nset interfaces interface-range DESKS member-range ge-0/0/0 to ge-0/0/23\nset interfaces interface-range DESKS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range DESKS unit 0 family ethernet-switching vlan members USERS\nset switch-options voip interface ge-0/0/0.0 vlan PHONES\nset switch-options voip interface ge-0/0/0.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/1.0 vlan PHONES\nset switch-options voip interface ge-0/0/1.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/2.0 vlan PHONES\nset switch-options voip interface ge-0/0/2.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/3.0 vlan PHONES\nset switch-options voip interface ge-0/0/3.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/4.0 vlan PHONES\nset switch-options voip interface ge-0/0/4.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/5.0 vlan PHONES\nset switch-options voip interface ge-0/0/5.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/6.0 vlan PHONES\nset switch-options voip interface ge-0/0/6.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/7.0 vlan PHONES\nset switch-options voip interface ge-0/0/7.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/8.0 vlan PHONES\nset switch-options voip interface ge-0/0/8.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/9.0 vlan PHONES\nset switch-options voip interface ge-0/0/9.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/10.0 vlan PHONES\nset switch-options voip interface ge-0/0/10.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/11.0 vlan PHONES\nset switch-options voip interface ge-0/0/11.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/12.0 vlan PHONES\nset switch-options voip interface ge-0/0/12.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/13.0 vlan PHONES\nset switch-options voip interface ge-0/0/13.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/14.0 vlan PHONES\nset switch-options voip interface ge-0/0/14.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/15.0 vlan PHONES\nset switch-options voip interface ge-0/0/15.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/16.0 vlan PHONES\nset switch-options voip interface ge-0/0/16.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/17.0 vlan PHONES\nset switch-options voip interface ge-0/0/17.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/18.0 vlan PHONES\nset switch-options voip interface ge-0/0/18.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/19.0 vlan PHONES\nset switch-options voip interface ge-0/0/19.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/20.0 vlan PHONES\nset switch-options voip interface ge-0/0/20.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/21.0 vlan PHONES\nset switch-options voip interface ge-0/0/21.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/22.0 vlan PHONES\nset switch-options voip interface ge-0/0/22.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/23.0 vlan PHONES\nset switch-options voip interface ge-0/0/23.0 forwarding-class expedited-forwarding\nset interfaces interface-range DESKS unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range CAMERAS member-range ge-0/0/24 to ge-0/0/35\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching vlan members CCTV\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching storm-control storm-default\nset interfaces ge-0/0/47 description \"Cross-link to cm-acc-01 ge-0/0/47\"\nset interfaces ge-0/0/47 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ge-0/0/47 unit 0 family ethernet-switching vlan members all\n\n# Link aggregation (LACP)\nset interfaces xe-0/2/0 ether-options 802.3ad ae0\nset interfaces xe-0/2/1 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp active\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae2\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members PHONES\nset chassis aggregated-devices ethernet device-count 1\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.10.10.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset protocols rstp interface ge-0/0/16 edge\nset protocols rstp interface ge-0/0/17 edge\nset protocols rstp interface ge-0/0/18 edge\nset protocols rstp interface ge-0/0/19 edge\nset protocols rstp interface ge-0/0/20 edge\nset protocols rstp interface ge-0/0/21 edge\nset protocols rstp interface ge-0/0/22 edge\nset protocols rstp interface ge-0/0/23 edge\nset protocols rstp interface ge-0/0/24 edge\nset protocols rstp interface ge-0/0/25 edge\nset protocols rstp interface ge-0/0/26 edge\nset protocols rstp interface ge-0/0/27 edge\nset protocols rstp interface ge-0/0/28 edge\nset protocols rstp interface ge-0/0/29 edge\nset protocols rstp interface ge-0/0/30 edge\nset protocols rstp interface ge-0/0/31 edge\nset protocols rstp interface ge-0/0/32 edge\nset protocols rstp interface ge-0/0/33 edge\nset protocols rstp interface ge-0/0/34 edge\nset protocols rstp interface ge-0/0/35 edge\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset poe interface all\nset interfaces interface-range UNUSED member-range ge-0/0/36 to ge-0/0/46\nset interfaces interface-range UNUSED member-range xe-0/2/2 to xe-0/2/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n\n# QoS: voice in expedited-forwarding (EF), video in assured-forwarding (AF41)\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP import default\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class expedited-forwarding loss-priority low code-points ef\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af41\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af42\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points cs4\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points cs3\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af31\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class network-control loss-priority low code-points cs6\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class network-control loss-priority low code-points cs7\nset class-of-service schedulers VOICE priority strict-high\nset class-of-service schedulers VOICE transmit-rate percent 20\nset class-of-service schedulers VIDEO transmit-rate percent 30\nset class-of-service schedulers NETWORK-CONTROL transmit-rate percent 5\nset class-of-service schedulers BEST-EFFORT transmit-rate remainder\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class expedited-forwarding scheduler VOICE\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class assured-forwarding scheduler VIDEO\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class network-control scheduler NETWORK-CONTROL\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class best-effort scheduler BEST-EFFORT\nset class-of-service interfaces ge-0/0/0 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/1 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/10 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/11 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/12 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/13 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/14 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/15 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/16 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/17 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/18 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/19 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/2 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/20 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/21 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/22 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/23 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/24 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/25 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/26 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/27 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/28 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/29 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/3 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/30 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/31 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/32 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/33 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/34 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/35 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/4 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/5 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/6 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/7 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/8 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/9 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/47 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ae0 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/0 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/1 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/10 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/11 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/12 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/13 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/14 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/15 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/16 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/17 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/18 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/19 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/2 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/20 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/21 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/22 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/23 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/24 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/25 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/26 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/27 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/28 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/29 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/3 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/30 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/31 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/32 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/33 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/34 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/35 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/4 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/5 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/6 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/7 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/8 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/9 unit 0 classifiers dscp VOICE-VIDEO-DSCP\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/2/0           -                   00:00:5e:00:53:01   xe-0/2/2           cm-core-01\nxe-0/2/1           -                   00:00:5e:00:53:01   xe-0/2/3           cm-core-01\nge-0/0/47          -                   00:00:5e:00:53:01   ge-0/0/47          cm-acc-01"
+     },
+     {
+      "name": "cm-acc-03",
+      "text": "# Juniper EX configuration for cm-acc-03\n# Hardware: EX2300-24P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-acc-03\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.12/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans USERS vlan-id 20\nset vlans VOICE vlan-id 30\nset vlans WIFI vlan-id 41\nset vlans CCTV vlan-id 50\n\n# Switch ports\nset interfaces interface-range LOBBY member-range ge-0/0/0 to ge-0/0/11\nset interfaces interface-range LOBBY unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range LOBBY unit 0 family ethernet-switching vlan members USERS\nset protocols rstp interface ge-0/0/0 no-root-port\nset protocols rstp interface ge-0/0/1 no-root-port\nset protocols rstp interface ge-0/0/2 no-root-port\nset protocols rstp interface ge-0/0/3 no-root-port\nset protocols rstp interface ge-0/0/4 no-root-port\nset protocols rstp interface ge-0/0/5 no-root-port\nset protocols rstp interface ge-0/0/6 no-root-port\nset protocols rstp interface ge-0/0/7 no-root-port\nset protocols rstp interface ge-0/0/8 no-root-port\nset protocols rstp interface ge-0/0/9 no-root-port\nset protocols rstp interface ge-0/0/10 no-root-port\nset protocols rstp interface ge-0/0/11 no-root-port\nset interfaces interface-range CAMERAS member-range ge-0/0/12 to ge-0/0/15\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching vlan members CCTV\n\n# Link aggregation (LACP)\nset interfaces xe-0/1/0 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp passive\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae3\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 native-vlan-id 10\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae0 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae0 unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/22 ether-options 802.3ad ae1\nset interfaces ge-0/0/23 ether-options 802.3ad ae1\nset interfaces ae1 description \"ESXi host in the closet\"\nset interfaces ae1 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae1 unit 0 family ethernet-switching vlan members USERS\nset chassis aggregated-devices ethernet device-count 2\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.10.99.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset poe interface all\nset interfaces interface-range UNUSED member-range ge-0/0/16 to ge-0/0/21\nset interfaces interface-range UNUSED member-range xe-0/1/1 to xe-0/1/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/1/0           -                   00:00:5e:00:53:01   ge-0/0/20          cm-core-01"
+     },
+     {
+      "name": "cm-edge-01",
+      "text": "# Juniper EX configuration for cm-edge-01\n# Hardware: EX3400-24T (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-edge-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.30/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# Switch ports\nset interfaces ge-0/0/0 description \"Downlink to cm-core-01 ge-0/0/23\"\nset interfaces ge-0/0/0 unit 0 family inet address 10.255.0.6/30\nset interfaces ge-0/0/1 description \"ISP handoff\"\nset interfaces ge-0/0/1 unit 0 family inet address 203.0.113.2/30\n\n# Loopback and routing identity\nset interfaces lo0 unit 0 family inet address 10.254.0.1/24\nset routing-options router-id 10.254.0.1\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 203.0.113.1\nset routing-options static route 10.10.0.0/16 next-hop 10.255.0.5\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset interfaces interface-range UNUSED member-range ge-0/0/2 to ge-0/0/23\nset interfaces interface-range UNUSED member-range xe-0/2/0 to xe-0/2/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\nset system services telnet\nset system services web-management http\nset system services ssh root-login allow\nset snmp community public authorization read-write\nset interfaces ge-0/0/0 disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name"
+     }
+    ],
+    "pos": {}
+   }
+  },
+  {
+   "space": "production",
+   "name": "Common Mistakes network",
+   "data": {
+    "items": [
+     {
+      "name": "cm-core-01",
+      "text": "# Juniper EX configuration for cm-core-01\n# Hardware: EX4100-24T (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-core-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system ntp server pool.ntp.org prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\nset chassis alarm management-ethernet link-down ignore\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system services web-management https system-generated-certificate\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp community public authorization read-only\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT description \"Switch management\"\nset vlans MGMT vlan-id 10\nset vlans MGMT l3-interface irb.10\nset interfaces irb unit 10 family inet address 10.10.10.1/24\nset vlans USERS description \"Office PCs\"\nset vlans USERS vlan-id 20\nset vlans USERS l3-interface irb.20\nset interfaces irb unit 20 family inet address 10.10.20.1/24\nset vlans VOICE description \"IP phones\"\nset vlans VOICE vlan-id 30\nset vlans VOICE l3-interface irb.30\nset interfaces irb unit 30 family inet address 10.10.30.1/24\nset vlans WIFI description \"Access points\"\nset vlans WIFI vlan-id 40\nset vlans WIFI l3-interface irb.40\nset interfaces irb unit 40 family inet address 10.10.40.1/24\nset vlans CCTV description Cameras\nset vlans CCTV vlan-id 50\nset vlans CCTV l3-interface irb.50\nset interfaces irb unit 50 family inet address 10.10.50.1/24\nset vlans PRINTERS description \"Printers (M01: defined but tagged nowhere)\"\nset vlans PRINTERS vlan-id 60\nset vlans PRINTERS l3-interface irb.60\nset interfaces irb unit 60 family inet address 10.10.60.1/24\nset vlans GUEST description \"Guest Wi-Fi (M03: overlaps USERS)\"\nset vlans GUEST vlan-id 70\nset vlans GUEST l3-interface irb.70\nset interfaces irb unit 70 family inet address 10.10.20.129/25\n\n# Switch ports\nset interfaces ge-0/0/23 description \"Uplink to cm-edge-01 ge-0/0/0\"\nset interfaces ge-0/0/23 unit 0 family inet address 10.255.0.1/30\n\n# Link aggregation (LACP)\nset interfaces xe-0/2/0 ether-options 802.3ad ae1\nset interfaces xe-0/2/1 ether-options 802.3ad ae1\nset interfaces ae1 aggregated-ether-options lacp active\nset interfaces ae1 aggregated-ether-options lacp periodic fast\nset interfaces ae1 description \"Downlink to cm-acc-01 ae0\"\nset interfaces ae1 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae1 native-vlan-id 10\nset interfaces ae1 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae1 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae1 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae1 unit 0 family ethernet-switching vlan members MGMT\nset interfaces xe-0/2/2 ether-options 802.3ad ae2\nset interfaces xe-0/2/3 ether-options 802.3ad ae2\nset interfaces ae2 aggregated-ether-options lacp active\nset interfaces ae2 aggregated-ether-options lacp periodic fast\nset interfaces ae2 description \"Downlink to cm-acc-02 ae0\"\nset interfaces ae2 mtu 9216\nset interfaces ae2 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae2 native-vlan-id 10\nset interfaces ae2 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae2 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae2 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae2 unit 0 family ethernet-switching vlan members CCTV\nset interfaces ae2 unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/20 ether-options 802.3ad ae3\nset interfaces ge-0/0/21 ether-options 802.3ad ae3\nset interfaces ae3 aggregated-ether-options lacp passive\nset interfaces ae3 aggregated-ether-options lacp periodic fast\nset interfaces ae3 description \"Downlink to cm-acc-03 ae0\"\nset interfaces ae3 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae3 native-vlan-id 10\nset interfaces ae3 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae3 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae3 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae3 unit 0 family ethernet-switching vlan members MGMT\nset chassis aggregated-devices ethernet device-count 4\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.255.0.2\nset routing-options static route 10.99.0.0/16 next-hop 10.250.9.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 4k\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset interfaces interface-range UNUSED member-range ge-0/0/0 to ge-0/0/19\nset interfaces interface-range UNUSED member ge-0/0/22\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/2/0           -                   00:00:5e:00:53:01   xe-0/1/0           cm-acc-01\nxe-0/2/1           -                   00:00:5e:00:53:01   xe-0/1/1           cm-acc-01\nxe-0/2/2           -                   00:00:5e:00:53:01   xe-0/2/0           cm-acc-02\nxe-0/2/3           -                   00:00:5e:00:53:01   xe-0/2/1           cm-acc-02\nge-0/0/20          -                   00:00:5e:00:53:01   xe-0/1/0           cm-acc-03\nge-0/0/23          -                   00:00:5e:00:53:01   ge-0/0/0           cm-edge-01"
+     },
+     {
+      "name": "cm-acc-01",
+      "text": "# Juniper EX configuration for cm-acc-01\n# Hardware: EX2300-48P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-acc-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\nset chassis alarm management-ethernet link-down ignore\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans MGMT l3-interface irb.10\nset interfaces irb unit 10 family inet address 10.10.10.11/24\nset vlans USERS vlan-id 20\nset vlans VOICE vlan-id 30\nset vlans WIFI vlan-id 40\n\n# Switch ports\nset interfaces interface-range DESKS member-range ge-0/0/0 to ge-0/0/31\nset interfaces interface-range DESKS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range DESKS unit 0 family ethernet-switching vlan members USERS\nset switch-options voip interface ge-0/0/0.0 vlan VOICE\nset switch-options voip interface ge-0/0/0.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/1.0 vlan VOICE\nset switch-options voip interface ge-0/0/1.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/2.0 vlan VOICE\nset switch-options voip interface ge-0/0/2.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/3.0 vlan VOICE\nset switch-options voip interface ge-0/0/3.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/4.0 vlan VOICE\nset switch-options voip interface ge-0/0/4.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/5.0 vlan VOICE\nset switch-options voip interface ge-0/0/5.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/6.0 vlan VOICE\nset switch-options voip interface ge-0/0/6.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/7.0 vlan VOICE\nset switch-options voip interface ge-0/0/7.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/8.0 vlan VOICE\nset switch-options voip interface ge-0/0/8.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/9.0 vlan VOICE\nset switch-options voip interface ge-0/0/9.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/10.0 vlan VOICE\nset switch-options voip interface ge-0/0/10.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/11.0 vlan VOICE\nset switch-options voip interface ge-0/0/11.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/12.0 vlan VOICE\nset switch-options voip interface ge-0/0/12.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/13.0 vlan VOICE\nset switch-options voip interface ge-0/0/13.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/14.0 vlan VOICE\nset switch-options voip interface ge-0/0/14.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/15.0 vlan VOICE\nset switch-options voip interface ge-0/0/15.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/16.0 vlan VOICE\nset switch-options voip interface ge-0/0/16.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/17.0 vlan VOICE\nset switch-options voip interface ge-0/0/17.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/18.0 vlan VOICE\nset switch-options voip interface ge-0/0/18.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/19.0 vlan VOICE\nset switch-options voip interface ge-0/0/19.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/20.0 vlan VOICE\nset switch-options voip interface ge-0/0/20.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/21.0 vlan VOICE\nset switch-options voip interface ge-0/0/21.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/22.0 vlan VOICE\nset switch-options voip interface ge-0/0/22.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/23.0 vlan VOICE\nset switch-options voip interface ge-0/0/23.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/24.0 vlan VOICE\nset switch-options voip interface ge-0/0/24.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/25.0 vlan VOICE\nset switch-options voip interface ge-0/0/25.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/26.0 vlan VOICE\nset switch-options voip interface ge-0/0/26.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/27.0 vlan VOICE\nset switch-options voip interface ge-0/0/27.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/28.0 vlan VOICE\nset switch-options voip interface ge-0/0/28.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/29.0 vlan VOICE\nset switch-options voip interface ge-0/0/29.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/30.0 vlan VOICE\nset switch-options voip interface ge-0/0/30.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/31.0 vlan VOICE\nset switch-options voip interface ge-0/0/31.0 forwarding-class expedited-forwarding\nset interfaces interface-range DESKS unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range MYSTERY member-range ge-0/0/32 to ge-0/0/35\nset interfaces interface-range MYSTERY description \"Spare desks\"\nset interfaces interface-range MYSTERY unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range MYSTERY unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range APS member-range ge-0/0/40 to ge-0/0/43\nset interfaces interface-range APS description \"Wi-Fi APs\"\nset interfaces interface-range APS unit 0 family ethernet-switching interface-mode trunk\nset interfaces interface-range APS native-vlan-id 10\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members WIFI\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members USERS\nset interfaces interface-range APS unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/52 description \"Floor printer\"\nset interfaces ge-0/0/52 unit 0 family ethernet-switching interface-mode access\nset interfaces ge-0/0/52 unit 0 family ethernet-switching vlan members USERS\nset interfaces ge-0/0/52 unit 0 family ethernet-switching storm-control storm-default\nset interfaces ge-0/0/47 description \"Cross-link to cm-acc-02 ge-0/0/47\"\nset interfaces ge-0/0/47 unit 0 family ethernet-switching interface-mode access\nset interfaces ge-0/0/47 unit 0 family ethernet-switching vlan members USERS\nset interfaces ge-0/0/47 unit 0 family ethernet-switching storm-control storm-default\n\n# Link aggregation (LACP)\nset interfaces xe-0/1/0 ether-options 802.3ad ae0\nset interfaces xe-0/1/1 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp active\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae1\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 native-vlan-id 10\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae0 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae0 unit 0 family ethernet-switching vlan members MGMT\nset chassis aggregated-devices ethernet device-count 1\n\n# Switching services\nset protocols lldp interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 4k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset protocols rstp interface ge-0/0/16 edge\nset protocols rstp interface ge-0/0/17 edge\nset protocols rstp interface ge-0/0/18 edge\nset protocols rstp interface ge-0/0/19 edge\nset protocols rstp interface ge-0/0/20 edge\nset protocols rstp interface ge-0/0/21 edge\nset protocols rstp interface ge-0/0/22 edge\nset protocols rstp interface ge-0/0/23 edge\nset protocols rstp interface ge-0/0/24 edge\nset protocols rstp interface ge-0/0/25 edge\nset protocols rstp interface ge-0/0/26 edge\nset protocols rstp interface ge-0/0/27 edge\nset protocols rstp interface ge-0/0/28 edge\nset protocols rstp interface ge-0/0/29 edge\nset protocols rstp interface ge-0/0/30 edge\nset protocols rstp interface ge-0/0/31 edge\nset protocols rstp interface ge-0/0/32 edge\nset protocols rstp interface ge-0/0/33 edge\nset protocols rstp interface ge-0/0/34 edge\nset protocols rstp interface ge-0/0/35 edge\nset protocols rstp interface ge-0/0/52 edge\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset poe interface all\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/1/0           -                   00:00:5e:00:53:01   xe-0/2/0           cm-core-01\nxe-0/1/1           -                   00:00:5e:00:53:01   xe-0/2/1           cm-core-01\nge-0/0/47          -                   00:00:5e:00:53:01   ge-0/0/47          cm-acc-02"
+     },
+     {
+      "name": "cm-acc-02",
+      "text": "# Juniper EX configuration for cm-acc-02\n# Hardware: EX3400-48P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\ndelete class-of-service\n\n# System\nset system host-name cm-acc-02\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.12/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level authentication read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans USERS vlan-id 20\nset vlans PHONES vlan-id 30\nset vlans CCTV vlan-id 55\n\n# Switch ports\nset interfaces interface-range DESKS member-range ge-0/0/0 to ge-0/0/23\nset interfaces interface-range DESKS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range DESKS unit 0 family ethernet-switching vlan members USERS\nset switch-options voip interface ge-0/0/0.0 vlan PHONES\nset switch-options voip interface ge-0/0/0.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/1.0 vlan PHONES\nset switch-options voip interface ge-0/0/1.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/2.0 vlan PHONES\nset switch-options voip interface ge-0/0/2.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/3.0 vlan PHONES\nset switch-options voip interface ge-0/0/3.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/4.0 vlan PHONES\nset switch-options voip interface ge-0/0/4.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/5.0 vlan PHONES\nset switch-options voip interface ge-0/0/5.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/6.0 vlan PHONES\nset switch-options voip interface ge-0/0/6.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/7.0 vlan PHONES\nset switch-options voip interface ge-0/0/7.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/8.0 vlan PHONES\nset switch-options voip interface ge-0/0/8.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/9.0 vlan PHONES\nset switch-options voip interface ge-0/0/9.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/10.0 vlan PHONES\nset switch-options voip interface ge-0/0/10.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/11.0 vlan PHONES\nset switch-options voip interface ge-0/0/11.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/12.0 vlan PHONES\nset switch-options voip interface ge-0/0/12.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/13.0 vlan PHONES\nset switch-options voip interface ge-0/0/13.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/14.0 vlan PHONES\nset switch-options voip interface ge-0/0/14.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/15.0 vlan PHONES\nset switch-options voip interface ge-0/0/15.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/16.0 vlan PHONES\nset switch-options voip interface ge-0/0/16.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/17.0 vlan PHONES\nset switch-options voip interface ge-0/0/17.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/18.0 vlan PHONES\nset switch-options voip interface ge-0/0/18.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/19.0 vlan PHONES\nset switch-options voip interface ge-0/0/19.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/20.0 vlan PHONES\nset switch-options voip interface ge-0/0/20.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/21.0 vlan PHONES\nset switch-options voip interface ge-0/0/21.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/22.0 vlan PHONES\nset switch-options voip interface ge-0/0/22.0 forwarding-class expedited-forwarding\nset switch-options voip interface ge-0/0/23.0 vlan PHONES\nset switch-options voip interface ge-0/0/23.0 forwarding-class expedited-forwarding\nset interfaces interface-range DESKS unit 0 family ethernet-switching storm-control storm-default\nset interfaces interface-range CAMERAS member-range ge-0/0/24 to ge-0/0/35\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching vlan members CCTV\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching storm-control storm-default\nset interfaces ge-0/0/47 description \"Cross-link to cm-acc-01 ge-0/0/47\"\nset interfaces ge-0/0/47 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ge-0/0/47 unit 0 family ethernet-switching vlan members all\n\n# Link aggregation (LACP)\nset interfaces xe-0/2/0 ether-options 802.3ad ae0\nset interfaces xe-0/2/1 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp active\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae2\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members PHONES\nset chassis aggregated-devices ethernet device-count 1\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.10.10.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset protocols rstp interface ge-0/0/16 edge\nset protocols rstp interface ge-0/0/17 edge\nset protocols rstp interface ge-0/0/18 edge\nset protocols rstp interface ge-0/0/19 edge\nset protocols rstp interface ge-0/0/20 edge\nset protocols rstp interface ge-0/0/21 edge\nset protocols rstp interface ge-0/0/22 edge\nset protocols rstp interface ge-0/0/23 edge\nset protocols rstp interface ge-0/0/24 edge\nset protocols rstp interface ge-0/0/25 edge\nset protocols rstp interface ge-0/0/26 edge\nset protocols rstp interface ge-0/0/27 edge\nset protocols rstp interface ge-0/0/28 edge\nset protocols rstp interface ge-0/0/29 edge\nset protocols rstp interface ge-0/0/30 edge\nset protocols rstp interface ge-0/0/31 edge\nset protocols rstp interface ge-0/0/32 edge\nset protocols rstp interface ge-0/0/33 edge\nset protocols rstp interface ge-0/0/34 edge\nset protocols rstp interface ge-0/0/35 edge\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset poe interface all\nset interfaces interface-range UNUSED member-range ge-0/0/36 to ge-0/0/46\nset interfaces interface-range UNUSED member-range xe-0/2/2 to xe-0/2/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n\n# QoS: voice in expedited-forwarding (EF), video in assured-forwarding (AF41)\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP import default\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class expedited-forwarding loss-priority low code-points ef\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af41\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af42\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points cs4\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points cs3\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class assured-forwarding loss-priority low code-points af31\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class network-control loss-priority low code-points cs6\nset class-of-service classifiers dscp VOICE-VIDEO-DSCP forwarding-class network-control loss-priority low code-points cs7\nset class-of-service schedulers VOICE priority strict-high\nset class-of-service schedulers VOICE transmit-rate percent 20\nset class-of-service schedulers VIDEO transmit-rate percent 30\nset class-of-service schedulers NETWORK-CONTROL transmit-rate percent 5\nset class-of-service schedulers BEST-EFFORT transmit-rate remainder\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class expedited-forwarding scheduler VOICE\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class assured-forwarding scheduler VIDEO\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class network-control scheduler NETWORK-CONTROL\nset class-of-service scheduler-maps VOICE-VIDEO-MAP forwarding-class best-effort scheduler BEST-EFFORT\nset class-of-service interfaces ge-0/0/0 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/1 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/10 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/11 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/12 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/13 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/14 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/15 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/16 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/17 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/18 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/19 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/2 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/20 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/21 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/22 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/23 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/24 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/25 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/26 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/27 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/28 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/29 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/3 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/30 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/31 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/32 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/33 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/34 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/35 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/4 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/5 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/6 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/7 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/8 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/9 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/47 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ae0 scheduler-map VOICE-VIDEO-MAP\nset class-of-service interfaces ge-0/0/0 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/1 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/10 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/11 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/12 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/13 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/14 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/15 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/16 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/17 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/18 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/19 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/2 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/20 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/21 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/22 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/23 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/24 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/25 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/26 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/27 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/28 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/29 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/3 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/30 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/31 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/32 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/33 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/34 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/35 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/4 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/5 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/6 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/7 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/8 unit 0 classifiers dscp VOICE-VIDEO-DSCP\nset class-of-service interfaces ge-0/0/9 unit 0 classifiers dscp VOICE-VIDEO-DSCP\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/2/0           -                   00:00:5e:00:53:01   xe-0/2/2           cm-core-01\nxe-0/2/1           -                   00:00:5e:00:53:01   xe-0/2/3           cm-core-01\nge-0/0/47          -                   00:00:5e:00:53:01   ge-0/0/47          cm-acc-01"
+     },
+     {
+      "name": "cm-acc-03",
+      "text": "# Juniper EX configuration for cm-acc-03\n# Hardware: EX2300-24P (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-acc-03\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\nset system login message \"TRAINING LAB - FAKE CONFIG - DO NOT PUSH\"\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.12/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system login user netadmin class super-user\nset system login user netadmin authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# VLANs\nset vlans MGMT vlan-id 10\nset vlans USERS vlan-id 20\nset vlans VOICE vlan-id 30\nset vlans WIFI vlan-id 41\nset vlans CCTV vlan-id 50\n\n# Switch ports\nset interfaces interface-range LOBBY member-range ge-0/0/0 to ge-0/0/11\nset interfaces interface-range LOBBY unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range LOBBY unit 0 family ethernet-switching vlan members USERS\nset protocols rstp interface ge-0/0/0 no-root-port\nset protocols rstp interface ge-0/0/1 no-root-port\nset protocols rstp interface ge-0/0/2 no-root-port\nset protocols rstp interface ge-0/0/3 no-root-port\nset protocols rstp interface ge-0/0/4 no-root-port\nset protocols rstp interface ge-0/0/5 no-root-port\nset protocols rstp interface ge-0/0/6 no-root-port\nset protocols rstp interface ge-0/0/7 no-root-port\nset protocols rstp interface ge-0/0/8 no-root-port\nset protocols rstp interface ge-0/0/9 no-root-port\nset protocols rstp interface ge-0/0/10 no-root-port\nset protocols rstp interface ge-0/0/11 no-root-port\nset interfaces interface-range CAMERAS member-range ge-0/0/12 to ge-0/0/15\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching interface-mode access\nset interfaces interface-range CAMERAS unit 0 family ethernet-switching vlan members CCTV\n\n# Link aggregation (LACP)\nset interfaces xe-0/1/0 ether-options 802.3ad ae0\nset interfaces ae0 aggregated-ether-options lacp passive\nset interfaces ae0 aggregated-ether-options lacp periodic fast\nset interfaces ae0 description \"Uplink to cm-core-01 ae3\"\nset interfaces ae0 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae0 native-vlan-id 10\nset interfaces ae0 unit 0 family ethernet-switching vlan members USERS\nset interfaces ae0 unit 0 family ethernet-switching vlan members VOICE\nset interfaces ae0 unit 0 family ethernet-switching vlan members WIFI\nset interfaces ae0 unit 0 family ethernet-switching vlan members MGMT\nset interfaces ge-0/0/22 ether-options 802.3ad ae1\nset interfaces ge-0/0/23 ether-options 802.3ad ae1\nset interfaces ae1 description \"ESXi host in the closet\"\nset interfaces ae1 unit 0 family ethernet-switching interface-mode trunk\nset interfaces ae1 unit 0 family ethernet-switching vlan members USERS\nset chassis aggregated-devices ethernet device-count 2\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 10.10.99.1\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp interface ge-0/0/0 edge\nset protocols rstp interface ge-0/0/1 edge\nset protocols rstp interface ge-0/0/2 edge\nset protocols rstp interface ge-0/0/3 edge\nset protocols rstp interface ge-0/0/4 edge\nset protocols rstp interface ge-0/0/5 edge\nset protocols rstp interface ge-0/0/6 edge\nset protocols rstp interface ge-0/0/7 edge\nset protocols rstp interface ge-0/0/8 edge\nset protocols rstp interface ge-0/0/9 edge\nset protocols rstp interface ge-0/0/10 edge\nset protocols rstp interface ge-0/0/11 edge\nset protocols rstp interface ge-0/0/12 edge\nset protocols rstp interface ge-0/0/13 edge\nset protocols rstp interface ge-0/0/14 edge\nset protocols rstp interface ge-0/0/15 edge\nset poe interface all\nset interfaces interface-range UNUSED member-range ge-0/0/16 to ge-0/0/21\nset interfaces interface-range UNUSED member-range xe-0/1/1 to xe-0/1/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name\nxe-0/1/0           -                   00:00:5e:00:53:01   ge-0/0/20          cm-core-01"
+     },
+     {
+      "name": "cm-edge-01",
+      "text": "# Juniper EX configuration for cm-edge-01\n# Hardware: EX3400-24T (member 0)\n# Made by Multi-Vendor Switch Config Builder 0.2.0. Review before you commit.\n\n# Start from clean interface and VLAN settings (removes the factory port config)\ndelete interfaces\ndelete vlans\ndelete protocols rstp\ndelete switch-options\ndelete poe\n\n# System\nset system host-name cm-edge-01\nset system domain-name lab.example\nset system time-zone America/Edmonton\nset system name-server 10.10.10.53\nset system ntp server 10.10.10.1 prefer\n\n# Management port\nset interfaces me0 unit 0 family inet address 10.10.99.30/24\n\n# Accounts and remote access\nset system root-authentication encrypted-password \"$6$A8OsoH3m2SCchXe/$y8ZjZ.lTmFSo9DM17MoGMf/hYxqY.SgeocS4F6/7W0aRyVYYcpBCXnKejas98l/7/3OWuV1tj4o6JJzMi9mrb/\"\nset system services ssh\nset system services ssh root-login deny\nset system services ssh protocol-version v2\nset system services ssh connection-limit 10\nset system services ssh rate-limit 5\nset system login retry-options tries-before-disconnect 3\nset system login retry-options backoff-threshold 2\nset system login retry-options lockout-period 5\n\n# SNMP\nset snmp location \"Training lab\"\nset snmp contact noc@lab.example\nset snmp view all oid .1 include\nset snmp v3 usm local-engine user nms authentication-sha256 authentication-password lab-auth-pass-1\nset snmp v3 usm local-engine user nms privacy-aes128 privacy-password lab-priv-pass-1\nset snmp v3 vacm security-to-group security-model usm security-name nms group nms-group\nset snmp v3 vacm access group nms-group default-context-prefix security-model usm security-level privacy read-view all\n\n# Logging\nset system syslog file messages any notice\nset system syslog file messages authorization info\nset system syslog file interactive-commands interactive-commands any\nset system syslog host 10.10.10.20 any info\n\n# Switch ports\nset interfaces ge-0/0/0 description \"Downlink to cm-core-01 ge-0/0/23\"\nset interfaces ge-0/0/0 unit 0 family inet address 10.255.0.6/30\nset interfaces ge-0/0/1 description \"ISP handoff\"\nset interfaces ge-0/0/1 unit 0 family inet address 203.0.113.2/30\n\n# Loopback and routing identity\nset interfaces lo0 unit 0 family inet address 10.254.0.1/24\nset routing-options router-id 10.254.0.1\n\n# Static routes\nset routing-options static route 0.0.0.0/0 next-hop 203.0.113.1\nset routing-options static route 10.10.0.0/16 next-hop 10.255.0.5\n\n# Switching services\nset protocols lldp interface all\nset protocols lldp-med interface all\nset protocols rstp interface all\nset protocols rstp bridge-priority 32k\nset protocols rstp bpdu-block-on-edge\nset forwarding-options storm-control-profiles storm-default all bandwidth-percentage 5\nset interfaces interface-range UNUSED member-range ge-0/0/2 to ge-0/0/23\nset interfaces interface-range UNUSED member-range xe-0/2/0 to xe-0/2/3\nset interfaces interface-range UNUSED description \"Unused - disabled\"\nset interfaces interface-range UNUSED disable\nset system services telnet\nset system services web-management http\nset system services ssh root-login allow\nset snmp community public authorization read-write\nset interfaces ge-0/0/0 disable\n",
+      "lldp": "Local Interface    Parent Interface    Chassis Id          Port info          System Name"
+     }
+    ],
+    "pos": {}
+   }
+  }
+ ]
+}

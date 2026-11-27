@@ -108,7 +108,7 @@ def test_shipped_samples_are_valid():
     from switchbuilder.generator import build, normalize
     from switchbuilder.web import samples
     shipped = samples.available()
-    assert {"evpn-vxlan-erb", "evpn-vxlan-crb"} <= {s["key"] for s in shipped}
+    assert {"evpn-vxlan-erb", "evpn-vxlan-crb", "common-mistakes"} <= {s["key"] for s in shipped}
     keys = [s["key"] for s in shipped]
     assert len(keys) == len(set(keys))
     for s in shipped:
